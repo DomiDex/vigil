@@ -2,6 +2,22 @@ import type { VigilConfig } from "./config.ts";
 
 export type TickHandler = (tickNumber: number, isSleeping: boolean) => Promise<void>;
 
+/**
+ * Deterministic jitter based on repo name (Kairos cronScheduler.ts pattern).
+ * Prevents thundering herd when watching multiple repos.
+ */
+export function computeJitter(repoName: string, baseIntervalSec: number): number {
+  let hash = 0;
+  for (let i = 0; i < repoName.length; i++) {
+    hash = ((hash << 5) - hash) + repoName.charCodeAt(i);
+    hash |= 0; // Convert to 32-bit integer
+  }
+  // Jitter: 0-10% of base interval, capped at 15 seconds
+  const maxJitter = Math.min(baseIntervalSec * 0.1, 15);
+  const jitter = (Math.abs(hash % 1000) / 1000) * maxJitter;
+  return jitter * 1000; // Return milliseconds
+}
+
 export class TickEngine {
   private config: VigilConfig;
   private handlers: TickHandler[] = [];
@@ -10,9 +26,11 @@ export class TickEngine {
   private lastActivity = Date.now();
   private sleeping = false;
   private paused = false;
+  private repoName: string | null = null;
 
-  constructor(config: VigilConfig) {
+  constructor(config: VigilConfig, repoName?: string) {
     this.config = config;
+    this.repoName = repoName ?? null;
   }
 
   onTick(handler: TickHandler): void {
@@ -59,6 +77,10 @@ export class TickEngine {
     return this.tickCount;
   }
 
+  updateConfig(config: VigilConfig): void {
+    this.config = config;
+  }
+
   private scheduleNext(): void {
     if (this.paused) return;
 
@@ -69,9 +91,15 @@ export class TickEngine {
       this.sleeping = true;
     }
 
-    const interval = this.sleeping
-      ? this.config.sleepTickInterval * 1000
-      : this.config.tickInterval * 1000;
+    const baseIntervalSec = this.sleeping
+      ? this.config.sleepTickInterval
+      : this.config.tickInterval;
+
+    const jitterMs = this.repoName
+      ? computeJitter(this.repoName, baseIntervalSec)
+      : 0;
+
+    const interval = (baseIntervalSec * 1000) + jitterMs;
 
     this.timer = setTimeout(async () => {
       this.tickCount++;

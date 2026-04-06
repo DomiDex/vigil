@@ -9,7 +9,7 @@ export interface MemoryEntry {
   id: string;
   timestamp: number;
   repo: string;
-  type: "git_event" | "decision" | "action" | "insight" | "consolidated";
+  type: "git_event" | "decision" | "action" | "insight" | "consolidated" | "user_reply";
   content: string;
   metadata: Record<string, unknown>;
   confidence: number;

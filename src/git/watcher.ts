@@ -1,5 +1,15 @@
 import { watch, type FSWatcher } from "fs";
-import { basename, resolve } from "path";
+import { basename, resolve, join } from "path";
+import { gitExec } from "./exec.ts";
+
+// ── Types ──
+
+export type GitEventType =
+  | "file_change"
+  | "new_commit"
+  | "branch_switch"
+  | "uncommitted_drift"
+  | "rebase_detected";
 
 export interface RepoState {
   path: string;
@@ -7,10 +17,12 @@ export interface RepoState {
   lastCommitHash: string;
   currentBranch: string;
   uncommittedSince: number | null;
+  lastReflogHash: string;
+  knownCommitSHAs: Set<string>;
 }
 
 export interface GitEvent {
-  type: "file_change" | "new_commit" | "branch_switch" | "uncommitted_drift";
+  type: GitEventType;
   repo: string;
   timestamp: number;
   detail: string;
@@ -18,11 +30,50 @@ export interface GitEvent {
 
 export type GitEventHandler = (event: GitEvent) => void;
 
+// ── Event Deduplication ──
+
+class EventDeduplicator {
+  private seen = new Map<string, number>();
+  private readonly windowMs: number;
+
+  constructor(windowMs = 5_000) {
+    this.windowMs = windowMs;
+  }
+
+  /**
+   * Returns true if this event is a duplicate (should be dropped).
+   * Same type + repo + detail within the dedup window = duplicate.
+   */
+  isDuplicate(event: { type: string; repo: string; detail: string }): boolean {
+    const key = `${event.type}:${event.repo}:${event.detail}`;
+    const now = Date.now();
+    const lastSeen = this.seen.get(key);
+
+    if (lastSeen && now - lastSeen < this.windowMs) {
+      return true;
+    }
+
+    this.seen.set(key, now);
+
+    // Periodic cleanup to avoid unbounded growth
+    if (this.seen.size > 1000) {
+      for (const [k, t] of this.seen) {
+        if (now - t > this.windowMs * 2) this.seen.delete(k);
+      }
+    }
+
+    return false;
+  }
+}
+
+// ── GitWatcher ──
+
 export class GitWatcher {
   private repos: Map<string, RepoState> = new Map();
   private watchers: FSWatcher[] = [];
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private handlers: GitEventHandler[] = [];
+  private dedup = new EventDeduplicator(5_000);
   private readonly DRIFT_THRESHOLD = 30 * 60 * 1000; // 30 minutes
 
   onEvent(handler: GitEventHandler): void {
@@ -35,12 +86,21 @@ export class GitWatcher {
     }
   }
 
+  private emitDeduped(event: GitEvent): void {
+    if (!this.dedup.isDuplicate(event)) {
+      this.emit(event);
+    }
+  }
+
   async addRepo(repoPath: string): Promise<void> {
     const absPath = resolve(repoPath);
     const name = basename(absPath);
 
     const hash = await this.git(absPath, ["rev-parse", "HEAD"]);
     const branch = await this.git(absPath, ["rev-parse", "--abbrev-ref", "HEAD"]);
+    const reflogHash = await this.git(absPath, ["reflog", "show", "--format=%H", "-1"]).catch(
+      () => ""
+    );
 
     const state: RepoState = {
       path: absPath,
@@ -48,31 +108,53 @@ export class GitWatcher {
       lastCommitHash: hash.trim(),
       currentBranch: branch.trim(),
       uncommittedSince: null,
+      lastReflogHash: reflogHash.trim(),
+      knownCommitSHAs: new Set([hash.trim()]),
     };
 
     this.repos.set(absPath, state);
 
-    // File system watcher
+    // File system watcher for working tree changes
+    // Note: recursive fs.watch can crash on broken symlinks (e.g. .claude/worktrees,
+    // node_modules/.pnpm). We attach an error handler to prevent process exit.
     try {
       const watcher = watch(absPath, { recursive: true }, (_event, filename) => {
         if (!filename) return;
-        if (filename.startsWith(".git") || filename.includes("node_modules")) return;
-        this.emit({
+        const IGNORE = [".git", "node_modules", ".claude", ".next", "dist", ".turbo"];
+        if (IGNORE.some((dir) => filename.startsWith(dir) || filename.includes(`/${dir}`))) return;
+        this.emitDeduped({
           type: "file_change",
           repo: name,
           timestamp: Date.now(),
           detail: `File changed: ${filename}`,
         });
       });
+      watcher.on("error", () => {
+        // Swallow fs.watch errors (broken symlinks, permission issues)
+      });
       this.watchers.push(watcher);
     } catch {
       // fs.watch may not work on all platforms
     }
+
+    // Watch .git/HEAD for immediate ref changes (branch switch, rebase)
+    try {
+      const gitHeadPath = join(absPath, ".git", "HEAD");
+      const headWatcher = watch(gitHeadPath, () => {
+        const s = this.repos.get(absPath);
+        if (s) {
+          s.lastCommitHash = ""; // Force re-read on next poll
+        }
+      });
+      this.watchers.push(headWatcher);
+    } catch {
+      // .git/HEAD watch may fail on some setups
+    }
   }
 
-  startPolling(): void {
+  startPolling(intervalSec?: number): void {
     if (this.pollTimer) return;
-    this.pollTimer = setInterval(() => this.poll(), 10_000);
+    this.pollTimer = setInterval(() => this.poll(), (intervalSec ?? 10) * 1000);
   }
 
   stopPolling(): void {
@@ -85,14 +167,30 @@ export class GitWatcher {
   }
 
   private async poll(): Promise<void> {
-    for (const [path, state] of this.repos) {
+    for (const [repoPath, state] of this.repos) {
       try {
+        // Check for rebase/reset before comparing commits
+        const rebased = await this.detectRebase(state);
+        if (rebased) {
+          state.lastCommitHash = "";
+          state.uncommittedSince = null;
+          state.knownCommitSHAs.clear();
+
+          this.emitDeduped({
+            type: "rebase_detected",
+            repo: state.name,
+            timestamp: Date.now(),
+            detail: "Cache invalidated after rebase/reset",
+          });
+        }
+
         // Check for new commits
-        const currentHash = (await this.git(path, ["rev-parse", "HEAD"])).trim();
-        if (currentHash !== state.lastCommitHash) {
-          const logMsg = await this.git(path, ["log", "--oneline", "-1"]);
+        const currentHash = (await this.git(repoPath, ["rev-parse", "HEAD"])).trim();
+        if (currentHash && currentHash !== state.lastCommitHash) {
+          const logMsg = await this.git(repoPath, ["log", "--oneline", "-1"]);
           state.lastCommitHash = currentHash;
-          this.emit({
+          state.knownCommitSHAs.add(currentHash);
+          this.emitDeduped({
             type: "new_commit",
             repo: state.name,
             timestamp: Date.now(),
@@ -101,11 +199,13 @@ export class GitWatcher {
         }
 
         // Check for branch switch
-        const currentBranch = (await this.git(path, ["rev-parse", "--abbrev-ref", "HEAD"])).trim();
+        const currentBranch = (
+          await this.git(repoPath, ["rev-parse", "--abbrev-ref", "HEAD"])
+        ).trim();
         if (currentBranch !== state.currentBranch) {
           const oldBranch = state.currentBranch;
           state.currentBranch = currentBranch;
-          this.emit({
+          this.emitDeduped({
             type: "branch_switch",
             repo: state.name,
             timestamp: Date.now(),
@@ -114,26 +214,62 @@ export class GitWatcher {
         }
 
         // Check uncommitted drift
-        const status = (await this.git(path, ["status", "--porcelain"])).trim();
+        const status = (await this.git(repoPath, ["status", "--porcelain"])).trim();
         if (status) {
           if (!state.uncommittedSince) {
             state.uncommittedSince = Date.now();
           } else if (Date.now() - state.uncommittedSince > this.DRIFT_THRESHOLD) {
-            this.emit({
+            this.emitDeduped({
               type: "uncommitted_drift",
               repo: state.name,
               timestamp: Date.now(),
               detail: `Uncommitted changes for ${Math.round((Date.now() - state.uncommittedSince) / 60000)}min`,
             });
-            // Reset to avoid spamming
             state.uncommittedSince = Date.now();
           }
         } else {
           state.uncommittedSince = null;
         }
       } catch {
-        // Git command failed, skip this repo
+        // Git command failed — gitExec already retried; skip this repo this cycle
       }
+    }
+  }
+
+  /**
+   * Detect rebase/reset/amend by checking if reflog tip changed
+   * and validating that the cached SHA still exists.
+   */
+  private async detectRebase(repo: RepoState): Promise<boolean> {
+    try {
+      const reflogResult = await this.git(repo.path, [
+        "reflog",
+        "show",
+        "--format=%H",
+        "-1",
+      ]);
+      const currentReflogHash = reflogResult.trim();
+
+      if (repo.lastReflogHash && currentReflogHash !== repo.lastReflogHash) {
+        // Reflog changed — validate that cached SHA still exists on branch
+        if (repo.lastCommitHash) {
+          const validateResult = await this.git(repo.path, [
+            "cat-file",
+            "-t",
+            repo.lastCommitHash,
+          ]).catch(() => null);
+
+          if (!validateResult || validateResult.trim() !== "commit") {
+            repo.lastReflogHash = currentReflogHash;
+            return true; // SHA is orphaned
+          }
+        }
+      }
+
+      repo.lastReflogHash = currentReflogHash;
+      return false;
+    } catch {
+      return false;
     }
   }
 
@@ -168,9 +304,15 @@ export class GitWatcher {
     return this.repos;
   }
 
+  getRepoState(repoPath: string): RepoState | undefined {
+    return this.repos.get(resolve(repoPath));
+  }
+
   private async git(cwd: string, args: string[]): Promise<string> {
-    const proc = Bun.spawn(["git", ...args], { cwd, stdout: "pipe", stderr: "pipe" });
-    const text = await new Response(proc.stdout).text();
-    return text;
+    const result = await gitExec(cwd, args);
+    if (result.exitCode !== 0) {
+      throw new Error(`git ${args[0]} failed: ${result.stderr}`);
+    }
+    return result.stdout;
   }
 }

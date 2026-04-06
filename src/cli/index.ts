@@ -74,6 +74,7 @@ program
       observe: "👁",
       notify: "🔔",
       act: "⚡",
+      user_reply: "💬",
     };
 
     console.log(chalk.cyan("\n  Event Log\n"));

@@ -1,4 +1,6 @@
+import * as z from "zod";
 import type { VigilConfig } from "../core/config.ts";
+import { CircuitBreaker } from "../core/circuit-breaker.ts";
 
 export type Decision = "SILENT" | "OBSERVE" | "NOTIFY" | "ACT";
 
@@ -7,6 +9,7 @@ export interface DecisionResult {
   reasoning: string;
   content?: string;
   action?: string;
+  confidence?: number;
 }
 
 export interface ConsolidationResult {
@@ -16,18 +19,67 @@ export interface ConsolidationResult {
   confidence: number;
 }
 
+// Zod schemas for strict LLM response validation
+const DecisionSchema = z.object({
+  decision: z.enum(["SILENT", "OBSERVE", "NOTIFY", "ACT"]),
+  reasoning: z.string(),
+  content: z.string().optional(),
+  action: z.string().optional(),
+  confidence: z.number().min(0).max(1).optional(),
+});
+
+const ConsolidationSchema = z.object({
+  summary: z.string(),
+  patterns: z.array(z.string()),
+  insights: z.array(z.string()),
+  confidence: z.number().min(0).max(1),
+});
+
 function extractJSON(text: string): string {
-  // Try to find JSON in the response
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (jsonMatch) return jsonMatch[0];
   return text;
 }
+
+function parseDecisionResponse(raw: string): DecisionResult {
+  const json = extractJSON(raw);
+  try {
+    const parsed = JSON.parse(json);
+    return DecisionSchema.parse(parsed);
+  } catch (err) {
+    console.warn("[decision] Invalid response, defaulting to SILENT:", err);
+    return { decision: "SILENT", reasoning: `Parse error: ${err}` };
+  }
+}
+
+function parseConsolidationResponse(raw: string): ConsolidationResult {
+  const json = extractJSON(raw);
+  try {
+    const parsed = JSON.parse(json);
+    return ConsolidationSchema.parse(parsed);
+  } catch {
+    return { summary: "Consolidation failed", patterns: [], insights: [], confidence: 0 };
+  }
+}
+
+/** Shared circuit breaker for all LLM calls */
+const llmBreaker = new CircuitBreaker({
+  failureThreshold: 3,
+  resetTimeoutMs: 60_000,
+});
 
 async function callClaude(
   prompt: string,
   systemPrompt: string,
   model?: string
 ): Promise<string> {
+  if (!llmBreaker.canCall()) {
+    console.warn(
+      `[circuit-breaker] LLM calls suspended (${llmBreaker.getFailureCount()} failures, state=${llmBreaker.getState()}). Retrying after cooldown.`
+    );
+    return "";
+  }
+
   // Remove API key so claude CLI uses Max subscription
   const env = { ...process.env };
   delete env.ANTHROPIC_API_KEY;
@@ -39,25 +91,31 @@ async function callClaude(
     ? `<system>${systemPrompt}</system>\n\n${prompt}`
     : prompt;
 
-  const proc = Bun.spawn(args, {
-    env,
-    stdin: "pipe",
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  try {
+    const proc = Bun.spawn(args, {
+      env,
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
 
-  proc.stdin.write(fullPrompt);
-  proc.stdin.end();
+    proc.stdin.write(fullPrompt);
+    proc.stdin.end();
 
-  const stdout = await new Response(proc.stdout).text();
-  const exitCode = await proc.exited;
+    const stdout = await new Response(proc.stdout).text();
+    const exitCode = await proc.exited;
 
-  if (exitCode !== 0) {
-    const stderr = await new Response(proc.stderr).text();
-    throw new Error(`Claude CLI failed (exit ${exitCode}): ${stderr}`);
+    if (exitCode !== 0) {
+      const stderr = await new Response(proc.stderr).text();
+      throw new Error(`Claude CLI failed (exit ${exitCode}): ${stderr}`);
+    }
+
+    llmBreaker.recordSuccess();
+    return stdout.trim();
+  } catch (err) {
+    llmBreaker.recordFailure();
+    throw err;
   }
-
-  return stdout.trim();
 }
 
 export class DecisionEngine {
@@ -65,6 +123,18 @@ export class DecisionEngine {
 
   constructor(config: VigilConfig) {
     this.config = config;
+  }
+
+  updateConfig(config: VigilConfig): void {
+    this.config = config;
+  }
+
+  /** Expose breaker state for status/diagnostics */
+  getCircuitState() {
+    return {
+      state: llmBreaker.getState(),
+      failures: llmBreaker.getFailureCount(),
+    };
   }
 
   async decide(context: string, recentMemories: string, repoProfile: string): Promise<DecisionResult> {
@@ -75,7 +145,8 @@ Respond with ONLY a JSON object, no other text:
   "decision": "SILENT" | "OBSERVE" | "NOTIFY" | "ACT",
   "reasoning": "brief explanation",
   "content": "observation text if OBSERVE, notification text if NOTIFY",
-  "action": "proposed action description if ACT"
+  "action": "proposed action description if ACT",
+  "confidence": 0.0-1.0
 }
 
 Decision guide:
@@ -97,13 +168,10 @@ What is your decision?`;
 
     try {
       const raw = await callClaude(prompt, systemPrompt, this.config.tickModel);
-      const json = extractJSON(raw);
-      const result = JSON.parse(json) as DecisionResult;
-      if (!["SILENT", "OBSERVE", "NOTIFY", "ACT"].includes(result.decision)) {
-        result.decision = "SILENT";
-      }
-      return result;
-    } catch {
+      if (!raw) return { decision: "SILENT", reasoning: "Circuit breaker active" };
+      return parseDecisionResponse(raw);
+    } catch (err) {
+      console.error(`  [decision] LLM call failed: ${err}`);
       return { decision: "SILENT", reasoning: "Failed to get LLM decision" };
     }
   }
@@ -132,15 +200,10 @@ Consolidate these observations into a coherent understanding.`;
 
     try {
       const raw = await callClaude(prompt, systemPrompt, this.config.escalationModel);
-      const json = extractJSON(raw);
-      return JSON.parse(json) as ConsolidationResult;
+      if (!raw) return { summary: "Consolidation skipped (circuit breaker)", patterns: [], insights: [], confidence: 0 };
+      return parseConsolidationResponse(raw);
     } catch {
-      return {
-        summary: "Consolidation failed",
-        patterns: [],
-        insights: [],
-        confidence: 0,
-      };
+      return { summary: "Consolidation failed", patterns: [], insights: [], confidence: 0 };
     }
   }
 
@@ -152,6 +215,12 @@ ${context}
 
 User question: ${question}`;
 
-    return callClaude(prompt, systemPrompt, this.config.escalationModel);
+    try {
+      const raw = await callClaude(prompt, systemPrompt, this.config.escalationModel);
+      if (!raw) return "Unable to answer — LLM circuit breaker is active. Try again later.";
+      return raw;
+    } catch (err) {
+      return `Failed to get answer: ${err}`;
+    }
   }
 }
