@@ -74,9 +74,7 @@ describe("VectorStore", () => {
       store.store({ ...entry, content: "updated" });
 
       const db = new Database(join(tmpDir, "vigil.db"));
-      const count = db
-        .query("SELECT COUNT(*) as c FROM memories WHERE id = ?")
-        .get(entry.id) as any;
+      const count = db.query("SELECT COUNT(*) as c FROM memories WHERE id = ?").get(entry.id) as any;
       const row = db.query("SELECT * FROM memories WHERE id = ?").get(entry.id) as any;
       db.close();
 
@@ -166,9 +164,7 @@ describe("VectorStore", () => {
       store.store(entry);
 
       const db = new Database(join(tmpDir, "vigil.db"));
-      const ftsRow = db
-        .query("SELECT * FROM memories_fts WHERE memories_fts MATCH 'trigger test'")
-        .get() as any;
+      const ftsRow = db.query("SELECT * FROM memories_fts WHERE memories_fts MATCH 'trigger test'").get() as any;
       db.close();
 
       expect(ftsRow).not.toBeNull();
@@ -183,9 +179,7 @@ describe("VectorStore", () => {
       db.run("DELETE FROM memories WHERE id = ?", [entry.id]);
 
       // FTS should no longer find it
-      const ftsRow = db
-        .query("SELECT * FROM memories_fts WHERE memories_fts MATCH 'deletable'")
-        .get();
+      const ftsRow = db.query("SELECT * FROM memories_fts WHERE memories_fts MATCH 'deletable'").get();
       db.close();
 
       expect(ftsRow).toBeNull();
@@ -233,9 +227,7 @@ describe("VectorStore", () => {
       store.saveRepoProfile(profile2);
 
       const db = new Database(join(tmpDir, "vigil.db"));
-      const count = db
-        .query("SELECT COUNT(*) as c FROM repo_profiles WHERE repo = 'my-repo'")
-        .get() as any;
+      const count = db.query("SELECT COUNT(*) as c FROM repo_profiles WHERE repo = 'my-repo'").get() as any;
       db.close();
 
       expect(count.c).toBe(1);

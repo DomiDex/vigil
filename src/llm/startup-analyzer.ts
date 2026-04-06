@@ -43,23 +43,14 @@ export class StartupAnalyzer {
     this.config = config;
   }
 
-  async analyze(
-    repoPath: string,
-    onProgress?: (progress: AnalysisProgress) => void,
-  ): Promise<StartupAnalysisResult> {
+  async analyze(repoPath: string, onProgress?: (progress: AnalysisProgress) => void): Promise<StartupAnalysisResult> {
     const data: Record<string, string> = {};
 
     // Phase 1: Git history
     onProgress?.({ phase: "git", detail: "Reading commit history..." });
     data.gitLog = await this.runGit(repoPath, ["git", "log", "--oneline", "-50"]);
     data.branches = await this.runGit(repoPath, ["git", "branch", "-a"]);
-    data.contributors = await this.runGit(repoPath, [
-      "git",
-      "shortlog",
-      "-sn",
-      "--no-merges",
-      "-20",
-    ]);
+    data.contributors = await this.runGit(repoPath, ["git", "shortlog", "-sn", "--no-merges", "-20"]);
     data.recentVelocity = await this.runGit(repoPath, ["git", "diff", "--stat", "HEAD~10..HEAD"]);
 
     // Phase 2: File structure
@@ -127,11 +118,7 @@ export class StartupAnalyzer {
     return found.join("\n\n") || "(no manifest files found)";
   }
 
-  private async readFile(
-    repoPath: string,
-    relativePath: string,
-    maxChars: number,
-  ): Promise<string> {
+  private async readFile(repoPath: string, relativePath: string, maxChars: number): Promise<string> {
     const fullPath = join(repoPath, relativePath);
     if (!existsSync(fullPath)) return "";
     try {
@@ -215,14 +202,7 @@ Analyze this repository comprehensively.`;
     const env = { ...process.env };
     delete env.ANTHROPIC_API_KEY;
 
-    const args = [
-      "claude",
-      "-p",
-      "--output-format",
-      "text",
-      "--model",
-      this.config.escalationModel,
-    ];
+    const args = ["claude", "-p", "--output-format", "text", "--model", this.config.escalationModel];
     const fullPrompt = `<system>${systemPrompt}</system>\n\n${prompt}`;
 
     const proc = Bun.spawn(args, {

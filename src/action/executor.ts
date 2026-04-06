@@ -1,6 +1,11 @@
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
-import { getDataDir } from "../core/config.ts";
+import {
+  type ActionGateConfig,
+  type ActionType,
+  DEFAULT_GATE_CONFIG,
+  getDataDir,
+} from "../core/config.ts";
 
 // ── Types ──
 
@@ -13,12 +18,21 @@ export interface ActionRequest {
   command: string;
   args: string[];
   tier: ActionTier;
+  actionType?: ActionType;
   reason: string;
+  confidence: number;
   status: ActionStatus;
   result?: string;
   error?: string;
+  gateResults?: Record<string, boolean>;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface GateCheckResult {
+  allowed: boolean;
+  results: Record<string, boolean>;
+  failedGates: string[];
 }
 
 // ── Whitelists ──
@@ -52,15 +66,47 @@ const MODERATE_GIT_SUBCOMMANDS = new Set([
 
 const DANGEROUS_GIT_SUBCOMMANDS = new Set(["push", "merge", "rebase", "pull", "remote", "clean"]);
 
+/**
+ * Command patterns per ActionType — validates the command matches
+ * the declared action type, preventing the LLM from declaring
+ * "run_tests" but executing "rm -rf".
+ */
+const COMMAND_PATTERNS: Record<ActionType, RegExp[]> = {
+  git_stash: [/^git stash/],
+  git_branch: [/^git (checkout -b|branch|switch -c)/],
+  git_commit: [/^git (add|commit)/],
+  run_tests: [/^(bun test|npm test|pytest|cargo test|go test|make test)/],
+  run_lint: [/^(bun run lint|npm run lint|eslint|prettier|ruff|clippy)/],
+  custom_script: [/.*/], // Custom scripts validated by allowlist only
+};
+
 // ── ActionExecutor ──
 
+/**
+ * Safe action execution with multi-gate safety.
+ *
+ * Modeled on Kairos's 6-layer gating pattern:
+ * 1. Config gate: actions.enabled must be true
+ * 2. Session gate: user must have opted in this session
+ * 3. Repo gate: repo must be in allowlist
+ * 4. Action gate: action type must be in allowlist
+ * 5. Confidence gate: decision confidence must exceed threshold
+ * 6. Confirmation gate: user must confirm (unless autoApprove)
+ */
 export class ActionExecutor {
   private db: Database;
   private allowModerate: boolean;
+  private gateConfig: ActionGateConfig;
+  private sessionOptIn = false;
 
-  constructor(opts?: { dbPath?: string; allowModerate?: boolean }) {
+  constructor(opts?: {
+    dbPath?: string;
+    allowModerate?: boolean;
+    gateConfig?: Partial<ActionGateConfig>;
+  }) {
     this.db = new Database(opts?.dbPath ?? join(getDataDir(), "vigil.db"));
     this.allowModerate = opts?.allowModerate ?? false;
+    this.gateConfig = { ...DEFAULT_GATE_CONFIG, ...opts?.gateConfig };
     this.init();
   }
 
@@ -73,14 +119,75 @@ export class ActionExecutor {
         command TEXT NOT NULL,
         args TEXT DEFAULT '[]',
         tier TEXT NOT NULL,
+        action_type TEXT,
         reason TEXT DEFAULT '',
+        confidence REAL DEFAULT 0,
         status TEXT DEFAULT 'pending',
         result TEXT,
         error TEXT,
+        gate_results TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )
     `);
+  }
+
+  /** Update gate config at runtime (e.g. from config hot-reload) */
+  updateGateConfig(config: Partial<ActionGateConfig>): void {
+    this.gateConfig = { ...this.gateConfig, ...config };
+  }
+
+  /** Get current gate config (for inspection/testing) */
+  getGateConfig(): ActionGateConfig {
+    return { ...this.gateConfig };
+  }
+
+  /** Session opt-in — Gate 2 */
+  optIn(): void {
+    this.sessionOptIn = true;
+  }
+
+  /** Session opt-out */
+  optOut(): void {
+    this.sessionOptIn = false;
+  }
+
+  /** Whether the user has opted in this session */
+  get isOptedIn(): boolean {
+    return this.sessionOptIn;
+  }
+
+  /**
+   * Check all 6 gates for an action request.
+   * Returns detailed per-gate results for transparency.
+   */
+  checkGates(repo: string, actionType: ActionType | undefined, confidence: number): GateCheckResult {
+    const results: Record<string, boolean> = {
+      "1_config_enabled": this.gateConfig.enabled,
+      "2_session_optin": this.sessionOptIn,
+      "3_repo_allowed":
+        this.gateConfig.allowedRepos.includes("*") || this.gateConfig.allowedRepos.includes(repo),
+      "4_action_allowed":
+        actionType !== undefined && this.gateConfig.allowedActions.includes(actionType),
+      "5_confidence": confidence >= this.gateConfig.confidenceThreshold,
+    };
+
+    const failedGates = Object.entries(results)
+      .filter(([, v]) => !v)
+      .map(([k]) => k);
+    const allowed = failedGates.length === 0;
+
+    return { allowed, results, failedGates };
+  }
+
+  /**
+   * Validate that a command matches the declared action type.
+   * Prevents the LLM from declaring "run_tests" but executing "rm -rf".
+   */
+  static validateCommand(command: string, actionType: ActionType): boolean {
+    const patterns = COMMAND_PATTERNS[actionType];
+    if (!patterns) return false;
+    return patterns.some((p) => p.test(command));
   }
 
   /** Classify a command string into a tier */
@@ -126,7 +233,10 @@ export class ActionExecutor {
       } else if (ch === '"' && !inSingle) {
         inDouble = !inDouble;
       } else if (/\s/.test(ch) && !inSingle && !inDouble) {
-        if (current) { args.push(current); current = ""; }
+        if (current) {
+          args.push(current);
+          current = "";
+        }
       } else {
         current += ch;
       }
@@ -135,15 +245,22 @@ export class ActionExecutor {
     return args;
   }
 
-  /** Submit an action. Safe actions auto-execute, others may queue. */
+  /**
+   * Submit an action with gate checking.
+   * Gate-checked actions require all 6 gates to pass.
+   * Legacy behavior (tier-only) still works for backward compat.
+   */
   async submit(
     command: string,
     reason: string,
     repo: string,
     repoPath: string,
+    opts?: { actionType?: ActionType; confidence?: number },
   ): Promise<ActionRequest> {
     const tier = ActionExecutor.classifyTier(command);
     const args = ActionExecutor.parseCommand(command);
+    const actionType = opts?.actionType;
+    const confidence = opts?.confidence ?? 0;
 
     const action: ActionRequest = {
       id: crypto.randomUUID(),
@@ -151,12 +268,48 @@ export class ActionExecutor {
       command,
       args,
       tier,
+      actionType,
       reason,
+      confidence,
       status: "pending",
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
 
+    // If an actionType is declared, run gate checks
+    if (actionType !== undefined) {
+      // Validate command matches declared action type
+      if (!ActionExecutor.validateCommand(command, actionType)) {
+        action.status = "failed";
+        action.error = "Command validation failed — does not match declared action type";
+        action.gateResults = { command_validation: false };
+        action.updatedAt = Date.now();
+        this.save(action);
+        return action;
+      }
+
+      const gateCheck = this.checkGates(repo, actionType, confidence);
+      action.gateResults = gateCheck.results;
+
+      if (!gateCheck.allowed) {
+        action.status = "rejected";
+        action.error = `Blocked by gates: ${gateCheck.failedGates.join(", ")}`;
+        action.updatedAt = Date.now();
+        this.save(action);
+        return action;
+      }
+
+      // Gate 6: confirmation — if autoApprove is off, queue for approval
+      if (!this.gateConfig.autoApprove) {
+        this.save(action);
+        return action;
+      }
+
+      // All gates passed + autoApprove — execute
+      return this.execute(action, repoPath);
+    }
+
+    // Legacy tier-based flow (no actionType declared)
     if (tier === "safe") {
       return this.execute(action, repoPath);
     }
@@ -246,18 +399,21 @@ export class ActionExecutor {
 
   private save(action: ActionRequest): void {
     this.db.run(
-      `INSERT OR REPLACE INTO action_queue (id, repo, command, args, tier, reason, status, result, error, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO action_queue (id, repo, command, args, tier, action_type, reason, confidence, status, result, error, gate_results, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         action.id,
         action.repo,
         action.command,
         JSON.stringify(action.args),
         action.tier,
+        action.actionType ?? null,
         action.reason,
+        action.confidence,
         action.status,
         action.result ?? null,
         action.error ?? null,
+        action.gateResults ? JSON.stringify(action.gateResults) : null,
         action.createdAt,
         action.updatedAt,
       ],
@@ -271,10 +427,13 @@ export class ActionExecutor {
       command: row.command,
       args: JSON.parse(row.args),
       tier: row.tier,
+      actionType: row.action_type ?? undefined,
       reason: row.reason,
+      confidence: row.confidence ?? 0,
       status: row.status,
       result: row.result ?? undefined,
       error: row.error ?? undefined,
+      gateResults: row.gate_results ? JSON.parse(row.gate_results) : undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };

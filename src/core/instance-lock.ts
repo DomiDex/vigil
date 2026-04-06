@@ -4,8 +4,8 @@
  * Pattern from Kairos cronTasksLock.ts — PID-based liveness detection.
  */
 
-import { existsSync, readFileSync, writeFileSync, unlinkSync } from "fs";
-import { join } from "path";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { getConfigDir } from "./config.ts";
 
 interface LockData {
@@ -37,9 +37,7 @@ export function acquireLock(sessionId: string, repos: string[]): boolean {
         // Process exists — check repo overlap
         const overlap = repos.filter((r) => existing.repos.includes(r));
         if (overlap.length > 0) {
-          console.error(
-            `Another Vigil instance (PID ${existing.pid}) is watching: ${overlap.join(", ")}`
-          );
+          console.error(`Another Vigil instance (PID ${existing.pid}) is watching: ${overlap.join(", ")}`);
           return false;
         }
         // No overlap — allow parallel watching of different repos

@@ -1,6 +1,30 @@
-import { homedir } from "os";
-import { join } from "path";
-import { mkdirSync, existsSync, readFileSync, writeFileSync, watch } from "fs";
+import { existsSync, mkdirSync, readFileSync, watch, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+export type ActionType =
+  | "git_stash"
+  | "git_branch"
+  | "git_commit"
+  | "run_tests"
+  | "run_lint"
+  | "custom_script";
+
+export interface ActionGateConfig {
+  enabled: boolean;
+  allowedRepos: string[];
+  allowedActions: ActionType[];
+  confidenceThreshold: number;
+  autoApprove: boolean;
+}
+
+export const DEFAULT_GATE_CONFIG: ActionGateConfig = {
+  enabled: false,
+  allowedRepos: [],
+  allowedActions: ["git_stash", "run_tests", "run_lint"],
+  confidenceThreshold: 0.8,
+  autoApprove: false,
+};
 
 export interface VigilConfig {
   tickInterval: number;
@@ -11,17 +35,27 @@ export interface VigilConfig {
   tickModel: string;
   escalationModel: string;
   maxEventWindow: number;
+  notifyBackends: string[];
+  webhookUrl: string;
+  desktopNotify: boolean;
+  allowModerateActions: boolean;
+  actions: ActionGateConfig;
 }
 
 const DEFAULT_CONFIG: VigilConfig = {
   tickInterval: 30,
-  blockingBudget: 15,
+  blockingBudget: 120,
   sleepAfter: 900, // 15 minutes in seconds
   sleepTickInterval: 300,
-  dreamAfter: 300, // 5 minutes in seconds
+  dreamAfter: 1800, // 30 minutes in seconds
   tickModel: "claude-haiku-4-5-20251001",
   escalationModel: "claude-sonnet-4-6",
   maxEventWindow: 100,
+  notifyBackends: ["file"],
+  webhookUrl: "",
+  desktopNotify: true,
+  allowModerateActions: false,
+  actions: { ...DEFAULT_GATE_CONFIG },
 };
 
 export function getConfigDir(): string {
@@ -72,6 +106,7 @@ type ConfigChangeHandler = (newConfig: VigilConfig) => void;
 let configWatcher: ReturnType<typeof watch> | null = null;
 const changeHandlers: ConfigChangeHandler[] = [];
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+let lastConfigSnapshot = "";
 
 /**
  * Start watching config file for changes.
@@ -85,14 +120,22 @@ export function watchConfig(onReload?: ConfigChangeHandler): void {
   // Only create one watcher
   if (configWatcher) return;
 
+  // Snapshot current content so we only fire on actual changes
+  try {
+    lastConfigSnapshot = readFileSync(configPath, "utf-8");
+  } catch {}
+
   configWatcher = watch(configPath, () => {
     // 300ms debounce (matches Kairos FILE_STABILITY_MS)
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
       try {
+        const raw = readFileSync(configPath, "utf-8");
+        // Skip spurious fs.watch events (common on WSL) when content hasn't changed
+        if (raw === lastConfigSnapshot) return;
+        lastConfigSnapshot = raw;
         const newConfig = loadConfig();
-        changeHandlers.forEach((h) => h(newConfig));
-        console.log("[config] Reloaded config.json");
+        for (const h of changeHandlers) h(newConfig);
       } catch (err) {
         console.warn("[config] Failed to reload:", err);
       }

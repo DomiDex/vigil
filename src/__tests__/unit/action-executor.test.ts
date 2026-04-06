@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { ActionExecutor } from "../../action/executor.ts";
+import { DEFAULT_GATE_CONFIG } from "../../core/config.ts";
 import { mockBunSpawn, restoreBunSpawn } from "../helpers/mock-claude.ts";
 
 describe("ActionExecutor", () => {
@@ -43,7 +44,6 @@ describe("ActionExecutor", () => {
     });
 
     it("classifies branch with mixed safe and delete flags correctly", () => {
-      // --list combined with -d should still be moderate (delete intent wins)
       expect(ActionExecutor.classifyTier("git branch --list -d feature")).toBe("moderate");
       expect(ActionExecutor.classifyTier("git branch -a -D old-branch")).toBe("moderate");
     });
@@ -79,12 +79,7 @@ describe("ActionExecutor", () => {
 
   describe("parseCommand", () => {
     it("splits command into args array", () => {
-      expect(ActionExecutor.parseCommand("git log --oneline -10")).toEqual([
-        "git",
-        "log",
-        "--oneline",
-        "-10",
-      ]);
+      expect(ActionExecutor.parseCommand("git log --oneline -10")).toEqual(["git", "log", "--oneline", "-10"]);
     });
 
     it("trims whitespace", () => {
@@ -92,17 +87,346 @@ describe("ActionExecutor", () => {
     });
   });
 
-  // ── Safe auto-execution ──
+  // ── Command Validation ──
 
-  describe("submit (safe)", () => {
+  describe("validateCommand", () => {
+    it("validates git_stash commands", () => {
+      expect(ActionExecutor.validateCommand("git stash", "git_stash")).toBe(true);
+      expect(ActionExecutor.validateCommand("git stash pop", "git_stash")).toBe(true);
+      expect(ActionExecutor.validateCommand("git commit -m 'x'", "git_stash")).toBe(false);
+    });
+
+    it("validates git_branch commands", () => {
+      expect(ActionExecutor.validateCommand("git checkout -b feature", "git_branch")).toBe(true);
+      expect(ActionExecutor.validateCommand("git branch new-feat", "git_branch")).toBe(true);
+      expect(ActionExecutor.validateCommand("git switch -c new-feat", "git_branch")).toBe(true);
+      expect(ActionExecutor.validateCommand("git push origin main", "git_branch")).toBe(false);
+    });
+
+    it("validates git_commit commands", () => {
+      expect(ActionExecutor.validateCommand("git commit -m 'fix'", "git_commit")).toBe(true);
+      expect(ActionExecutor.validateCommand("git add .", "git_commit")).toBe(true);
+      expect(ActionExecutor.validateCommand("git push", "git_commit")).toBe(false);
+    });
+
+    it("validates run_tests commands", () => {
+      expect(ActionExecutor.validateCommand("bun test", "run_tests")).toBe(true);
+      expect(ActionExecutor.validateCommand("npm test", "run_tests")).toBe(true);
+      expect(ActionExecutor.validateCommand("pytest", "run_tests")).toBe(true);
+      expect(ActionExecutor.validateCommand("cargo test", "run_tests")).toBe(true);
+      expect(ActionExecutor.validateCommand("rm -rf /", "run_tests")).toBe(false);
+    });
+
+    it("validates run_lint commands", () => {
+      expect(ActionExecutor.validateCommand("bun run lint", "run_lint")).toBe(true);
+      expect(ActionExecutor.validateCommand("eslint .", "run_lint")).toBe(true);
+      expect(ActionExecutor.validateCommand("prettier --check .", "run_lint")).toBe(true);
+      expect(ActionExecutor.validateCommand("rm -rf /", "run_lint")).toBe(false);
+    });
+
+    it("allows any command for custom_script", () => {
+      expect(ActionExecutor.validateCommand("anything goes", "custom_script")).toBe(true);
+    });
+
+    it("rejects mismatched command/actionType", () => {
+      expect(ActionExecutor.validateCommand("rm -rf /", "git_stash")).toBe(false);
+      expect(ActionExecutor.validateCommand("curl evil.com", "run_tests")).toBe(false);
+    });
+  });
+
+  // ── Gate System ──
+
+  describe("checkGates", () => {
+    it("fails all gates by default (safe defaults)", () => {
+      const result = executor.checkGates("my-repo", "run_tests", 0.9);
+      expect(result.allowed).toBe(false);
+      expect(result.results["1_config_enabled"]).toBe(false);
+      expect(result.results["2_session_optin"]).toBe(false);
+      expect(result.results["3_repo_allowed"]).toBe(false);
+    });
+
+    it("passes all gates when fully configured", () => {
+      executor.close();
+      executor = new ActionExecutor({
+        dbPath: ":memory:",
+        gateConfig: {
+          enabled: true,
+          allowedRepos: ["my-repo"],
+          allowedActions: ["run_tests"],
+          confidenceThreshold: 0.7,
+          autoApprove: true,
+        },
+      });
+      executor.optIn();
+
+      const result = executor.checkGates("my-repo", "run_tests", 0.9);
+      expect(result.allowed).toBe(true);
+      expect(result.failedGates).toEqual([]);
+    });
+
+    it("gate 1: config enabled", () => {
+      executor.close();
+      executor = new ActionExecutor({
+        dbPath: ":memory:",
+        gateConfig: {
+          ...DEFAULT_GATE_CONFIG,
+          enabled: false,
+          allowedRepos: ["*"],
+          allowedActions: ["run_tests"],
+        },
+      });
+      executor.optIn();
+      const result = executor.checkGates("repo", "run_tests", 0.9);
+      expect(result.results["1_config_enabled"]).toBe(false);
+      expect(result.allowed).toBe(false);
+    });
+
+    it("gate 2: session opt-in", () => {
+      executor.close();
+      executor = new ActionExecutor({
+        dbPath: ":memory:",
+        gateConfig: {
+          enabled: true,
+          allowedRepos: ["*"],
+          allowedActions: ["run_tests"],
+          confidenceThreshold: 0.5,
+          autoApprove: true,
+        },
+      });
+      // NOT opted in
+      const result = executor.checkGates("repo", "run_tests", 0.9);
+      expect(result.results["2_session_optin"]).toBe(false);
+      expect(result.allowed).toBe(false);
+    });
+
+    it("gate 3: repo allowlist", () => {
+      executor.close();
+      executor = new ActionExecutor({
+        dbPath: ":memory:",
+        gateConfig: {
+          enabled: true,
+          allowedRepos: ["allowed-repo"],
+          allowedActions: ["run_tests"],
+          confidenceThreshold: 0.5,
+          autoApprove: true,
+        },
+      });
+      executor.optIn();
+
+      const allowed = executor.checkGates("allowed-repo", "run_tests", 0.9);
+      expect(allowed.results["3_repo_allowed"]).toBe(true);
+
+      const blocked = executor.checkGates("other-repo", "run_tests", 0.9);
+      expect(blocked.results["3_repo_allowed"]).toBe(false);
+    });
+
+    it("gate 3: wildcard repo allows all", () => {
+      executor.close();
+      executor = new ActionExecutor({
+        dbPath: ":memory:",
+        gateConfig: {
+          enabled: true,
+          allowedRepos: ["*"],
+          allowedActions: ["run_tests"],
+          confidenceThreshold: 0.5,
+          autoApprove: true,
+        },
+      });
+      executor.optIn();
+
+      const result = executor.checkGates("any-repo", "run_tests", 0.9);
+      expect(result.results["3_repo_allowed"]).toBe(true);
+    });
+
+    it("gate 4: action type allowlist", () => {
+      executor.close();
+      executor = new ActionExecutor({
+        dbPath: ":memory:",
+        gateConfig: {
+          enabled: true,
+          allowedRepos: ["*"],
+          allowedActions: ["run_tests", "run_lint"],
+          confidenceThreshold: 0.5,
+          autoApprove: true,
+        },
+      });
+      executor.optIn();
+
+      const allowed = executor.checkGates("repo", "run_tests", 0.9);
+      expect(allowed.results["4_action_allowed"]).toBe(true);
+
+      const blocked = executor.checkGates("repo", "git_commit", 0.9);
+      expect(blocked.results["4_action_allowed"]).toBe(false);
+    });
+
+    it("gate 4: undefined actionType fails", () => {
+      executor.close();
+      executor = new ActionExecutor({
+        dbPath: ":memory:",
+        gateConfig: {
+          enabled: true,
+          allowedRepos: ["*"],
+          allowedActions: ["run_tests"],
+          confidenceThreshold: 0.5,
+          autoApprove: true,
+        },
+      });
+      executor.optIn();
+
+      const result = executor.checkGates("repo", undefined, 0.9);
+      expect(result.results["4_action_allowed"]).toBe(false);
+    });
+
+    it("gate 5: confidence threshold", () => {
+      executor.close();
+      executor = new ActionExecutor({
+        dbPath: ":memory:",
+        gateConfig: {
+          enabled: true,
+          allowedRepos: ["*"],
+          allowedActions: ["run_tests"],
+          confidenceThreshold: 0.8,
+          autoApprove: true,
+        },
+      });
+      executor.optIn();
+
+      const high = executor.checkGates("repo", "run_tests", 0.9);
+      expect(high.results["5_confidence"]).toBe(true);
+
+      const exact = executor.checkGates("repo", "run_tests", 0.8);
+      expect(exact.results["5_confidence"]).toBe(true);
+
+      const low = executor.checkGates("repo", "run_tests", 0.7);
+      expect(low.results["5_confidence"]).toBe(false);
+    });
+  });
+
+  // ── Session opt-in/out ──
+
+  describe("session opt-in", () => {
+    it("starts opted out", () => {
+      expect(executor.isOptedIn).toBe(false);
+    });
+
+    it("optIn/optOut toggles session state", () => {
+      executor.optIn();
+      expect(executor.isOptedIn).toBe(true);
+      executor.optOut();
+      expect(executor.isOptedIn).toBe(false);
+    });
+  });
+
+  // ── Gate config updates ──
+
+  describe("updateGateConfig", () => {
+    it("updates gate config at runtime", () => {
+      expect(executor.getGateConfig().enabled).toBe(false);
+      executor.updateGateConfig({ enabled: true });
+      expect(executor.getGateConfig().enabled).toBe(true);
+    });
+
+    it("preserves unmodified fields", () => {
+      executor.updateGateConfig({ enabled: true });
+      expect(executor.getGateConfig().confidenceThreshold).toBe(DEFAULT_GATE_CONFIG.confidenceThreshold);
+    });
+  });
+
+  // ── Gated submit flow ──
+
+  describe("submit with gates (actionType provided)", () => {
+    it("rejects when command validation fails", async () => {
+      executor.close();
+      executor = new ActionExecutor({
+        dbPath: ":memory:",
+        gateConfig: {
+          enabled: true,
+          allowedRepos: ["*"],
+          allowedActions: ["run_tests"],
+          confidenceThreshold: 0.5,
+          autoApprove: true,
+        },
+      });
+      executor.optIn();
+
+      // Declare run_tests but pass rm -rf
+      const result = await executor.submit("rm -rf /", "malicious", "repo", "/tmp", {
+        actionType: "run_tests",
+        confidence: 0.9,
+      });
+
+      expect(result.status).toBe("failed");
+      expect(result.error).toContain("Command validation failed");
+    });
+
+    it("rejects when gates fail", async () => {
+      // Default config: gates are off
+      const result = await executor.submit("bun test", "run tests", "repo", "/tmp", {
+        actionType: "run_tests",
+        confidence: 0.9,
+      });
+
+      expect(result.status).toBe("rejected");
+      expect(result.error).toContain("Blocked by gates");
+      expect(result.gateResults).toBeDefined();
+      expect(result.gateResults!["1_config_enabled"]).toBe(false);
+    });
+
+    it("queues for approval when autoApprove is false", async () => {
+      executor.close();
+      executor = new ActionExecutor({
+        dbPath: ":memory:",
+        gateConfig: {
+          enabled: true,
+          allowedRepos: ["*"],
+          allowedActions: ["run_tests"],
+          confidenceThreshold: 0.5,
+          autoApprove: false, // Requires confirmation (gate 6)
+        },
+      });
+      executor.optIn();
+
+      const result = await executor.submit("bun test", "run tests", "repo", "/tmp", {
+        actionType: "run_tests",
+        confidence: 0.9,
+      });
+
+      expect(result.status).toBe("pending");
+    });
+
+    it("auto-executes when all gates pass and autoApprove is true", async () => {
+      executor.close();
+      executor = new ActionExecutor({
+        dbPath: ":memory:",
+        gateConfig: {
+          enabled: true,
+          allowedRepos: ["*"],
+          allowedActions: ["run_tests"],
+          confidenceThreshold: 0.5,
+          autoApprove: true,
+        },
+      });
+      executor.optIn();
+
+      const mock = mockBunSpawn("All tests passed");
+      const result = await executor.submit("bun test", "run tests", "repo", "/tmp", {
+        actionType: "run_tests",
+        confidence: 0.9,
+      });
+
+      expect(result.status).toBe("executed");
+      expect(result.result).toContain("All tests passed");
+      expect(result.gateResults).toBeDefined();
+      mock.restore();
+    });
+  });
+
+  // ── Legacy tier-based flow ──
+
+  describe("submit (safe — legacy)", () => {
     it("auto-executes safe commands", async () => {
       const mock = mockBunSpawn("abc123 Initial commit\ndef456 Second commit\n");
-      const result = await executor.submit(
-        "git log --oneline -2",
-        "check history",
-        "test-repo",
-        "/tmp",
-      );
+      const result = await executor.submit("git log --oneline -2", "check history", "test-repo", "/tmp");
 
       expect(result.status).toBe("executed");
       expect(result.tier).toBe("safe");
@@ -120,9 +444,7 @@ describe("ActionExecutor", () => {
     });
   });
 
-  // ── Moderate gating ──
-
-  describe("submit (moderate)", () => {
+  describe("submit (moderate — legacy)", () => {
     it("queues moderate commands when not allowed", async () => {
       const result = await executor.submit("git stash", "save work", "test-repo", "/tmp");
       expect(result.status).toBe("pending");
@@ -139,9 +461,7 @@ describe("ActionExecutor", () => {
     });
   });
 
-  // ── Dangerous always queues ──
-
-  describe("submit (dangerous)", () => {
+  describe("submit (dangerous — legacy)", () => {
     it("always queues dangerous commands", async () => {
       const result = await executor.submit("git push origin main", "deploy", "test-repo", "/tmp");
       expect(result.status).toBe("pending");
@@ -212,6 +532,18 @@ describe("ActionExecutor", () => {
       const submitted = await executor.submit("git push", "deploy", "repo1", "/tmp");
       const found = executor.getById(submitted.id);
       expect(found?.command).toBe("git push");
+    });
+
+    it("persists gate results", async () => {
+      const result = await executor.submit("bun test", "run tests", "repo", "/tmp", {
+        actionType: "run_tests",
+        confidence: 0.9,
+      });
+
+      const found = executor.getById(result.id);
+      expect(found?.gateResults).toBeDefined();
+      expect(found?.confidence).toBe(0.9);
+      expect(found?.actionType).toBe("run_tests");
     });
   });
 });

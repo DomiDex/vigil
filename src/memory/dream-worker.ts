@@ -54,9 +54,7 @@ try {
   const observations = rows.map((r: any) => r.content as string);
   const profileRow = db.query("SELECT * FROM repo_profiles WHERE repo = ?").get(repoName) as any;
 
-  const profileStr = profileRow
-    ? `${profileRow.summary}\nPatterns: ${JSON.parse(profileRow.patterns).join(", ")}`
-    : "";
+  const profileStr = profileRow ? `${profileRow.summary}\nPatterns: ${JSON.parse(profileRow.patterns).join(", ")}` : "";
 
   db.close();
 

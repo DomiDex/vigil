@@ -2,12 +2,14 @@ import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { loadConfig } from "../../core/config.ts";
 import { GitWatcher } from "../../git/watcher.ts";
 import { startA2AServer } from "../../llm/a2a-server.ts";
-import { DecisionEngine } from "../../llm/decision-max.ts";
+import { DecisionEngine, resetCircuitBreaker } from "../../llm/decision-max.ts";
 
 let server: ReturnType<typeof Bun.serve>;
 let port: number;
 let mockEngine: DecisionEngine;
 let mockWatcher: GitWatcher;
+const TEST_TOKEN = "test-a2a-token";
+const authHeaders = { "Content-Type": "application/json", Authorization: `Bearer ${TEST_TOKEN}` };
 
 function rpcBody(method: string, parts: { type: string; text: string }[] = []) {
   return {
@@ -19,6 +21,7 @@ function rpcBody(method: string, parts: { type: string; text: string }[] = []) {
 }
 
 beforeEach(() => {
+  resetCircuitBreaker();
   port = 40000 + Math.floor(Math.random() * 10000);
   const config = loadConfig();
   mockEngine = new DecisionEngine(config);
@@ -32,7 +35,7 @@ afterEach(() => {
 describe("agent card", () => {
   test("GET agent card returns valid JSON with 4 skills", async () => {
     spyOn(mockEngine, "ask").mockResolvedValue("test");
-    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher });
+    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher, authToken: TEST_TOKEN });
 
     const res = await fetch(`http://localhost:${port}/.well-known/agent-card.json`);
     expect(res.status).toBe(200);
@@ -43,7 +46,7 @@ describe("agent card", () => {
 
   test("agent card has correct version", async () => {
     spyOn(mockEngine, "ask").mockResolvedValue("test");
-    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher });
+    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher, authToken: TEST_TOKEN });
 
     const res = await fetch(`http://localhost:${port}/.well-known/agent-card.json`);
     const card = await res.json();
@@ -53,7 +56,7 @@ describe("agent card", () => {
 
 describe("health", () => {
   test("GET /health returns ok with uptime", async () => {
-    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher });
+    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher, authToken: TEST_TOKEN });
 
     const res = await fetch(`http://localhost:${port}/health`);
     expect(res.status).toBe(200);
@@ -66,14 +69,12 @@ describe("health", () => {
 describe("message/send", () => {
   test("valid message returns completed task", async () => {
     spyOn(mockEngine, "ask").mockResolvedValue("Hello from Vigil");
-    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher });
+    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher, authToken: TEST_TOKEN });
 
     const res = await fetch(`http://localhost:${port}/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(
-        rpcBody("message/send", [{ type: "text", text: "What's the repo status?" }]),
-      ),
+      headers: authHeaders,
+      body: JSON.stringify(rpcBody("message/send", [{ type: "text", text: "What's the repo status?" }])),
     });
 
     expect(res.status).toBe(200);
@@ -83,11 +84,11 @@ describe("message/send", () => {
 
   test("response has artifact with text", async () => {
     spyOn(mockEngine, "ask").mockResolvedValue("Some answer");
-    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher });
+    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher, authToken: TEST_TOKEN });
 
     const res = await fetch(`http://localhost:${port}/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders,
       body: JSON.stringify(rpcBody("message/send", [{ type: "text", text: "question" }])),
     });
 
@@ -98,11 +99,11 @@ describe("message/send", () => {
 
   test("task has UUID id", async () => {
     spyOn(mockEngine, "ask").mockResolvedValue("answer");
-    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher });
+    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher, authToken: TEST_TOKEN });
 
     const res = await fetch(`http://localhost:${port}/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders,
       body: JSON.stringify(rpcBody("message/send", [{ type: "text", text: "q" }])),
     });
 
@@ -113,11 +114,11 @@ describe("message/send", () => {
 
   test("multiple text parts joined with newline", async () => {
     const askSpy = spyOn(mockEngine, "ask").mockResolvedValue("answer");
-    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher });
+    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher, authToken: TEST_TOKEN });
 
     await fetch(`http://localhost:${port}/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders,
       body: JSON.stringify(
         rpcBody("message/send", [
           { type: "text", text: "part one" },
@@ -134,11 +135,11 @@ describe("message/send", () => {
 
   test("no repos gives fallback context", async () => {
     const askSpy = spyOn(mockEngine, "ask").mockResolvedValue("answer");
-    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher });
+    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher, authToken: TEST_TOKEN });
 
     await fetch(`http://localhost:${port}/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders,
       body: JSON.stringify(rpcBody("message/send", [{ type: "text", text: "q" }])),
     });
 
@@ -167,11 +168,11 @@ describe("message/send", () => {
       uncommittedSince: null,
     });
 
-    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher });
+    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher, authToken: TEST_TOKEN });
 
     await fetch(`http://localhost:${port}/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders,
       body: JSON.stringify(rpcBody("message/send", [{ type: "text", text: "q" }])),
     });
 
@@ -183,11 +184,11 @@ describe("message/send", () => {
 
 describe("error handling", () => {
   test("unknown method returns -32601", async () => {
-    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher });
+    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher, authToken: TEST_TOKEN });
 
     const res = await fetch(`http://localhost:${port}/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders,
       body: JSON.stringify(rpcBody("unknown")),
     });
 
@@ -197,11 +198,11 @@ describe("error handling", () => {
   });
 
   test("missing text parts returns -32602", async () => {
-    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher });
+    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher, authToken: TEST_TOKEN });
 
     const res = await fetch(`http://localhost:${port}/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders,
       body: JSON.stringify(rpcBody("message/send", [])),
     });
 
@@ -211,11 +212,11 @@ describe("error handling", () => {
 
   test("LLM failure returns -32603", async () => {
     spyOn(mockEngine, "ask").mockRejectedValue(new Error("LLM down"));
-    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher });
+    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher, authToken: TEST_TOKEN });
 
     const res = await fetch(`http://localhost:${port}/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders,
       body: JSON.stringify(rpcBody("message/send", [{ type: "text", text: "q" }])),
     });
 
@@ -225,11 +226,11 @@ describe("error handling", () => {
   });
 
   test("malformed JSON body returns error", async () => {
-    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher });
+    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher, authToken: TEST_TOKEN });
 
     const res = await fetch(`http://localhost:${port}/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders,
       body: "this is not json",
     });
 
@@ -238,10 +239,19 @@ describe("error handling", () => {
     expect(json.error.code).toBe(-32700);
   });
 
-  test("non-POST to / returns 404", async () => {
-    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher });
+  test("non-POST to / without auth returns 401", async () => {
+    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher, authToken: TEST_TOKEN });
 
     const res = await fetch(`http://localhost:${port}/`);
+    expect(res.status).toBe(401);
+  });
+
+  test("non-POST to / with auth returns 404", async () => {
+    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher, authToken: TEST_TOKEN });
+
+    const res = await fetch(`http://localhost:${port}/`, {
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+    });
     expect(res.status).toBe(404);
   });
 });
@@ -252,10 +262,10 @@ describe("rate limiting", () => {
       await Bun.sleep(50);
       return "answer";
     });
-    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher, maxConcurrent: 2 });
+    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher, maxConcurrent: 2, authToken: TEST_TOKEN });
 
     const body = JSON.stringify(rpcBody("message/send", [{ type: "text", text: "q" }]));
-    const opts = { method: "POST", headers: { "Content-Type": "application/json" }, body };
+    const opts = { method: "POST", headers: authHeaders, body };
 
     const [r1, r2] = await Promise.all([
       fetch(`http://localhost:${port}/`, opts),
@@ -273,10 +283,10 @@ describe("rate limiting", () => {
           resolve1 = r;
         }),
     );
-    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher, maxConcurrent: 1 });
+    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher, maxConcurrent: 1, authToken: TEST_TOKEN });
 
     const body = JSON.stringify(rpcBody("message/send", [{ type: "text", text: "q" }]));
-    const opts = { method: "POST", headers: { "Content-Type": "application/json" }, body };
+    const opts = { method: "POST", headers: authHeaders, body };
 
     // First request takes the only slot
     const p1 = fetch(`http://localhost:${port}/`, opts);
@@ -297,10 +307,10 @@ describe("rate limiting", () => {
 
   test("slot freed after request completes", async () => {
     spyOn(mockEngine, "ask").mockResolvedValue("answer");
-    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher, maxConcurrent: 1 });
+    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher, maxConcurrent: 1, authToken: TEST_TOKEN });
 
     const body = JSON.stringify(rpcBody("message/send", [{ type: "text", text: "q" }]));
-    const opts = { method: "POST", headers: { "Content-Type": "application/json" }, body };
+    const opts = { method: "POST", headers: authHeaders, body };
 
     // First request completes, freeing the slot
     const r1 = await fetch(`http://localhost:${port}/`, opts);

@@ -7,6 +7,7 @@ export type NotifyBackend = "desktop" | "webhook" | "file";
 export interface NotifyConfig {
   backends: NotifyBackend[];
   webhookUrl?: string;
+  queueDir?: string;
 }
 
 export class NotificationRouter {
@@ -15,7 +16,7 @@ export class NotificationRouter {
 
   constructor(config: NotifyConfig) {
     this.config = config;
-    this.queueDir = join(getDataDir(), "notifications");
+    this.queueDir = config.queueDir ?? join(getDataDir(), "notifications");
     mkdirSync(this.queueDir, { recursive: true });
   }
 

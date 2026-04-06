@@ -23,21 +23,17 @@ const DEFAULT_RETRIES = 2;
 const DEFAULT_RETRY_DELAY = 1_000;
 
 const TRANSIENT_PATTERNS = [
-  "Unable to create",     // .git/index.lock exists
-  "cannot lock ref",      // ref lock contention
-  "Connection refused",   // network mount
-  "fatal: loose object",  // temporary corruption during gc
+  "Unable to create", // .git/index.lock exists
+  "cannot lock ref", // ref lock contention
+  "Connection refused", // network mount
+  "fatal: loose object", // temporary corruption during gc
 ];
 
 function isTransientError(stderr: string): boolean {
   return TRANSIENT_PATTERNS.some((p) => stderr.includes(p));
 }
 
-export async function gitExec(
-  cwd: string,
-  args: string[],
-  opts: GitExecOptions = {}
-): Promise<GitExecResult> {
+export async function gitExec(cwd: string, args: string[], opts: GitExecOptions = {}): Promise<GitExecResult> {
   const timeout = opts.timeoutMs ?? DEFAULT_TIMEOUT;
   const maxRetries = opts.retries ?? DEFAULT_RETRIES;
   const retryDelay = opts.retryDelayMs ?? DEFAULT_RETRY_DELAY;
@@ -60,7 +56,7 @@ export async function gitExec(
           setTimeout(() => {
             proc.kill();
             reject(new Error(`git ${args[0]} timed out after ${timeout}ms`));
-          }, timeout)
+          }, timeout),
         ),
       ]);
 
@@ -79,7 +75,6 @@ export async function gitExec(
       lastError = err as Error;
       if (attempt < maxRetries) {
         await Bun.sleep(retryDelay);
-        continue;
       }
     }
   }

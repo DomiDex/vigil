@@ -16,9 +16,7 @@ afterEach(() => {
   rmSync(tmpHome, { recursive: true, force: true });
 });
 
-async function runCLI(
-  ...args: string[]
-): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+async function runCLI(...args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const proc = Bun.spawn(["bun", "run", "src/cli/index.ts", ...args], {
     cwd: PROJECT_ROOT,
     env: { ...process.env, HOME: tmpHome, USERPROFILE: tmpHome },

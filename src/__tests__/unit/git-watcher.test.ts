@@ -240,10 +240,7 @@ describe("GitWatcher", () => {
       expect(ctx).toContain("## Repo:");
       expect(ctx).toContain("### Git Status");
       expect(ctx).toContain("### Recent Commits");
-      expect(ctx).toContain("### Last Commit");
-      expect(ctx).toContain("### Last Commit Diff");
-      expect(ctx).toContain("### Working Tree Diff Stats");
-      expect(ctx).toContain("### Working Tree Diff");
+      expect(ctx).toContain("### Diff Stats");
     });
   });
 });

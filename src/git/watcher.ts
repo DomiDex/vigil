@@ -1,15 +1,10 @@
-import { watch, type FSWatcher } from "fs";
-import { basename, resolve, join } from "path";
+import { type FSWatcher, watch } from "node:fs";
+import { basename, join, resolve } from "node:path";
 import { gitExec } from "./exec.ts";
 
 // ── Types ──
 
-export type GitEventType =
-  | "file_change"
-  | "new_commit"
-  | "branch_switch"
-  | "uncommitted_drift"
-  | "rebase_detected";
+export type GitEventType = "file_change" | "new_commit" | "branch_switch" | "uncommitted_drift" | "rebase_detected";
 
 export interface RepoState {
   path: string;
@@ -32,7 +27,7 @@ export type GitEventHandler = (event: GitEvent) => void;
 
 // ── Event Deduplication ──
 
-class EventDeduplicator {
+export class EventDeduplicator {
   private seen = new Map<string, number>();
   private readonly windowMs: number;
 
@@ -98,9 +93,7 @@ export class GitWatcher {
 
     const hash = await this.git(absPath, ["rev-parse", "HEAD"]);
     const branch = await this.git(absPath, ["rev-parse", "--abbrev-ref", "HEAD"]);
-    const reflogHash = await this.git(absPath, ["reflog", "show", "--format=%H", "-1"]).catch(
-      () => ""
-    );
+    const reflogHash = await this.git(absPath, ["reflog", "show", "--format=%H", "-1"]).catch(() => "");
 
     const state: RepoState = {
       path: absPath,
@@ -199,9 +192,7 @@ export class GitWatcher {
         }
 
         // Check for branch switch
-        const currentBranch = (
-          await this.git(repoPath, ["rev-parse", "--abbrev-ref", "HEAD"])
-        ).trim();
+        const currentBranch = (await this.git(repoPath, ["rev-parse", "--abbrev-ref", "HEAD"])).trim();
         if (currentBranch !== state.currentBranch) {
           const oldBranch = state.currentBranch;
           state.currentBranch = currentBranch;
@@ -242,22 +233,13 @@ export class GitWatcher {
    */
   private async detectRebase(repo: RepoState): Promise<boolean> {
     try {
-      const reflogResult = await this.git(repo.path, [
-        "reflog",
-        "show",
-        "--format=%H",
-        "-1",
-      ]);
+      const reflogResult = await this.git(repo.path, ["reflog", "show", "--format=%H", "-1"]);
       const currentReflogHash = reflogResult.trim();
 
       if (repo.lastReflogHash && currentReflogHash !== repo.lastReflogHash) {
         // Reflog changed — validate that cached SHA still exists on branch
         if (repo.lastCommitHash) {
-          const validateResult = await this.git(repo.path, [
-            "cat-file",
-            "-t",
-            repo.lastCommitHash,
-          ]).catch(() => null);
+          const validateResult = await this.git(repo.path, ["cat-file", "-t", repo.lastCommitHash]).catch(() => null);
 
           if (!validateResult || validateResult.trim() !== "commit") {
             repo.lastReflogHash = currentReflogHash;

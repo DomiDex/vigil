@@ -3,7 +3,7 @@
  * confidence-based eviction, and archiving to prevent unbounded growth.
  */
 
-import { existsSync, mkdirSync, appendFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { getDataDir } from "../core/config.ts";
 
@@ -84,9 +84,7 @@ export class MemoryPruner {
   private pruneByAge(): number {
     const cutoff = Date.now() - this.policy.maxAgeDays * 24 * 60 * 60 * 1000;
 
-    const rows = this.db
-      .query(`SELECT * FROM memories WHERE created_at < ?`)
-      .all(cutoff) as MemoryRow[];
+    const rows = this.db.query(`SELECT * FROM memories WHERE created_at < ?`).all(cutoff) as MemoryRow[];
 
     for (const row of rows) {
       if (this.policy.archive) {
@@ -193,7 +191,7 @@ export class MemoryPruner {
       confidence: memory.confidence,
       archivedAt: Date.now(),
     });
-    appendFileSync(filePath, line + "\n");
+    appendFileSync(filePath, `${line}\n`);
     this.archivedCount++;
   }
 
@@ -218,8 +216,7 @@ export class MemoryPruner {
       avgConfidence: Math.round(row.avg_conf * 1000) / 1000,
     }));
 
-    const pageCount = (this.db.query(`PRAGMA page_count`).get() as { page_count: number })
-      .page_count;
+    const pageCount = (this.db.query(`PRAGMA page_count`).get() as { page_count: number }).page_count;
     const pageSize = (this.db.query(`PRAGMA page_size`).get() as { page_size: number }).page_size;
 
     return {

@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
-import { join } from "path";
-import { appendFileSync, readFileSync, readdirSync } from "fs";
+import { appendFileSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { getDataDir, getLogsDir } from "../core/config.ts";
 
 // ── Types ──
@@ -27,15 +27,15 @@ export interface RepoProfile {
 export class EventLog {
   private logsDir: string;
 
-  constructor() {
-    this.logsDir = getLogsDir();
+  constructor(logsDir?: string) {
+    this.logsDir = logsDir ?? getLogsDir();
   }
 
   append(repo: string, event: Record<string, unknown>): void {
     const date = new Date().toISOString().split("T")[0];
     const filename = `${date}-${repo}.jsonl`;
     const filepath = join(this.logsDir, filename);
-    const line = JSON.stringify({ ...event, timestamp: Date.now() }) + "\n";
+    const line = `${JSON.stringify({ ...event, timestamp: Date.now() })}\n`;
     appendFileSync(filepath, line);
   }
 
@@ -47,11 +47,17 @@ export class EventLog {
     limit?: number;
   }): Record<string, unknown>[] {
     const results: Record<string, unknown>[] = [];
-    const files = readdirSync(this.logsDir).filter((f) => f.endsWith(".jsonl")).sort().reverse();
+    const files = readdirSync(this.logsDir)
+      .filter((f) => f.endsWith(".jsonl"))
+      .sort()
+      .reverse();
 
     for (const file of files) {
-      // Filter by repo name in filename
-      if (options.repo && !file.includes(options.repo)) continue;
+      // Filter by exact repo name in filename (format: YYYY-MM-DD-{repo}.jsonl)
+      if (options.repo) {
+        const fileRepo = file.replace(/^\d{4}-\d{2}-\d{2}-/, "").replace(/\.jsonl$/, "");
+        if (fileRepo !== options.repo) continue;
+      }
 
       // Filter by date range
       const fileDate = file.split("-").slice(0, 3).join("-");
@@ -82,9 +88,8 @@ export class EventLog {
 export class VectorStore {
   private db: Database;
 
-  constructor() {
-    const dbPath = join(getDataDir(), "vigil.db");
-    this.db = new Database(dbPath);
+  constructor(dbPath?: string) {
+    this.db = new Database(dbPath ?? join(getDataDir(), "vigil.db"));
   }
 
   init(): void {
@@ -157,7 +162,7 @@ export class VectorStore {
         entry.confidence,
         entry.timestamp,
         Date.now(),
-      ]
+      ],
     );
   }
 
@@ -168,7 +173,7 @@ export class VectorStore {
          JOIN memories_fts fts ON m.rowid = fts.rowid
          WHERE memories_fts MATCH ?
          ORDER BY rank
-         LIMIT ?`
+         LIMIT ?`,
       )
       .all(query, limit) as any[];
 
@@ -184,9 +189,7 @@ export class VectorStore {
   }
 
   getRepoProfile(repo: string): RepoProfile | null {
-    const row = this.db
-      .query(`SELECT * FROM repo_profiles WHERE repo = ?`)
-      .get(repo) as any;
+    const row = this.db.query(`SELECT * FROM repo_profiles WHERE repo = ?`).get(repo) as any;
 
     if (!row) return null;
     return {
@@ -201,7 +204,7 @@ export class VectorStore {
     this.db.run(
       `INSERT OR REPLACE INTO repo_profiles (repo, summary, patterns, last_updated)
        VALUES (?, ?, ?, ?)`,
-      [profile.repo, profile.summary, JSON.stringify(profile.patterns), Date.now()]
+      [profile.repo, profile.summary, JSON.stringify(profile.patterns), Date.now()],
     );
   }
 
@@ -209,8 +212,98 @@ export class VectorStore {
     this.db.run(
       `INSERT OR REPLACE INTO consolidated (id, repo, content, source_ids, created_at)
        VALUES (?, ?, ?, ?, ?)`,
-      [id, repo, content, JSON.stringify(sourceIds), Date.now()]
+      [id, repo, content, JSON.stringify(sourceIds), Date.now()],
     );
+  }
+
+  /**
+   * Prune old, low-confidence memories.
+   * Inspired by Kairos auto-expiry (cronTasks.ts: recurringMaxAgeMs).
+   *
+   * Rules:
+   * - git_event memories older than maxAgeDays → delete
+   * - decision memories with confidence < 0.3 older than 3 days → delete
+   * - consolidated memories are NEVER pruned (Kairos permanent: true)
+   * - Keep at least minPerRepo memories per repo
+   */
+  prune(options?: { maxAgeDays?: number; minPerRepo?: number }): number {
+    const maxAge = (options?.maxAgeDays ?? 7) * 86_400_000;
+    const minPerRepo = options?.minPerRepo ?? 50;
+    const cutoff = Date.now() - maxAge;
+    const lowConfCutoff = Date.now() - 3 * 86_400_000;
+
+    const counts = this.db.query("SELECT repo, COUNT(*) as count FROM memories GROUP BY repo").all() as {
+      repo: string;
+      count: number;
+    }[];
+
+    let pruned = 0;
+
+    for (const { repo, count } of counts) {
+      if (count <= minPerRepo) continue;
+
+      const excess = count - minPerRepo;
+
+      // Select IDs to prune, then delete them
+      // (Two-step to avoid FTS5 triggers inflating change count)
+      const toDelete = this.db
+        .query(
+          `SELECT id FROM memories
+           WHERE repo = ?
+             AND type != 'consolidated'
+             AND (
+               (type = 'git_event' AND created_at < ?)
+               OR (type = 'decision' AND confidence < 0.3 AND created_at < ?)
+             )
+           ORDER BY created_at ASC
+           LIMIT ?`,
+        )
+        .all(repo, cutoff, lowConfCutoff, excess) as { id: string }[];
+
+      if (toDelete.length === 0) continue;
+
+      const placeholders = toDelete.map(() => "?").join(",");
+      this.db.run(
+        `DELETE FROM memories WHERE id IN (${placeholders})`,
+        toDelete.map((r) => r.id),
+      );
+
+      pruned += toDelete.length;
+    }
+
+    if (pruned > 100) {
+      this.db.run("VACUUM");
+    }
+
+    return pruned;
+  }
+
+  /**
+   * Get recent memories across ALL repos, for cross-repo analysis.
+   * Used during dream consolidation to detect inter-repo patterns.
+   */
+  getCrossRepoMemories(limit = 50): MemoryEntry[] {
+    const rows = this.db.query(`SELECT * FROM memories ORDER BY created_at DESC LIMIT ?`).all(limit) as any[];
+
+    return rows.map(this.rowToEntry);
+  }
+
+  /**
+   * Get all repo profiles for cross-repo comparison.
+   */
+  getAllRepoProfiles(): RepoProfile[] {
+    const rows = this.db.query(`SELECT * FROM repo_profiles`).all() as any[];
+
+    return rows.map((r: any) => ({
+      repo: r.repo,
+      summary: r.summary,
+      patterns: JSON.parse(r.patterns || "[]"),
+      lastUpdated: r.last_updated,
+    }));
+  }
+
+  close(): void {
+    this.db.close();
   }
 
   private rowToEntry(row: any): MemoryEntry {

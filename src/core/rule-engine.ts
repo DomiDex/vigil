@@ -109,8 +109,9 @@ export class RuleEngine {
 
       if (rule.match.commitMessage !== undefined) {
         const re = this.safeRegex(rule.match.commitMessage);
-        if (!re) { matched = false; }
-        else {
+        if (!re) {
+          matched = false;
+        } else {
           const anyMatch = context.commitMessages.some((msg) => re.test(msg));
           if (!anyMatch) matched = false;
         }
@@ -118,8 +119,9 @@ export class RuleEngine {
 
       if (matched && rule.match.filePath !== undefined) {
         const re = this.safeRegex(rule.match.filePath);
-        if (!re) { matched = false; }
-        else {
+        if (!re) {
+          matched = false;
+        } else {
           const anyMatch = context.changedFiles.some((f) => re.test(f));
           if (!anyMatch) matched = false;
         }
@@ -127,8 +129,9 @@ export class RuleEngine {
 
       if (matched && rule.match.branch !== undefined) {
         const re = this.safeRegex(rule.match.branch);
-        if (!re) { matched = false; }
-        else if (!re.test(context.branch)) matched = false;
+        if (!re) {
+          matched = false;
+        } else if (!re.test(context.branch)) matched = false;
       }
 
       if (matched && rule.match.uncommittedAbove !== undefined) {
@@ -162,8 +165,7 @@ export class RuleEngine {
           commitMessage: "\\b(TODO|FIXME|HACK)\\b",
         },
         action: "NOTIFY",
-        message:
-          "Commit message contains TODO/FIXME/HACK — flagging for review.",
+        message: "Commit message contains TODO/FIXME/HACK — flagging for review.",
         enabled: true,
       },
       {
@@ -173,8 +175,7 @@ export class RuleEngine {
           uncommittedAbove: 20,
         },
         action: "NOTIFY",
-        message:
-          "More than 20 uncommitted files detected — consider committing or stashing.",
+        message: "More than 20 uncommitted files detected — consider committing or stashing.",
         enabled: true,
       },
       {
@@ -194,8 +195,7 @@ export class RuleEngine {
           filePath: "(^|/)\\.env",
         },
         action: "NOTIFY",
-        message:
-          "Environment file (.env) changed — potential security concern, verify no secrets are committed.",
+        message: "Environment file (.env) changed — potential security concern, verify no secrets are committed.",
         enabled: true,
       },
       {

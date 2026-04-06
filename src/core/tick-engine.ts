@@ -1,6 +1,7 @@
 import type { VigilConfig } from "./config.ts";
 
 export type TickHandler = (tickNumber: number, isSleeping: boolean) => Promise<void>;
+export type TickErrorHandler = (tickNumber: number, error: Error) => void;
 
 /**
  * Deterministic jitter based on repo name (Kairos cronScheduler.ts pattern).
@@ -9,7 +10,7 @@ export type TickHandler = (tickNumber: number, isSleeping: boolean) => Promise<v
 export function computeJitter(repoName: string, baseIntervalSec: number): number {
   let hash = 0;
   for (let i = 0; i < repoName.length; i++) {
-    hash = ((hash << 5) - hash) + repoName.charCodeAt(i);
+    hash = (hash << 5) - hash + repoName.charCodeAt(i);
     hash |= 0; // Convert to 32-bit integer
   }
   // Jitter: 0-10% of base interval, capped at 15 seconds
@@ -21,6 +22,7 @@ export function computeJitter(repoName: string, baseIntervalSec: number): number
 export class TickEngine {
   private config: VigilConfig;
   private handlers: TickHandler[] = [];
+  private errorHandlers: TickErrorHandler[] = [];
   private timer: ReturnType<typeof setInterval> | null = null;
   private tickCount = 0;
   private lastActivity = Date.now();
@@ -35,6 +37,10 @@ export class TickEngine {
 
   onTick(handler: TickHandler): void {
     this.handlers.push(handler);
+  }
+
+  onError(handler: TickErrorHandler): void {
+    this.errorHandlers.push(handler);
   }
 
   start(): void {
@@ -91,15 +97,11 @@ export class TickEngine {
       this.sleeping = true;
     }
 
-    const baseIntervalSec = this.sleeping
-      ? this.config.sleepTickInterval
-      : this.config.tickInterval;
+    const baseIntervalSec = this.sleeping ? this.config.sleepTickInterval : this.config.tickInterval;
 
-    const jitterMs = this.repoName
-      ? computeJitter(this.repoName, baseIntervalSec)
-      : 0;
+    const jitterMs = this.repoName ? computeJitter(this.repoName, baseIntervalSec) : 0;
 
-    const interval = (baseIntervalSec * 1000) + jitterMs;
+    const interval = baseIntervalSec * 1000 + jitterMs;
 
     this.timer = setTimeout(async () => {
       this.tickCount++;
@@ -110,13 +112,15 @@ export class TickEngine {
           await Promise.race([
             handler(this.tickCount, this.sleeping),
             new Promise((_, reject) =>
-              setTimeout(() => reject(new Error("Tick handler exceeded blocking budget")), budget)
+              setTimeout(() => reject(new Error("Tick handler exceeded blocking budget")), budget),
             ),
           ]);
         } catch (err) {
-          if (err instanceof Error && err.message.includes("blocking budget")) {
+          const error = err instanceof Error ? err : new Error(String(err));
+          if (error.message.includes("blocking budget")) {
             console.error(`[tick ${this.tickCount}] Handler exceeded ${this.config.blockingBudget}s budget`);
           }
+          for (const eh of this.errorHandlers) eh(this.tickCount, error);
         }
       }
 

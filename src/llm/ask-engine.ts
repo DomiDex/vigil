@@ -19,7 +19,10 @@ function parseShellArgs(command: string): string[] {
     } else if (ch === '"' && !inSingle) {
       inDouble = !inDouble;
     } else if (/\s/.test(ch) && !inSingle && !inDouble) {
-      if (current) { args.push(current); current = ""; }
+      if (current) {
+        args.push(current);
+        current = "";
+      }
     } else {
       current += ch;
     }
@@ -118,14 +121,12 @@ const ASK_TOOL_DEFINITIONS = [
   },
   {
     name: "run_git",
-    description:
-      "Run a read-only git command (allowed: log, diff, show, status, branch, shortlog, blame, ls-files)",
+    description: "Run a read-only git command (allowed: log, diff, show, status, branch, shortlog, blame, ls-files)",
     parameters: { command: "string — full git command, e.g. 'git log --oneline -20'" },
   },
   {
     name: "answer",
-    description:
-      "Provide your final answer to the user's question. Call this when you have enough information.",
+    description: "Provide your final answer to the user's question. Call this when you have enough information.",
     parameters: { text: "string — your answer", sources: "string[] — what you consulted" },
   },
 ];
@@ -161,8 +162,7 @@ export class AskEngine {
     // Build initial context with memory injection
     const indexPrompt = askCtx.indexTier.formatForPrompt(askCtx.repo);
     const recentMemories = askCtx.vectorStore.getByRepo(askCtx.repo, 10);
-    const memorySummary =
-      recentMemories.map((m) => `- [${m.type}] ${m.content}`).join("\n") || "(none)";
+    const memorySummary = recentMemories.map((m) => `- [${m.type}] ${m.content}`).join("\n") || "(none)";
     const topics = askCtx.topicTier.listTopics(askCtx.repo);
     const topicList = topics.length > 0 ? `Available topics: ${topics.join(", ")}` : "(no topics)";
 
@@ -279,10 +279,7 @@ Investigate using the tools above, then call "answer" when ready.`;
     try {
       switch (call.tool) {
         case "search_memory": {
-          const results = ctx.vectorStore.hybridSearch(
-            call.args.query as string,
-            (call.args.limit as number) ?? 5,
-          );
+          const results = ctx.vectorStore.hybridSearch(call.args.query as string, (call.args.limit as number) ?? 5);
           return { tool: "search_memory", result: results.map((r) => r.content) };
         }
 
@@ -311,10 +308,7 @@ Investigate using the tools above, then call "answer" when ready.`;
             const maxChars = 4000;
             return {
               tool: "read_file",
-              result:
-                content.length > maxChars
-                  ? `${content.slice(0, maxChars)}\n...(truncated)`
-                  : content,
+              result: content.length > maxChars ? `${content.slice(0, maxChars)}\n...(truncated)` : content,
             };
           } catch {
             return { tool: "read_file", result: null, error: `File not found: ${filePath}` };
@@ -331,11 +325,7 @@ Investigate using the tools above, then call "answer" when ready.`;
         }
 
         case "list_files": {
-          return listFiles(
-            ctx.repoPath,
-            call.args.path as string | undefined,
-            call.args.glob as string | undefined,
-          );
+          return listFiles(ctx.repoPath, call.args.path as string | undefined, call.args.glob as string | undefined);
         }
 
         case "read_file_range": {
@@ -376,10 +366,7 @@ Investigate using the tools above, then call "answer" when ready.`;
           const maxChars = 4000;
           return {
             tool: "run_git",
-            result:
-              stdout.length > maxChars
-                ? `${stdout.slice(0, maxChars)}\n...(truncated)`
-                : stdout.trim(),
+            result: stdout.length > maxChars ? `${stdout.slice(0, maxChars)}\n...(truncated)` : stdout.trim(),
           };
         }
 
@@ -395,14 +382,7 @@ Investigate using the tools above, then call "answer" when ready.`;
     const env = { ...process.env };
     delete env.ANTHROPIC_API_KEY;
 
-    const args = [
-      "claude",
-      "-p",
-      "--output-format",
-      "text",
-      "--model",
-      this.config.escalationModel,
-    ];
+    const args = ["claude", "-p", "--output-format", "text", "--model", this.config.escalationModel];
     const fullPrompt = `<system>${systemPrompt}</system>\n\n${prompt}`;
 
     const proc = Bun.spawn(args, {

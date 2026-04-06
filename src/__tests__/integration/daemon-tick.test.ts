@@ -4,7 +4,6 @@ import { Daemon } from "../../core/daemon.ts";
 import { TickEngine } from "../../core/tick-engine.ts";
 import { GitWatcher } from "../../git/watcher.ts";
 import { DecisionEngine } from "../../llm/decision-max.ts";
-import type { ToolResult } from "../../llm/tools.ts";
 import { EventLog, VectorStore } from "../../memory/store.ts";
 import { withTempHome } from "../helpers/temp-config.ts";
 
@@ -15,24 +14,6 @@ let mockEventLog: EventLog;
 let mockVectorStore: VectorStore;
 let mockTickEngine: TickEngine;
 let tempHome: ReturnType<typeof withTempHome>;
-
-function silentToolResult(reasoning = "all quiet"): { reasoning: string; toolResults: ToolResult[] } {
-  return { reasoning, toolResults: [{ tool: "silent", result: "ok" }] };
-}
-
-function observeToolResult(content = "interesting pattern"): { reasoning: string; toolResults: ToolResult[] } {
-  return {
-    reasoning: "spotted something",
-    toolResults: [{ tool: "observe", result: content }],
-  };
-}
-
-function notifyToolResult(content = "heads up"): { reasoning: string; toolResults: ToolResult[] } {
-  return {
-    reasoning: "important",
-    toolResults: [{ tool: "notify", result: content }],
-  };
-}
 
 beforeEach(() => {
   tempHome = withTempHome();
@@ -56,10 +37,6 @@ beforeEach(() => {
       decisionEngine: mockEngine,
     },
   );
-
-  // Default quickFingerprint mock — returns a unique value each call to avoid short-circuit
-  let fpCounter = 0;
-  spyOn(mockWatcher, "quickFingerprint").mockImplementation(async () => `fp-${++fpCounter}`);
 });
 
 afterEach(() => {
@@ -71,64 +48,89 @@ afterEach(() => {
 describe("daemon tick integration", () => {
   test("tick calls buildContext for each repo", async () => {
     const buildCtxSpy = spyOn(mockWatcher, "buildContext").mockResolvedValue("context");
-    spyOn(mockEngine, "decideTick").mockResolvedValue(silentToolResult());
+    spyOn(mockEngine, "decide").mockResolvedValue({ decision: "SILENT", reasoning: "all quiet", confidence: 0.5 });
 
     await daemon.handleTick(1, false);
 
     expect(buildCtxSpy).toHaveBeenCalledTimes(2);
   });
 
-  test("SILENT writes tick output via stdout in collapsed mode", async () => {
+  test("SILENT decision logs on first ticks", async () => {
     spyOn(mockWatcher, "buildContext").mockResolvedValue("context");
-    spyOn(mockEngine, "decideTick").mockResolvedValue(silentToolResult());
-    const writeSpy = spyOn(process.stdout, "write").mockImplementation(() => true);
-
-    await daemon.handleTick(1, false);
-
-    // Collapsed mode writes every SILENT tick via process.stdout.write
-    expect(writeSpy.mock.calls.length).toBeGreaterThan(0);
-    const output = String(writeSpy.mock.calls[0][0]);
-    expect(output).toContain("SILENT");
-    writeSpy.mockRestore();
-  });
-
-  test("SILENT logs with reasoning in verbose mode", async () => {
-    // Close the old daemon's executor before re-creating
-    daemon.actionExecutor.close();
-
-    // Re-create daemon with verbose mode
-    daemon = new Daemon(
-      ["/fake/repo1"],
-      { tickInterval: 1, verbose: true },
-      {
-        tickEngine: mockTickEngine,
-        gitWatcher: mockWatcher,
-        eventLog: mockEventLog,
-        vectorStore: mockVectorStore,
-        decisionEngine: mockEngine,
-      },
-    );
-
-    spyOn(mockWatcher, "buildContext").mockResolvedValue("context");
-    spyOn(mockEngine, "decideTick").mockResolvedValue(silentToolResult());
+    spyOn(mockEngine, "decide").mockResolvedValue({ decision: "SILENT", reasoning: "all quiet", confidence: 0.5 });
     const logSpy = spyOn(console, "log").mockImplementation(() => {});
 
     await daemon.handleTick(1, false);
 
+    // Tick 1 is <= 3, so SILENT should be logged
     expect(logSpy.mock.calls.length).toBeGreaterThan(0);
+    const output = logSpy.mock.calls.map((c) => String(c[0])).join(" ");
+    expect(output).toContain("tick 1");
     logSpy.mockRestore();
+  });
+
+  test("OBSERVE stores memory in vectorStore", async () => {
+    spyOn(mockWatcher, "buildContext").mockResolvedValue("context");
+    spyOn(mockEngine, "decide").mockResolvedValue({
+      decision: "OBSERVE",
+      reasoning: "interesting pattern",
+      content: "Developer has uncommitted changes for 2 hours",
+      confidence: 0.6,
+    });
+    spyOn(console, "log").mockImplementation(() => {});
+
+    daemon.repoPaths = ["/fake/repo1"];
+    await daemon.handleTick(1, false);
+
+    const memories = mockVectorStore.getByRepo("repo1", 10);
+    expect(memories.length).toBe(1);
+    expect(memories[0].content).toContain("uncommitted changes");
+    expect(memories[0].type).toBe("decision");
+  });
+
+  test("NOTIFY sends notification", async () => {
+    spyOn(mockWatcher, "buildContext").mockResolvedValue("context");
+    spyOn(mockEngine, "decide").mockResolvedValue({
+      decision: "NOTIFY",
+      reasoning: "important finding",
+      content: "Branch drift detected",
+      confidence: 0.8,
+    });
+    spyOn(console, "log").mockImplementation(() => {});
+    const notifySpy = spyOn(daemon.notifier, "send").mockImplementation(async () => {});
+
+    daemon.repoPaths = ["/fake/repo1"];
+    await daemon.handleTick(1, false);
+
+    expect(notifySpy).toHaveBeenCalledTimes(1);
+    expect(String(notifySpy.mock.calls[0][1])).toContain("Branch drift detected");
+  });
+
+  test("ACT sends warning notification", async () => {
+    spyOn(mockWatcher, "buildContext").mockResolvedValue("context");
+    spyOn(mockEngine, "decide").mockResolvedValue({
+      decision: "ACT",
+      reasoning: "needs action",
+      action: "Run tests immediately",
+      confidence: 0.9,
+    });
+    spyOn(console, "log").mockImplementation(() => {});
+    const notifySpy = spyOn(daemon.notifier, "send").mockImplementation(async () => {});
+
+    daemon.repoPaths = ["/fake/repo1"];
+    await daemon.handleTick(1, false);
+
+    expect(notifySpy).toHaveBeenCalledTimes(1);
+    expect(notifySpy.mock.calls[0][2]).toBe("warning");
   });
 
   test("git event triggers reportActivity", () => {
     const activitySpy = spyOn(mockTickEngine, "reportActivity");
 
-    // Wire up the daemon's git event handling manually
-    // In production, start() wires this. We simulate the event handler.
     mockWatcher.onEvent(() => {
       mockTickEngine.reportActivity();
     });
 
-    // Emit a fake event
     (mockWatcher as any).emit({
       type: "file_change",
       repo: "repo1",
@@ -139,73 +141,38 @@ describe("daemon tick integration", () => {
     expect(activitySpy).toHaveBeenCalledTimes(1);
   });
 
-  test("unchanged context skips LLM on second tick", async () => {
-    spyOn(mockWatcher, "buildContext").mockResolvedValue("same context");
-    const decideTickSpy = spyOn(mockEngine, "decideTick").mockResolvedValue(silentToolResult());
-
-    daemon.repoPaths = ["/fake/repo1"];
-    await daemon.handleTick(1, false);
-    expect(decideTickSpy).toHaveBeenCalledTimes(1);
-
-    // Second tick with same context should skip LLM
-    await daemon.handleTick(2, false);
-    expect(decideTickSpy).toHaveBeenCalledTimes(1); // still 1
-  });
-
-  test("changed context triggers LLM again", async () => {
-    const buildCtxSpy = spyOn(mockWatcher, "buildContext").mockResolvedValue("context v1");
-    const decideTickSpy = spyOn(mockEngine, "decideTick").mockResolvedValue(silentToolResult());
-
-    daemon.repoPaths = ["/fake/repo1"];
-    await daemon.handleTick(1, false);
-    expect(decideTickSpy).toHaveBeenCalledTimes(1);
-
-    // Context changes
-    buildCtxSpy.mockResolvedValue("context v2");
-    await daemon.handleTick(2, false);
-    expect(decideTickSpy).toHaveBeenCalledTimes(2);
-  });
-
-  test("git event invalidates context hash", async () => {
-    spyOn(mockWatcher, "buildContext").mockResolvedValue("same context");
-    const decideTickSpy = spyOn(mockEngine, "decideTick").mockResolvedValue(silentToolResult());
-
-    daemon.repoPaths = ["/fake/repo1"];
-    await daemon.handleTick(1, false);
-
-    // Simulate git event invalidating the hash
-    const tickState = daemon.repoTickState.get("repo1");
-    if (tickState) tickState.lastContextHash = "";
-
-    await daemon.handleTick(2, false);
-    expect(decideTickSpy).toHaveBeenCalledTimes(2);
-  });
-
-  test("repoTickState tracks decision after tick", async () => {
+  test("observationsSinceLastDream increments on OBSERVE", async () => {
     spyOn(mockWatcher, "buildContext").mockResolvedValue("context");
-    spyOn(mockEngine, "decideTick").mockResolvedValue(notifyToolResult("alert!"));
+    spyOn(mockEngine, "decide").mockResolvedValue({
+      decision: "OBSERVE",
+      reasoning: "noticed something",
+      content: "test observation",
+      confidence: 0.5,
+    });
+    spyOn(console, "log").mockImplementation(() => {});
+
+    daemon.repoPaths = ["/fake/repo1"];
+    const before = daemon.observationsSinceLastDream;
+    await daemon.handleTick(1, false);
+
+    expect(daemon.observationsSinceLastDream).toBe(before + 1);
+  });
+
+  test("observationsSinceLastDream increments on NOTIFY", async () => {
+    spyOn(mockWatcher, "buildContext").mockResolvedValue("context");
+    spyOn(mockEngine, "decide").mockResolvedValue({
+      decision: "NOTIFY",
+      reasoning: "alert",
+      content: "heads up",
+      confidence: 0.7,
+    });
+    spyOn(console, "log").mockImplementation(() => {});
+    spyOn(daemon.notifier, "send").mockImplementation(async () => {});
 
     daemon.repoPaths = ["/fake/repo1"];
     await daemon.handleTick(1, false);
 
-    const state = daemon.repoTickState.get("repo1");
-    expect(state).toBeDefined();
-    expect(state?.lastDecision).toBe("notify");
-    expect(state?.lastContent).toBe("important");
-    expect(state?.unchangedCount).toBe(0);
-  });
-
-  test("unchangedCount increments on dedup skips", async () => {
-    spyOn(mockWatcher, "buildContext").mockResolvedValue("same context");
-    spyOn(mockEngine, "decideTick").mockResolvedValue(silentToolResult());
-
-    daemon.repoPaths = ["/fake/repo1"];
-    await daemon.handleTick(1, false); // first tick — calls LLM
-    await daemon.handleTick(2, false); // skipped — hash match
-    await daemon.handleTick(3, false); // skipped — hash match
-
-    const state = daemon.repoTickState.get("repo1");
-    expect(state?.unchangedCount).toBe(2);
+    expect(daemon.observationsSinceLastDream).toBeGreaterThan(0);
   });
 
   test("git event logged to eventLog", () => {
@@ -227,116 +194,88 @@ describe("daemon tick integration", () => {
     expect(args[0]).toBe("repo1");
     expect((args[1] as Record<string, unknown>).type).toBe("new_commit");
   });
-});
 
-describe("daemon handleTickTools", () => {
-  test("tool-based tick calls decideTick and records state", async () => {
-    spyOn(mockWatcher, "buildContext").mockResolvedValue("tool context");
-
-    const toolResults: ToolResult[] = [
-      { tool: "observe", result: "interesting pattern found" },
-    ];
-    const decideTickSpy = spyOn(mockEngine, "decideTick").mockResolvedValue({
-      reasoning: "spotted something via tools",
-      toolResults,
+  test("cross-repo context injected when watching multiple repos", async () => {
+    spyOn(mockWatcher, "buildContext").mockResolvedValue("base context");
+    const decideSpy = spyOn(mockEngine, "decide").mockResolvedValue({
+      decision: "SILENT",
+      reasoning: "quiet",
+      confidence: 0.5,
     });
 
-    daemon.repoPaths = ["/fake/repo1"];
+    spyOn(daemon.crossRepoAnalyzer, "getRelatedRepoContext").mockReturnValue(
+      "### Related Repositories\n- repo2 (dependency): repo1 depends on repo2",
+    );
+
     await daemon.handleTick(1, false);
 
-    expect(decideTickSpy).toHaveBeenCalledTimes(1);
-    const state = daemon.repoTickState.get("repo1");
-    expect(state).toBeDefined();
-    expect(state?.lastDecision).toBe("observe");
-    expect(state?.lastContent).toBe("spotted something via tools");
-  });
-
-  test("tool-based tick with silent result tracks SILENT", async () => {
-    spyOn(mockWatcher, "buildContext").mockResolvedValue("context");
-    spyOn(mockEngine, "decideTick").mockResolvedValue({
-      reasoning: "all quiet",
-      toolResults: [{ tool: "silent", result: "nothing to report" }],
-    });
-
-    daemon.repoPaths = ["/fake/repo1"];
-    await daemon.handleTick(1, false);
-
-    const state = daemon.repoTickState.get("repo1");
-    expect(state?.lastDecision).toBe("SILENT");
-  });
-
-  test("tool-based tick with notify sends notification", async () => {
-    spyOn(mockWatcher, "buildContext").mockResolvedValue("context");
-    spyOn(mockEngine, "decideTick").mockResolvedValue({
-      reasoning: "important finding",
-      toolResults: [{ tool: "notify", result: "Branch drift detected" }],
-    });
-    const notifySpy = spyOn(daemon.notificationRouter, "send").mockImplementation(async () => {});
-
-    daemon.repoPaths = ["/fake/repo1"];
-    await daemon.handleTick(1, false);
-
-    expect(notifySpy).toHaveBeenCalledTimes(1);
-    expect(notifySpy.mock.calls[0][1]).toContain("Branch drift detected");
+    // decide() should have been called with context containing related repo info
+    expect(decideSpy).toHaveBeenCalled();
+    const contextArg = String(decideSpy.mock.calls[0][0]);
+    expect(contextArg).toContain("Related Repositories");
   });
 });
 
 describe("daemon maybeConsolidate", () => {
   test("skips consolidation when not enough time has passed", async () => {
-    daemon.lastConsolidation = Date.now(); // just consolidated
-    const dreamSpy = spyOn(daemon.output, "dream");
+    daemon.lastConsolidation = Date.now();
+    daemon.config.dreamAfter = 9999;
+    const consolidateSpy = spyOn(mockEngine, "consolidate");
 
     await daemon.maybeConsolidate();
 
-    expect(dreamSpy).not.toHaveBeenCalled();
+    expect(consolidateSpy).not.toHaveBeenCalled();
   });
 
-  test("triggers consolidation after dreamAfter threshold", async () => {
-    // Set last consolidation far in the past
-    daemon.lastConsolidation = Date.now() - (daemon.config.dreamAfter + 10) * 1000;
-    daemon.repoPaths = ["/fake/repo1"];
-
-    // Mock vectorStore to return < 5 memories (skip threshold)
-    spyOn(mockVectorStore, "getByRepo").mockReturnValue([]);
-    const dreamSpy = spyOn(daemon.output, "dream").mockImplementation(() => {});
+  test("skips consolidation when no observations since last dream", async () => {
+    daemon.lastConsolidation = 0;
+    daemon.config.dreamAfter = 0;
+    daemon.observationsSinceLastDream = 0;
+    const consolidateSpy = spyOn(mockEngine, "consolidate");
 
     await daemon.maybeConsolidate();
 
-    // Should have entered dream phase even if skipping due to low memory count
-    expect(dreamSpy).toHaveBeenCalled();
-    const dreamCalls = dreamSpy.mock.calls.map((c) => String(c[0]));
-    expect(dreamCalls.some((c) => c.includes("dream") || c.includes("Dream") || c.includes("Skipping"))).toBe(true);
+    expect(consolidateSpy).not.toHaveBeenCalled();
   });
-});
 
-describe("daemon cross-repo context injection", () => {
-  test("cross-repo context is injected into tick context", async () => {
-    spyOn(mockWatcher, "buildContext").mockResolvedValue("base context");
-    const decideTickSpy = spyOn(mockEngine, "decideTick").mockResolvedValue(silentToolResult());
-
-    // Mock the cross-repo analyzer to return related context
-    spyOn(daemon.crossRepoAnalyzer, "getRelatedRepoContext").mockReturnValue(
-      "### Related Repositories\n- repo2 (dependency): repo1 depends on repo2",
-    );
-
+  test("triggers consolidation when threshold met and observations exist", async () => {
+    daemon.lastConsolidation = 0;
+    daemon.config.dreamAfter = 0;
+    daemon.observationsSinceLastDream = 5;
     daemon.repoPaths = ["/fake/repo1"];
-    await daemon.handleTick(1, false);
 
-    expect(decideTickSpy).toHaveBeenCalledTimes(1);
-    // The context passed to decideTick should contain related repo info
-    const contextArg = decideTickSpy.mock.calls[0][0] as string;
-    expect(contextArg).toContain("Related Repositories");
+    spyOn(mockVectorStore, "getByRepo").mockReturnValue([
+      { id: "m1", timestamp: Date.now(), repo: "repo1", type: "decision", content: "obs 1", metadata: {}, confidence: 0.5 },
+    ]);
+    const consolidateSpy = spyOn(mockEngine, "consolidate").mockResolvedValue({
+      summary: "Active development",
+      patterns: ["frequent commits"],
+      insights: ["good flow"],
+      confidence: 0.8,
+    });
+    spyOn(mockVectorStore, "storeConsolidated").mockImplementation(() => {});
+    spyOn(mockVectorStore, "saveRepoProfile").mockImplementation(() => {});
+    spyOn(mockVectorStore, "prune").mockReturnValue(0);
+    spyOn(console, "log").mockImplementation(() => {});
+
+    await daemon.maybeConsolidate();
+
+    expect(consolidateSpy).toHaveBeenCalledTimes(1);
   });
 });
 
 describe("daemon sleeping tick", () => {
   test("sleeping tick skips LLM calls", async () => {
     const buildCtxSpy = spyOn(mockWatcher, "buildContext").mockResolvedValue("context");
-    const decideTickSpy = spyOn(mockEngine, "decideTick").mockResolvedValue(silentToolResult());
+    const decideSpy = spyOn(mockEngine, "decide").mockResolvedValue({
+      decision: "SILENT",
+      reasoning: "all quiet",
+      confidence: 0.5,
+    });
 
     await daemon.handleTick(1, true); // isSleeping = true
 
     expect(buildCtxSpy).not.toHaveBeenCalled();
-    expect(decideTickSpy).not.toHaveBeenCalled();
+    expect(decideSpy).not.toHaveBeenCalled();
   });
 });

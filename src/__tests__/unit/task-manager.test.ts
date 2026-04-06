@@ -114,7 +114,7 @@ describe("wait conditions", () => {
   });
 
   test("event-based wait with filter", () => {
-    const task = tm.create({
+    const _task = tm.create({
       repo: "myrepo",
       title: "Watch for config changes",
       waitCondition: { type: "event", eventType: "file_change", filter: "config" },

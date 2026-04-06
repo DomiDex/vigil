@@ -15,6 +15,7 @@ const testConfig: VigilConfig = {
   maxEventWindow: 100,
   notifyBackends: ["file"],
   webhookUrl: "",
+  desktopNotify: true,
   allowModerateActions: false,
 };
 

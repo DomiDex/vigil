@@ -88,10 +88,7 @@ describe("EventLog", () => {
         join(tmpDir, "2025-06-15-repo-a.jsonl"),
         '{"type":"observe","timestamp":1000}\n{"type":"observe","timestamp":1001}\n',
       );
-      writeFileSync(
-        join(tmpDir, "2025-06-15-repo-b.jsonl"),
-        '{"type":"observe","timestamp":2000}\n',
-      );
+      writeFileSync(join(tmpDir, "2025-06-15-repo-b.jsonl"), '{"type":"observe","timestamp":2000}\n');
 
       const results = eventLog.query({ repo: "repo-a" });
       expect(results).toHaveLength(2);
@@ -152,10 +149,7 @@ describe("EventLog", () => {
     });
 
     test("repo filter matches exact name only", () => {
-      writeFileSync(
-        join(tmpDir, "2025-06-15-my-app.jsonl"),
-        '{"type":"observe","timestamp":1000}\n',
-      );
+      writeFileSync(join(tmpDir, "2025-06-15-my-app.jsonl"), '{"type":"observe","timestamp":1000}\n');
       writeFileSync(join(tmpDir, "2025-06-15-app.jsonl"), '{"type":"notify","timestamp":2000}\n');
 
       // "app" should NOT match "my-app"
@@ -176,10 +170,7 @@ describe("EventLog", () => {
 
     test("handles repo names with hyphens", () => {
       // File "2025-06-15-my-app.jsonl" — split("-").slice(0,3) = ["2025","06","15"]
-      writeFileSync(
-        join(tmpDir, "2025-06-15-my-app.jsonl"),
-        '{"type":"observe","timestamp":1000}\n',
-      );
+      writeFileSync(join(tmpDir, "2025-06-15-my-app.jsonl"), '{"type":"observe","timestamp":1000}\n');
 
       const results = eventLog.query({ startDate: "2025-06-15", endDate: "2025-06-15" });
       expect(results).toHaveLength(1);

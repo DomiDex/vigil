@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import type { VigilConfig } from "../../core/config.ts";
-import { DecisionEngine } from "../../llm/decision-max.ts";
+import { DEFAULT_GATE_CONFIG, type VigilConfig } from "../../core/config.ts";
+import { DecisionEngine, resetCircuitBreaker } from "../../llm/decision-max.ts";
 import { mockBunSpawn, mockBunSpawnThrow, restoreBunSpawn } from "../helpers/mock-claude.ts";
 
 const testConfig: VigilConfig = {
@@ -14,7 +14,9 @@ const testConfig: VigilConfig = {
   maxEventWindow: 100,
   notifyBackends: ["file"],
   webhookUrl: "",
+  desktopNotify: true,
   allowModerateActions: false,
+  actions: { ...DEFAULT_GATE_CONFIG },
 };
 
 describe("DecisionEngine", () => {
@@ -22,6 +24,7 @@ describe("DecisionEngine", () => {
   let _mockHandle: ReturnType<typeof mockBunSpawn> | ReturnType<typeof mockBunSpawnThrow>;
 
   beforeEach(() => {
+    resetCircuitBreaker();
     engine = new DecisionEngine(testConfig);
   });
 

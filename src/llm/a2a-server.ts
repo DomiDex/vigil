@@ -1,6 +1,26 @@
-import { DecisionEngine } from "./decision-max.ts";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { join } from "node:path";
+import { getConfigDir, loadConfig } from "../core/config.ts";
 import { GitWatcher } from "../git/watcher.ts";
-import { loadConfig } from "../core/config.ts";
+import { DecisionEngine } from "./decision-max.ts";
+
+/**
+ * Load or generate a bearer token for A2A server authentication.
+ * Token is stored at ~/.vigil/a2a-token with owner-only read permissions.
+ */
+export function loadOrCreateToken(configDir?: string): string {
+  const tokenPath = join(configDir ?? getConfigDir(), "a2a-token");
+
+  if (existsSync(tokenPath)) {
+    return readFileSync(tokenPath, "utf-8").trim();
+  }
+
+  const token = randomUUID();
+  writeFileSync(tokenPath, token, { mode: 0o600 });
+  console.log(`[a2a] Generated auth token: ${tokenPath}`);
+  return token;
+}
 
 interface AgentCard {
   name: string;
@@ -18,10 +38,14 @@ interface JsonRpcRequest {
   params?: any;
 }
 
-export function startA2AServer(port: number): void {
+export function startA2AServer(
+  port: number,
+  deps?: { engine?: DecisionEngine; watcher?: GitWatcher; maxConcurrent?: number; authToken?: string },
+): ReturnType<typeof Bun.serve> {
   const config = loadConfig();
-  const engine = new DecisionEngine(config);
-  const watcher = new GitWatcher();
+  const engine = deps?.engine ?? new DecisionEngine(config);
+  const watcher = deps?.watcher ?? new GitWatcher();
+  const authToken = deps?.authToken ?? loadOrCreateToken();
 
   const agentCard: AgentCard = {
     name: "Vigil",
@@ -37,7 +61,10 @@ export function startA2AServer(port: number): void {
     ],
   };
 
-  Bun.serve({
+  const maxConcurrent = deps?.maxConcurrent ?? 10;
+  let activeRequests = 0;
+
+  const server = Bun.serve({
     port,
     async fetch(req) {
       const url = new URL(req.url);
@@ -52,8 +79,26 @@ export function startA2AServer(port: number): void {
         return Response.json({ status: "ok", uptime: process.uptime() });
       }
 
+      // All other endpoints require authentication
+      const authHeader = req.headers.get("Authorization");
+      if (!authHeader || authHeader !== `Bearer ${authToken}`) {
+        return Response.json(
+          { jsonrpc: "2.0", id: null, error: { code: -32000, message: "Unauthorized" } },
+          { status: 401 },
+        );
+      }
+
       // JSON-RPC endpoint
       if (url.pathname === "/" && req.method === "POST") {
+        // Rate limiting
+        if (activeRequests >= maxConcurrent) {
+          return Response.json(
+            { jsonrpc: "2.0", id: null, error: { code: -32000, message: "Too many concurrent requests" } },
+            { status: 429 },
+          );
+        }
+
+        activeRequests++;
         try {
           const body = (await req.json()) as JsonRpcRequest;
 
@@ -105,12 +150,18 @@ export function startA2AServer(port: number): void {
               },
             },
           });
-        } catch {
+        } catch (err) {
+          const isParseError = err instanceof SyntaxError;
           return Response.json({
             jsonrpc: "2.0",
             id: null,
-            error: { code: -32700, message: "Parse error" },
+            error: {
+              code: isParseError ? -32700 : -32603,
+              message: isParseError ? "Parse error" : "Internal error",
+            },
           });
+        } finally {
+          activeRequests--;
         }
       }
 
@@ -120,4 +171,7 @@ export function startA2AServer(port: number): void {
 
   console.log(`🔔 Vigil A2A server running on http://localhost:${port}`);
   console.log(`   Agent card: http://localhost:${port}/.well-known/agent-card.json`);
+  console.log(`   Auth: Bearer token required for all endpoints except agent-card and health`);
+
+  return server;
 }

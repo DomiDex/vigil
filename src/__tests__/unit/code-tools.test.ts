@@ -1,12 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  listFiles,
-  readFileRange,
-  searchCodebase,
-  summarizeStructure,
-} from "../../llm/code-tools.ts";
+import { listFiles, readFileRange, searchCodebase, summarizeStructure } from "../../llm/code-tools.ts";
 import { createTempRepo, type TempRepo } from "../helpers/temp-repo.ts";
 
 let repo: TempRepo;

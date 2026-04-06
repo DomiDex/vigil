@@ -1,7 +1,7 @@
 import { ActionExecutor } from "../action/executor.ts";
 import type { Coordinator } from "../core/coordinator.ts";
 import type { Scheduler } from "../core/scheduler.ts";
-import type { EventSubscription, GitEventType, SleepController, WakeTrigger } from "../core/sleep-controller.ts";
+import type { GitEventType, SleepController, WakeTrigger } from "../core/sleep-controller.ts";
 import type { TaskManager } from "../core/task-manager.ts";
 import type { CrossRepoAnalyzer } from "../memory/cross-repo.ts";
 import type { EventLog, VectorStore } from "../memory/store.ts";
@@ -135,8 +135,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     name: "spawn_worker",
-    description:
-      "Spawn a scoped sub-agent for deep analysis (uses haiku by default, max 2 concurrent)",
+    description: "Spawn a scoped sub-agent for deep analysis (uses haiku by default, max 2 concurrent)",
     parameters: {
       type: "object",
       properties: {
@@ -248,8 +247,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     name: "list_files",
-    description:
-      "List files in the repository, optionally filtered by path prefix or glob pattern.",
+    description: "List files in the repository, optionally filtered by path prefix or glob pattern.",
     parameters: {
       type: "object",
       properties: {
@@ -289,8 +287,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     name: "summarize_structure",
-    description:
-      "Show the repository directory tree with file counts. Gives you a map of the codebase.",
+    description: "Show the repository directory tree with file counts. Gives you a map of the codebase.",
     parameters: {
       type: "object",
       properties: {
@@ -362,8 +359,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     name: "declare_relation",
-    description:
-      "Declare a relationship between the current repo and another repo (e.g., dependency, shared pattern).",
+    description: "Declare a relationship between the current repo and another repo (e.g., dependency, shared pattern).",
     parameters: {
       type: "object",
       properties: {
@@ -574,10 +570,7 @@ export class ToolExecutor {
   }
 
   private execSearchMemory(args: Record<string, unknown>): ToolResult {
-    const results = this.ctx.vectorStore.hybridSearch(
-      args.query as string,
-      (args.limit as number) ?? 5,
-    );
+    const results = this.ctx.vectorStore.hybridSearch(args.query as string, (args.limit as number) ?? 5);
     return {
       tool: "search_memory",
       result: results.map((r) => r.content),
@@ -631,9 +624,7 @@ export class ToolExecutor {
       return {
         tool: "read_file",
         result:
-          content.length > maxChars
-            ? `${content.slice(0, maxChars)}\n...(truncated at ${maxChars} chars)`
-            : content,
+          content.length > maxChars ? `${content.slice(0, maxChars)}\n...(truncated at ${maxChars} chars)` : content,
       };
     } catch {
       return { tool: "read_file", result: null, error: `File not found: ${filePath}` };
@@ -778,10 +769,7 @@ export class ToolExecutor {
       targetRepos = repos;
     } else {
       const relations = this.ctx.crossRepoAnalyzer.getRelatedRepos(this.ctx.repo);
-      targetRepos = [
-        this.ctx.repo,
-        ...relations.map((r) => (r.repoA === this.ctx.repo ? r.repoB : r.repoA)),
-      ];
+      targetRepos = [this.ctx.repo, ...relations.map((r) => (r.repoA === this.ctx.repo ? r.repoB : r.repoA))];
     }
 
     // Use hybrid search across all target repos
@@ -854,7 +842,10 @@ export class ToolExecutor {
         }
         const results = await Promise.all(configs.map((c) => runCheck(c)));
         const summary = results
-          .map((r) => `[${r.type}] exit=${r.exitCode} errors=${r.errorCount} warnings=${r.warningCount} (${r.durationMs}ms)\n${r.summary}`)
+          .map(
+            (r) =>
+              `[${r.type}] exit=${r.exitCode} errors=${r.errorCount} warnings=${r.warningCount} (${r.durationMs}ms)\n${r.summary}`,
+          )
           .join("\n\n");
         return { tool: "run_check", result: summary };
       }

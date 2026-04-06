@@ -105,9 +105,7 @@ export class CrossRepoAnalyzer {
 
   /** Get all relations. */
   getAllRelations(): RepoRelation[] {
-    const rows = this.db
-      .query(`SELECT * FROM repo_relations ORDER BY confidence DESC`)
-      .all() as any[];
+    const rows = this.db.query(`SELECT * FROM repo_relations ORDER BY confidence DESC`).all() as any[];
 
     return rows.map(this.rowToRelation);
   }
@@ -123,9 +121,7 @@ export class CrossRepoAnalyzer {
 
     const placeholders = repos.map(() => "?").join(",");
     const rows = this.db
-      .query(
-        `SELECT * FROM memories WHERE repo IN (${placeholders}) ORDER BY updated_at DESC LIMIT ?`,
-      )
+      .query(`SELECT * FROM memories WHERE repo IN (${placeholders}) ORDER BY updated_at DESC LIMIT ?`)
       .all(...repos, limit) as any[];
 
     return rows.map((row: any) => ({
@@ -148,17 +144,13 @@ export class CrossRepoAnalyzer {
     for (const rel of relations) {
       const otherRepo = rel.repoA === repo ? rel.repoB : rel.repoA;
       const lastMemory = this.db
-        .query(
-          `SELECT content, updated_at FROM memories WHERE repo = ? ORDER BY updated_at DESC LIMIT 1`,
-        )
+        .query(`SELECT content, updated_at FROM memories WHERE repo = ? ORDER BY updated_at DESC LIMIT 1`)
         .get(otherRepo) as { content: string; updated_at: number } | null;
 
       const ago = lastMemory ? formatTimeAgo(Date.now() - lastMemory.updated_at) : "no activity";
       const lastNote = lastMemory ? lastMemory.content.slice(0, 100) : "no observations";
 
-      lines.push(
-        `- ${otherRepo} (${rel.relationType}): "${rel.description}" — ${ago}: ${lastNote}`,
-      );
+      lines.push(`- ${otherRepo} (${rel.relationType}): "${rel.description}" — ${ago}: ${lastNote}`);
     }
 
     return lines.join("\n");

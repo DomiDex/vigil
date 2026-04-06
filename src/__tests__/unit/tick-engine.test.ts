@@ -14,6 +14,7 @@ function testConfig(overrides?: Partial<VigilConfig>): VigilConfig {
     maxEventWindow: 100,
     notifyBackends: ["file"],
     webhookUrl: "",
+    desktopNotify: true,
     allowModerateActions: false,
     ...overrides,
   };

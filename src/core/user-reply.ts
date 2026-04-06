@@ -1,5 +1,5 @@
+import { createInterface, type Interface } from "node:readline";
 import chalk from "chalk";
-import { createInterface, type Interface } from "readline";
 
 export interface PendingReply {
   tickNum: number;

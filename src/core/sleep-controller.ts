@@ -31,9 +31,7 @@ export class SleepController {
   /** Subscribe to a specific git event type. Subscriptions persist across sleep cycles. */
   subscribe(sub: EventSubscription): void {
     // Deduplicate
-    const exists = this.subscriptions.some(
-      (s) => s.eventType === sub.eventType && s.filter === sub.filter,
-    );
+    const exists = this.subscriptions.some((s) => s.eventType === sub.eventType && s.filter === sub.filter);
     if (!exists) {
       this.subscriptions.push(sub);
     }
@@ -52,9 +50,7 @@ export class SleepController {
   /** Check if a git event matches any subscription */
   matchesSubscription(eventType: GitEventType, detail: string): boolean {
     if (this.subscriptions.length === 0) return true; // no subscriptions = match all
-    return this.subscriptions.some(
-      (s) => s.eventType === eventType && (!s.filter || detail.includes(s.filter)),
-    );
+    return this.subscriptions.some((s) => s.eventType === eventType && (!s.filter || detail.includes(s.filter)));
   }
 
   /** Check if a wake condition is met */

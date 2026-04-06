@@ -199,9 +199,11 @@ export class SemanticIndex {
     if (queryMag === 0) return [];
 
     // Scan all vectors and compute cosine similarity
-    const rows = this.db
-      .query(`SELECT memory_id, terms, magnitude FROM semantic_vectors`)
-      .all() as { memory_id: string; terms: string; magnitude: number }[];
+    const rows = this.db.query(`SELECT memory_id, terms, magnitude FROM semantic_vectors`).all() as {
+      memory_id: string;
+      terms: string;
+      magnitude: number;
+    }[];
 
     const scored: SemanticResult[] = [];
     for (const row of rows) {

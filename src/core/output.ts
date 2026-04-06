@@ -100,16 +100,12 @@ export class OutputFormatter {
   }
 
   actionQueued(tickNum: number, command: string, tier: string): void {
-    console.log(
-      `\n${chalk.yellow(`  \u{1F4CB} [tick ${tickNum}] Action queued (${tier}): ${command}`)}`,
-    );
+    console.log(`\n${chalk.yellow(`  \u{1F4CB} [tick ${tickNum}] Action queued (${tier}): ${command}`)}`);
   }
 
   actionExecuted(tickNum: number, command: string, result: string): void {
     const truncResult = result.length > 80 ? `${result.slice(0, 77)}...` : result;
-    console.log(
-      `\n${chalk.green(`  \u2713 [tick ${tickNum}] Executed: ${command} \u2192 ${truncResult}`)}`,
-    );
+    console.log(`\n${chalk.green(`  \u2713 [tick ${tickNum}] Executed: ${command} \u2192 ${truncResult}`)}`);
   }
 
   analysisProgress(phase: string, detail: string): void {

@@ -31,7 +31,7 @@ export interface CheckResult {
 
 const MAX_OUTPUT_CHARS = 3000;
 
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ── Detection ──
 
@@ -64,7 +64,7 @@ export function detectChecks(repoPath: string): CheckConfig[] {
     "eslint.config.cjs",
     "eslint.config.ts",
   ];
-  if (eslintConfigs.some(f => existsSync(join(repoPath, f)))) {
+  if (eslintConfigs.some((f) => existsSync(join(repoPath, f)))) {
     configs.push({
       type: "eslint",
       command: ["npx", "eslint", ".", "--max-warnings", "0"],
@@ -145,10 +145,7 @@ export async function runCheck(config: CheckConfig): Promise<CheckResult> {
   });
 
   const timeoutResult = Symbol("timeout");
-  const raceResult = await Promise.race([
-    proc.exited,
-    sleep(config.timeoutMs).then(() => timeoutResult),
-  ]);
+  const raceResult = await Promise.race([proc.exited, sleep(config.timeoutMs).then(() => timeoutResult)]);
 
   if (raceResult === timeoutResult) {
     proc.kill();
@@ -166,7 +163,7 @@ export async function runCheck(config: CheckConfig): Promise<CheckResult> {
   const exitCode = raceResult as number;
   const stdout = await new Response(proc.stdout).text();
   const stderr = await new Response(proc.stderr).text();
-  const combined = (stdout + "\n" + stderr).trim();
+  const combined = `${stdout}\n${stderr}`.trim();
   const durationMs = Math.round(performance.now() - start);
 
   const { errorCount, warningCount } = parseOutput(config.type, combined);
@@ -201,29 +198,29 @@ function parseOutput(type: CheckType, output: string): { errorCount: number; war
       // Fallback: count lines containing "error" or "warning"
       const lines = output.split("\n");
       return {
-        errorCount: lines.filter(l => /\berror\b/i.test(l)).length,
-        warningCount: lines.filter(l => /\bwarning\b/i.test(l)).length,
+        errorCount: lines.filter((l) => /\berror\b/i.test(l)).length,
+        warningCount: lines.filter((l) => /\bwarning\b/i.test(l)).length,
       };
     }
 
     case "tsc": {
       // tsc: lines matching "error TS\d+"
-      const errorLines = output.split("\n").filter(l => /error TS\d+/.test(l));
+      const errorLines = output.split("\n").filter((l) => /error TS\d+/.test(l));
       return { errorCount: errorLines.length, warningCount: 0 };
     }
 
     case "biome": {
       const lines = output.split("\n");
       return {
-        errorCount: lines.filter(l => /\berror\b/i.test(l)).length,
-        warningCount: lines.filter(l => /\bwarning\b/i.test(l)).length,
+        errorCount: lines.filter((l) => /\berror\b/i.test(l)).length,
+        warningCount: lines.filter((l) => /\bwarning\b/i.test(l)).length,
       };
     }
 
     case "pytest": {
       // pytest: "X failed, Y passed" or "X passed"
       const failMatch = output.match(/(\d+)\s+failed/);
-      const passMatch = output.match(/(\d+)\s+passed/);
+      const _passMatch = output.match(/(\d+)\s+passed/);
       return {
         errorCount: failMatch ? parseInt(failMatch[1], 10) : 0,
         warningCount: 0,
@@ -243,8 +240,8 @@ function parseOutput(type: CheckType, output: string): { errorCount: number; war
       // custom / generic: count lines with "error" or "warning"
       const lines = output.split("\n");
       return {
-        errorCount: lines.filter(l => /error/i.test(l)).length,
-        warningCount: lines.filter(l => /warning/i.test(l)).length,
+        errorCount: lines.filter((l) => /error/i.test(l)).length,
+        warningCount: lines.filter((l) => /warning/i.test(l)).length,
       };
     }
   }

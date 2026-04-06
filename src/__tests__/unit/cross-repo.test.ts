@@ -72,13 +72,7 @@ afterEach(() => {
 
 describe("relation CRUD", () => {
   test("declares a new relation", () => {
-    const rel = analyzer.declareRelation(
-      "frontend",
-      "backend",
-      "dependency",
-      "Frontend consumes backend API",
-      0.9,
-    );
+    const rel = analyzer.declareRelation("frontend", "backend", "dependency", "Frontend consumes backend API", 0.9);
     expect(rel.repoA).toBe("frontend");
     expect(rel.repoB).toBe("backend");
     expect(rel.relationType).toBe("dependency");

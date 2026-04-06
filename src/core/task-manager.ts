@@ -118,9 +118,10 @@ export class TaskManager {
     );
 
     // Check if any tasks are waiting on this one
-    const waiting = this.db
-      .query(`SELECT id, wait_condition FROM tasks WHERE status = 'waiting'`)
-      .all() as { id: string; wait_condition: string }[];
+    const waiting = this.db.query(`SELECT id, wait_condition FROM tasks WHERE status = 'waiting'`).all() as {
+      id: string;
+      wait_condition: string;
+    }[];
 
     for (const row of waiting) {
       const wc: WaitCondition = JSON.parse(row.wait_condition);
@@ -158,9 +159,7 @@ export class TaskManager {
         [repo],
       );
     }
-    return this.queryTasks(
-      `SELECT * FROM tasks WHERE status IN ('pending', 'active') ORDER BY created_at`,
-    );
+    return this.queryTasks(`SELECT * FROM tasks WHERE status IN ('pending', 'active') ORDER BY created_at`);
   }
 
   /** Get tasks waiting on conditions. */
@@ -222,9 +221,7 @@ export class TaskManager {
 
   /** Get subtasks of a parent task. */
   getSubtasks(parentId: string): Task[] {
-    return this.queryTasks(`SELECT * FROM tasks WHERE parent_id = ? ORDER BY created_at`, [
-      parentId,
-    ]);
+    return this.queryTasks(`SELECT * FROM tasks WHERE parent_id = ? ORDER BY created_at`, [parentId]);
   }
 
   /** Get a task by ID. */
@@ -238,9 +235,7 @@ export class TaskManager {
   }
 
   private queryTasks(sql: string, params?: SQLQueryBindings[]): Task[] {
-    const rows = params
-      ? (this.db.query(sql).all(...params) as any[])
-      : (this.db.query(sql).all() as any[]);
+    const rows = params ? (this.db.query(sql).all(...params) as any[]) : (this.db.query(sql).all() as any[]);
     return rows.map(this.rowToTask);
   }
 

@@ -17,6 +17,7 @@ const testConfig: VigilConfig = {
   maxEventWindow: 100,
   notifyBackends: ["file"],
   webhookUrl: "",
+  desktopNotify: true,
   allowModerateActions: false,
 };
 
@@ -142,9 +143,7 @@ describe("AskEngine", () => {
       } else {
         // Final forced answer
         response = JSON.stringify({
-          tool_calls: [
-            { tool: "answer", args: { text: "Forced answer after max rounds.", sources: [] } },
-          ],
+          tool_calls: [{ tool: "answer", args: { text: "Forced answer after max rounds.", sources: [] } }],
         });
       }
 

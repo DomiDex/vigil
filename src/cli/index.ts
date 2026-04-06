@@ -1,12 +1,16 @@
 #!/usr/bin/env bun
-import { Command } from "commander";
+import { writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import chalk from "chalk";
-import { loadConfig, saveConfig } from "../core/config.ts";
+import { Command } from "commander";
+import { ActionExecutor } from "../action/executor.ts";
+import { getDataDir, loadConfig, saveConfig } from "../core/config.ts";
 import { Daemon } from "../core/daemon.ts";
-import { EventLog, VectorStore } from "../memory/store.ts";
-import { DecisionEngine } from "../llm/decision-max.ts";
 import { GitWatcher } from "../git/watcher.ts";
-import { resolve } from "path";
+import { DecisionEngine } from "../llm/decision-max.ts";
+import { MetricsStore } from "../core/metrics.ts";
+import { EventLog, VectorStore } from "../memory/store.ts";
+import { NotificationRouter } from "../notify/push.ts";
 
 const program = new Command();
 
@@ -133,10 +137,15 @@ program
 
     const result = await engine.consolidate(
       memories.map((m) => m.content),
-      profileStr
+      profileStr,
     );
 
-    store.storeConsolidated(crypto.randomUUID(), repoName, result.summary, memories.map((m) => m.id));
+    store.storeConsolidated(
+      crypto.randomUUID(),
+      repoName,
+      result.summary,
+      memories.map((m) => m.id),
+    );
     store.saveRepoProfile({
       repo: repoName,
       summary: result.summary,
@@ -208,9 +217,153 @@ program
 
     // Parse value
     const numVal = Number(value);
-    (config as any)[key] = isNaN(numVal) ? value : numVal;
+    (config as any)[key] = Number.isNaN(numVal) ? value : numVal;
     saveConfig(config);
     console.log(chalk.green(`  ✓ ${key} = ${value}`));
+  });
+
+// ── notifications ──
+program
+  .command("notifications")
+  .description("View or clear notification queue")
+  .option("--clear", "Clear all notifications")
+  .option("-l, --limit <n>", "Max entries to show", parseInt, 20)
+  .action((opts) => {
+    const config = loadConfig();
+    const notifier = new NotificationRouter({
+      backends: config.notifyBackends as any[],
+      webhookUrl: config.webhookUrl || undefined,
+    });
+
+    const entries = notifier.readQueue(opts.limit);
+
+    if (opts.clear) {
+      writeFileSync(join(getDataDir(), "notifications", "queue.jsonl"), "");
+      console.log(chalk.green("  ✓ Cleared notification queue."));
+      return;
+    }
+
+    if (entries.length === 0) {
+      console.log(chalk.gray("\n  No notifications.\n"));
+      return;
+    }
+
+    console.log(chalk.cyan("\n  Notifications\n"));
+    for (const entry of entries) {
+      const time = new Date(entry.timestamp as number).toLocaleTimeString();
+      const severity = entry.severity as string;
+      const icon = severity === "warning" ? "⚡" : "🔔";
+      console.log(`  ${icon} ${chalk.gray(time)} ${chalk.white(entry.title as string)}`);
+      console.log(`    ${entry.message}`);
+    }
+    console.log();
+  });
+
+// ── metrics ──
+program
+  .command("metrics")
+  .description("Show operational metrics")
+  .option("--hours <n>", "Hours to look back", "24")
+  .action((opts) => {
+    const metrics = new MetricsStore();
+    const hours = Number.parseInt(opts.hours, 10) || 24;
+    const since = Date.now() - hours * 3_600_000;
+    const summary = metrics.getSummary(since);
+
+    const entries = Object.entries(summary);
+    if (entries.length === 0) {
+      console.log(chalk.gray(`\n  No metrics recorded in the last ${hours}h.\n`));
+      metrics.close();
+      return;
+    }
+
+    console.log(chalk.cyan(`\n  Metrics (last ${hours}h)\n`));
+    for (const [name, data] of entries) {
+      console.log(
+        `  ${chalk.white(name)}: count=${chalk.green(String(data.count))} avg=${chalk.yellow(data.avg.toFixed(1))} max=${chalk.red(data.max.toFixed(1))}`,
+      );
+    }
+    console.log();
+    metrics.close();
+  });
+
+// ── actions ──
+program
+  .command("actions")
+  .description("View and manage queued actions")
+  .option("--pending", "Show only pending actions")
+  .option("--approve <id>", "Approve a pending action")
+  .option("--reject <id>", "Reject a pending action")
+  .option("-l, --limit <n>", "Max entries to show", parseInt, 20)
+  .action(async (opts) => {
+    const config = loadConfig();
+    const executor = new ActionExecutor({
+      allowModerate: config.allowModerateActions,
+      gateConfig: config.actions,
+    });
+
+    if (opts.approve) {
+      const result = await executor.approve(opts.approve, ".");
+      if (!result) {
+        console.log(chalk.red(`  ✗ No pending action found with id: ${opts.approve}`));
+      } else {
+        console.log(
+          result.status === "executed"
+            ? chalk.green(`  ✓ Action executed: ${result.result?.slice(0, 120) || "ok"}`)
+            : chalk.red(`  ✗ Action failed: ${result.error}`),
+        );
+      }
+      executor.close();
+      return;
+    }
+
+    if (opts.reject) {
+      const result = executor.reject(opts.reject);
+      if (!result) {
+        console.log(chalk.red(`  ✗ No pending action found with id: ${opts.reject}`));
+      } else {
+        console.log(chalk.green(`  ✓ Action rejected: ${result.command}`));
+      }
+      executor.close();
+      return;
+    }
+
+    const actions = opts.pending ? executor.getPending() : executor.getRecent(opts.limit);
+
+    if (actions.length === 0) {
+      console.log(chalk.gray(`\n  No ${opts.pending ? "pending " : ""}actions.\n`));
+      executor.close();
+      return;
+    }
+
+    const statusIcons: Record<string, string> = {
+      pending: "⏳",
+      approved: "✓",
+      executed: "✓",
+      rejected: "✗",
+      failed: "✗",
+    };
+
+    console.log(chalk.cyan(`\n  ${opts.pending ? "Pending " : ""}Actions\n`));
+    for (const action of actions) {
+      const icon = statusIcons[action.status] || "·";
+      const time = new Date(action.createdAt).toLocaleTimeString();
+      const statusColor =
+        action.status === "executed"
+          ? chalk.green
+          : action.status === "failed" || action.status === "rejected"
+            ? chalk.red
+            : chalk.yellow;
+      console.log(
+        `  ${icon} ${chalk.gray(time)} ${statusColor(`[${action.status}]`)} ${chalk.white(action.command)}`,
+      );
+      console.log(`    ${chalk.gray(`id: ${action.id.slice(0, 8)}  tier: ${action.tier}  repo: ${action.repo}`)}`);
+      if (action.error) {
+        console.log(`    ${chalk.red(action.error)}`);
+      }
+    }
+    console.log();
+    executor.close();
   });
 
 program.parse();
