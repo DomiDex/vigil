@@ -71,7 +71,7 @@ export class SSEManager {
 /** Wire SSE to daemon events (tick, messages, state changes) */
 export function wireSSE(sse: SSEManager, ctx: DashboardContext): void {
   const { daemon } = ctx;
-  const tick = daemon["tickEngine"] as any;
+  const tick = daemon.tickEngine as any;
 
   // Broadcast tick events via the public onTick API
   tick.onTick(async (tickNum: number, isSleeping: boolean) => {
@@ -87,8 +87,8 @@ export function wireSSE(sse: SSEManager, ctx: DashboardContext): void {
   daemon.messageRouter.on("delivered", ({ message }: { message: any }) => {
     sse.broadcast("message", {
       id: message.id,
-      decision: message.decision,
-      message: message.text || message.message,
+      decision: message.metadata?.decision || "SILENT",
+      message: message.message,
       timestamp: message.timestamp,
       repo: message.source?.repo,
       severity: message.severity,

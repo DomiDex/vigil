@@ -90,6 +90,49 @@ export class MetricsStore {
     return this.counters.get(name) ?? 0;
   }
 
+  /** Get time-series data for a metric, bucketed by interval. */
+  getTimeSeries(
+    name: string,
+    since?: number,
+    bucketMs = 1_800_000, // 30 min default
+  ): { time: string; value: number; count: number }[] {
+    const cutoff = since ?? Date.now() - 86_400_000;
+    const rows = this.db
+      .query(
+        `SELECT (recorded_at / ? * ?) as bucket, SUM(value) as value, COUNT(*) as count
+         FROM metrics WHERE name = ? AND recorded_at > ?
+         GROUP BY bucket ORDER BY bucket`,
+      )
+      .all(bucketMs, bucketMs, name, cutoff) as { bucket: number; value: number; count: number }[];
+
+    return rows.map((r) => ({
+      time: new Date(r.bucket).toISOString(),
+      value: r.value,
+      count: r.count,
+    }));
+  }
+
+  /** Get raw metric rows for a metric name, ordered by time. */
+  getRawMetrics(name: string, since?: number, limit = 200): { value: number; labels: string; recorded_at: number }[] {
+    const cutoff = since ?? Date.now() - 86_400_000;
+    return this.db
+      .query(
+        `SELECT value, labels, recorded_at
+         FROM metrics WHERE name = ? AND recorded_at > ?
+         ORDER BY recorded_at DESC LIMIT ?`,
+      )
+      .all(name, cutoff, limit) as { value: number; labels: string; recorded_at: number }[];
+  }
+
+  /** Get all distinct metric names. */
+  getMetricNames(since?: number): string[] {
+    const cutoff = since ?? Date.now() - 86_400_000;
+    const rows = this.db.query("SELECT DISTINCT name FROM metrics WHERE recorded_at > ? ORDER BY name").all(cutoff) as {
+      name: string;
+    }[];
+    return rows.map((r) => r.name);
+  }
+
   /** Stop flushing and perform a final flush. */
   stop(): void {
     if (this.flushInterval) {

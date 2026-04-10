@@ -39,6 +39,7 @@
     <button class="tab active" data-tab="overview">Overview</button>
     <button class="tab" data-tab="timeline">Timeline</button>
     <button class="tab" data-tab="memory">Memory</button>
+    <button class="tab" data-tab="dreams">Dreams</button>
     <button class="tab" data-tab="tasks">Tasks</button>
     <button class="tab" data-tab="metrics">Metrics</button>
     <button class="tab" data-tab="config">Config</button>
@@ -47,36 +48,101 @@
   <!-- Tab Content Panels -->
   <main class="container">
     <section id="tab-overview" class="tab-panel active">
-      <h2>Live Overview</h2>
-      <p class="muted">Dashboard is connected. The top bar updates every 5 seconds.</p>
-
-      <div class="overview-grid">
-        <article class="overview-card" id="overview-repos"
-                 hx-get="/api/overview"
-                 hx-trigger="every 10s"
-                 hx-swap="innerHTML"
-                 hx-select-oob="#overview-repos-content">
-          <div id="overview-repos-content">
-            <h3>Watched Repos</h3>
+      <div class="overview-layout">
+        <!-- Repo Nav -->
+        <nav id="repo-nav" class="repo-nav"
+             hx-get="/api/repos/fragment"
+             hx-trigger="load"
+             hx-swap="innerHTML"
+             hx-target="#repo-nav-list">
+          <h3 class="repo-nav-title">Repositories</h3>
+          <div id="repo-nav-list">
             <p class="muted">Loading...</p>
           </div>
-        </article>
-        <article class="overview-card" id="overview-connection">
-          <h3>SSE Connection</h3>
-          <p id="sse-status" class="muted">Connecting...</p>
-          <p id="sse-clients" class="muted"></p>
-        </article>
+          <div class="repo-nav-footer">
+            <article class="overview-card" id="overview-connection">
+              <h3>SSE</h3>
+              <p id="sse-status" class="muted">Connecting...</p>
+            </article>
+          </div>
+        </nav>
+
+        <!-- Repo Detail Sidebar -->
+        <aside id="repo-detail" class="repo-detail">
+          <div class="rs-empty">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4">
+              <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+            </svg>
+            <p>Select a repository</p>
+          </div>
+        </aside>
       </div>
     </section>
 
     <section id="tab-timeline" class="tab-panel">
-      <h2>Timeline</h2>
-      <p class="muted">Coming in Phase 2.</p>
+      <!-- Filter Bar -->
+      <div class="tl-filters">
+        <div class="tl-filter-buttons">
+          <button class="tl-filter active" data-decision=""
+                  hx-get="/api/timeline/fragment"
+                  hx-target="#timeline-entries"
+                  hx-swap="innerHTML">All</button>
+          <button class="tl-filter" data-decision="OBSERVE"
+                  hx-get="/api/timeline/fragment?decision=OBSERVE"
+                  hx-target="#timeline-entries"
+                  hx-swap="innerHTML">Observe</button>
+          <button class="tl-filter" data-decision="NOTIFY"
+                  hx-get="/api/timeline/fragment?decision=NOTIFY"
+                  hx-target="#timeline-entries"
+                  hx-swap="innerHTML">Notify</button>
+          <button class="tl-filter" data-decision="ACT"
+                  hx-get="/api/timeline/fragment?decision=ACT"
+                  hx-target="#timeline-entries"
+                  hx-swap="innerHTML">Act</button>
+        </div>
+        <div class="tl-filter-right">
+          <div class="tl-search-wrap">
+            <svg class="tl-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="search" name="q" placeholder="Search messages..."
+                   class="tl-search"
+                   hx-get="/api/timeline/fragment"
+                   hx-trigger="keyup changed delay:300ms"
+                   hx-target="#timeline-entries"
+                   hx-swap="innerHTML"
+                   hx-include="[name=q]">
+          </div>
+          <span id="tl-live-indicator" class="tl-live active">
+            <svg width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill="currentColor"/></svg>
+            Live
+          </span>
+        </div>
+      </div>
+
+      <!-- Timeline Entries (HTMX-managed) -->
+      <div id="timeline-entries"
+           hx-get="/api/timeline/fragment"
+           hx-trigger="load"
+           hx-swap="innerHTML">
+        <div class="tl-loading">Loading timeline...</div>
+      </div>
     </section>
 
     <section id="tab-memory" class="tab-panel">
-      <h2>Memory &amp; Dreams</h2>
-      <p class="muted">Coming in Phase 5.</p>
+      <div id="memory-panel"
+           hx-get="/api/memory/fragment"
+           hx-trigger="load"
+           hx-swap="innerHTML">
+        <div class="tl-loading">Loading memory...</div>
+      </div>
+    </section>
+
+    <section id="tab-dreams" class="tab-panel">
+      <div id="dreams-panel"
+           hx-get="/api/dreams/fragment"
+           hx-trigger="load"
+           hx-swap="innerHTML">
+        <div class="tl-loading">Loading dreams...</div>
+      </div>
     </section>
 
     <section id="tab-tasks" class="tab-panel">
@@ -85,8 +151,12 @@
     </section>
 
     <section id="tab-metrics" class="tab-panel">
-      <h2>Metrics</h2>
-      <p class="muted">Coming in Phase 4.</p>
+      <div id="metrics-panel"
+           hx-get="/api/metrics/fragment"
+           hx-trigger="load"
+           hx-swap="innerHTML">
+        <div class="tl-loading">Loading metrics...</div>
+      </div>
     </section>
 
     <section id="tab-config" class="tab-panel">
@@ -97,6 +167,7 @@
 
   <script src="/dash/vendor/htmx.min.js"></script>
   <script src="/dash/vendor/htmx-sse.js"></script>
+  <script src="/dash/vendor/chart.min.js"></script>
   <script src="/dash/app.js"></script>
 </body>
 </html>

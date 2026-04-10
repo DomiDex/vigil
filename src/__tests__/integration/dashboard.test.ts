@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { startDashboard } from "../../dashboard/server.ts";
-import { MessageRouter } from "../../messaging/index.ts";
+import { createMessage, MessageRouter, type VigilMessage } from "../../messaging/index.ts";
 
 let server: ReturnType<typeof Bun.serve>;
 let port: number;
@@ -20,7 +20,84 @@ function createMockDaemon() {
     },
     repoPaths: ["/home/user/projects/vigil", "/home/user/projects/other"],
     messageRouter,
+    vectorStore: {
+      search(_query: string, _limit = 10) {
+        return [];
+      },
+      getByRepo(_repo: string, _limit = 20) {
+        return [];
+      },
+      getRepoProfile(repo: string) {
+        if (repo === "vigil") {
+          return {
+            repo: "vigil",
+            summary: "Git monitoring daemon",
+            patterns: ["All LLM calls route through claude -p CLI", "Tiered memory pipeline"],
+            lastUpdated: Date.now(),
+          };
+        }
+        return null;
+      },
+    },
+    eventLog: {
+      query(_options: any) {
+        return [];
+      },
+    },
+    metrics: {
+      getSummary() {
+        return {
+          "decisions.silent": { count: 80, avg: 0, max: 0 },
+          "decisions.observe": { count: 14, avg: 0, max: 0 },
+          "decisions.notify": { count: 5, avg: 0, max: 0 },
+          "decisions.act": { count: 1, avg: 0, max: 0 },
+          "llm.decision_ms": { count: 27, avg: 1340, max: 3200 },
+          "ticks.total": { count: 142, avg: 1, max: 1 },
+          "ticks.sleeping": { count: 30, avg: 1, max: 1 },
+          "ticks.proactive": { count: 12, avg: 1, max: 1 },
+        };
+      },
+      getTimeSeries(_name: string, _since?: number, _bucket?: number) {
+        return [
+          { time: "2026-04-10T14:00:00.000Z", value: 5, count: 5 },
+          { time: "2026-04-10T14:30:00.000Z", value: 8, count: 8 },
+          { time: "2026-04-10T15:00:00.000Z", value: 3, count: 3 },
+        ];
+      },
+      getRawMetrics(_name: string, _since?: number, _limit?: number) {
+        return [
+          { value: 1200, labels: '{"repo":"vigil"}', recorded_at: Date.now() - 60000 },
+          { value: 980, labels: '{"repo":"vigil"}', recorded_at: Date.now() - 30000 },
+          { value: 2100, labels: '{"repo":"vigil"}', recorded_at: Date.now() },
+        ];
+      },
+      getMetricNames() {
+        return ["decisions.silent", "decisions.observe", "ticks.total", "llm.decision_ms"];
+      },
+    },
+    userReply: {
+      pendingReplies: [] as any[],
+      drain() {
+        const r = [...this.pendingReplies];
+        this.pendingReplies = [];
+        return r;
+      },
+    },
     // Private fields accessed via bracket notation
+    gitWatcher: {
+      getRepoState(path: string) {
+        const name = path.split("/").pop();
+        return {
+          path,
+          name,
+          lastCommitHash: "b19bbac1234567890",
+          currentBranch: "main",
+          uncommittedSince: name === "vigil" ? Date.now() - 600_000 : null,
+          lastReflogHash: "abc123",
+          knownCommitSHAs: new Set(["b19bbac"]),
+        };
+      },
+    },
     tickEngine: {
       currentTick: 42,
       isSleeping: false,
@@ -227,5 +304,587 @@ describe("404 handling", () => {
 
     const res = await fetch(`${baseUrl}/api/nonexistent`);
     expect(res.status).toBe(404);
+  });
+});
+
+// ── Phase 2: Timeline Feed ──────────────────────
+
+function seedMessages(daemon: any, count = 5) {
+  const decisions = ["SILENT", "OBSERVE", "NOTIFY", "ACT"];
+  const messages: VigilMessage[] = [];
+  for (let i = 0; i < count; i++) {
+    const decision = decisions[i % decisions.length];
+    const msg = createMessage({
+      source: { repo: i % 2 === 0 ? "vigil" : "other-repo", branch: "main", event: "tick" },
+      status: decision === "ACT" ? "alert" : decision === "NOTIFY" ? "proactive" : "normal",
+      severity: decision === "ACT" ? "critical" : decision === "NOTIFY" ? "warning" : "info",
+      message: `Test message ${i}: ${decision} decision content`,
+      metadata: { tickNum: i + 1, decision, confidence: 0.8 + i * 0.02 },
+    });
+    messages.push(msg);
+  }
+  // Route all messages through the router to populate history
+  for (const msg of messages) {
+    daemon.messageRouter.route(msg);
+  }
+  return messages;
+}
+
+describe("GET /api/timeline", () => {
+  test("returns JSON with messages array", async () => {
+    const daemon = createMockDaemon();
+    seedMessages(daemon, 3);
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/timeline`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("application/json");
+
+    const data = await res.json();
+    expect(data.messages).toBeArray();
+    expect(data.messages).toHaveLength(3);
+    expect(data.total).toBe(3);
+    expect(data.hasMore).toBe(false);
+  });
+
+  test("messages sorted by timestamp descending", async () => {
+    const daemon = createMockDaemon();
+    seedMessages(daemon, 3);
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/timeline`);
+    const data = await res.json();
+
+    for (let i = 1; i < data.messages.length; i++) {
+      const prev = new Date(data.messages[i - 1].timestamp).getTime();
+      const curr = new Date(data.messages[i].timestamp).getTime();
+      expect(prev).toBeGreaterThanOrEqual(curr);
+    }
+  });
+
+  test("filters by decision type", async () => {
+    const daemon = createMockDaemon();
+    seedMessages(daemon, 8);
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/timeline?decision=OBSERVE`);
+    const data = await res.json();
+
+    expect(data.messages.length).toBeGreaterThan(0);
+    for (const msg of data.messages) {
+      expect(msg.decision).toBe("OBSERVE");
+    }
+  });
+
+  test("filters by repo", async () => {
+    const daemon = createMockDaemon();
+    seedMessages(daemon, 6);
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/timeline?repo=vigil`);
+    const data = await res.json();
+
+    expect(data.messages.length).toBeGreaterThan(0);
+    for (const msg of data.messages) {
+      expect(msg.source.repo).toBe("vigil");
+    }
+  });
+
+  test("pagination works", async () => {
+    const daemon = createMockDaemon();
+    seedMessages(daemon, 10);
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/timeline?limit=3&page=1`);
+    const data = await res.json();
+
+    expect(data.messages).toHaveLength(3);
+    expect(data.total).toBe(10);
+    expect(data.hasMore).toBe(true);
+
+    const res2 = await fetch(`${baseUrl}/api/timeline?limit=3&page=4`);
+    const data2 = await res2.json();
+    expect(data2.messages).toHaveLength(1);
+    expect(data2.hasMore).toBe(false);
+  });
+
+  test("each message has expected fields", async () => {
+    const daemon = createMockDaemon();
+    seedMessages(daemon, 1);
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/timeline`);
+    const data = await res.json();
+    const msg = data.messages[0];
+
+    expect(msg.id).toBeTruthy();
+    expect(msg.timestamp).toBeTruthy();
+    expect(msg.source).toBeTruthy();
+    expect(msg.decision).toBeTruthy();
+    expect(msg.message).toBeTruthy();
+    expect(typeof msg.confidence).toBe("number");
+  });
+});
+
+describe("GET /api/timeline/fragment", () => {
+  test("returns HTML with entry cards", async () => {
+    const daemon = createMockDaemon();
+    seedMessages(daemon, 3);
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/timeline/fragment`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+
+    const html = await res.text();
+    expect(html).toContain("tl-entry");
+    expect(html).toContain("tl-expand-btn");
+  });
+
+  test("filter buttons return only matching decisions", async () => {
+    const daemon = createMockDaemon();
+    seedMessages(daemon, 8);
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/timeline/fragment?decision=NOTIFY`);
+    const html = await res.text();
+
+    expect(html).toContain("tl-notify");
+    expect(html).not.toContain("tl-badge-observe");
+    expect(html).not.toContain("tl-badge-act");
+  });
+
+  test("empty results show empty state", async () => {
+    const daemon = createMockDaemon();
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/timeline/fragment`);
+    const html = await res.text();
+    expect(html).toContain("tl-empty");
+  });
+
+  test("infinite scroll sentinel appears when hasMore", async () => {
+    const daemon = createMockDaemon();
+    seedMessages(daemon, 10);
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/timeline/fragment?limit=3`);
+    const html = await res.text();
+    expect(html).toContain("tl-sentinel");
+    expect(html).toContain('hx-trigger="revealed"');
+    expect(html).toContain("page=2");
+  });
+});
+
+describe("GET /api/timeline/:id/fragment", () => {
+  test("expanded view shows detail panel", async () => {
+    const daemon = createMockDaemon();
+    const messages = seedMessages(daemon, 1);
+    server = startDashboard(daemon, port);
+
+    const id = messages[0].id;
+    const res = await fetch(`${baseUrl}/api/timeline/${id}/fragment`);
+    expect(res.status).toBe(200);
+
+    const html = await res.text();
+    expect(html).toContain("tl-expanded");
+    expect(html).toContain("tl-detail-panel");
+    expect(html).toContain("tl-reply-form");
+    expect(html).toContain("tl-collapse-btn");
+  });
+
+  test("collapsed=1 returns collapsed card", async () => {
+    const daemon = createMockDaemon();
+    const messages = seedMessages(daemon, 1);
+    server = startDashboard(daemon, port);
+
+    const id = messages[0].id;
+    const res = await fetch(`${baseUrl}/api/timeline/${id}/fragment?collapsed=1`);
+    const html = await res.text();
+
+    expect(html).toContain("tl-expand-btn");
+    expect(html).not.toContain("tl-expanded");
+  });
+
+  test("unknown ID returns 404", async () => {
+    const daemon = createMockDaemon();
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/timeline/nonexistent-id/fragment`);
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("POST /api/timeline/:id/reply", () => {
+  test("submits reply and shows confirmation", async () => {
+    const daemon = createMockDaemon();
+    const messages = seedMessages(daemon, 1);
+    server = startDashboard(daemon, port);
+
+    const id = messages[0].id;
+    const form = new FormData();
+    form.set("reply", "Looks good, keep watching.");
+
+    const res = await fetch(`${baseUrl}/api/timeline/${id}/reply`, {
+      method: "POST",
+      body: form,
+    });
+    expect(res.status).toBe(200);
+
+    const html = await res.text();
+    expect(html).toContain("tl-reply-success");
+    expect(html).toContain("Reply sent");
+
+    // Verify it was added to userReply.pendingReplies
+    expect(daemon.userReply.pendingReplies).toHaveLength(1);
+    expect(daemon.userReply.pendingReplies[0].userReply).toBe("Looks good, keep watching.");
+  });
+
+  test("empty reply shows error", async () => {
+    const daemon = createMockDaemon();
+    const messages = seedMessages(daemon, 1);
+    server = startDashboard(daemon, port);
+
+    const id = messages[0].id;
+    const form = new FormData();
+    form.set("reply", "   ");
+
+    const res = await fetch(`${baseUrl}/api/timeline/${id}/reply`, {
+      method: "POST",
+      body: form,
+    });
+
+    const html = await res.text();
+    expect(html).toContain("tl-reply-error");
+  });
+
+  test("reply to unknown message shows error", async () => {
+    const daemon = createMockDaemon();
+    server = startDashboard(daemon, port);
+
+    const form = new FormData();
+    form.set("reply", "test");
+
+    const res = await fetch(`${baseUrl}/api/timeline/nonexistent/reply`, {
+      method: "POST",
+      body: form,
+    });
+
+    const html = await res.text();
+    expect(html).toContain("tl-reply-error");
+  });
+});
+
+describe("timeline contains no emojis", () => {
+  test("entry cards use SVG icons not emojis", async () => {
+    const daemon = createMockDaemon();
+    seedMessages(daemon, 4);
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/timeline/fragment`);
+    const html = await res.text();
+    expect(html).toContain("<svg");
+    expect(html).not.toMatch(/[\u{1F300}-\u{1F9FF}]/u);
+  });
+});
+
+// ── Phase 3: Per-Repo Sidebar ─────────────────────
+
+describe("GET /api/repos", () => {
+  test("returns list of watched repos", async () => {
+    const daemon = createMockDaemon();
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/repos`);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+
+    expect(data).toBeArray();
+    expect(data).toHaveLength(2);
+    expect(data[0].name).toBe("vigil");
+    expect(data[0].branch).toBe("main");
+    expect(data[0].head).toBe("b19bbac");
+    expect(data[0].dirty).toBe(true);
+    expect(data[1].name).toBe("other");
+    expect(data[1].dirty).toBe(false);
+  });
+});
+
+describe("GET /api/repos/fragment", () => {
+  test("returns HTML nav buttons for repos", async () => {
+    const daemon = createMockDaemon();
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/repos/fragment`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+
+    const html = await res.text();
+    expect(html).toContain("repo-nav-btn");
+    expect(html).toContain("vigil");
+    expect(html).toContain("other");
+    expect(html).toContain("main");
+  });
+});
+
+describe("GET /api/repos/:name", () => {
+  test("returns full repo detail", async () => {
+    const daemon = createMockDaemon();
+    seedMessages(daemon, 4);
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/repos/vigil`);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+
+    expect(data.name).toBe("vigil");
+    expect(data.branch).toBe("main");
+    expect(data.head).toBe("b19bbac");
+    expect(data.dirty).toBe(true);
+    expect(data.decisions).toBeTruthy();
+    expect(data.decisions.total).toBeGreaterThan(0);
+    expect(data.patterns).toBeArray();
+    expect(data.patterns).toContain("All LLM calls route through claude -p CLI");
+    expect(data.topics).toBeArray();
+  });
+
+  test("returns 404 for unknown repo", async () => {
+    const daemon = createMockDaemon();
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/repos/nonexistent`);
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("GET /api/repos/:name/fragment", () => {
+  test("returns HTML sidebar panel", async () => {
+    const daemon = createMockDaemon();
+    seedMessages(daemon, 4);
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/repos/vigil/fragment`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+
+    const html = await res.text();
+    expect(html).toContain("rs-panel");
+    expect(html).toContain("vigil");
+    expect(html).toContain("main");
+    expect(html).toContain("b19bbac");
+  });
+
+  test("decision bars render proportionally", async () => {
+    const daemon = createMockDaemon();
+    seedMessages(daemon, 4);
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/repos/vigil/fragment`);
+    const html = await res.text();
+
+    expect(html).toContain("rs-bar-row");
+    expect(html).toContain("rs-fill-silent");
+    expect(html).toContain("rs-fill-observe");
+    expect(html).toContain("rs-fill-notify");
+    expect(html).toContain("rs-fill-act");
+    // SILENT should have the highest percentage
+    expect(html).toContain("SILENT");
+  });
+
+  test("patterns and topics sections render", async () => {
+    const daemon = createMockDaemon();
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/repos/vigil/fragment`);
+    const html = await res.text();
+
+    expect(html).toContain("rs-section-title");
+    expect(html).toContain("Patterns");
+    expect(html).toContain("Topics");
+    expect(html).toContain("claude -p CLI");
+    expect(html).toContain("Tiered memory pipeline");
+  });
+
+  test("sidebar has 30s auto-refresh via hx-trigger", async () => {
+    const daemon = createMockDaemon();
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/repos/vigil/fragment`);
+    const html = await res.text();
+    expect(html).toContain('hx-trigger="every 30s"');
+  });
+
+  test("dirty repo shows uncommitted section", async () => {
+    const daemon = createMockDaemon();
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/repos/vigil/fragment`);
+    const html = await res.text();
+    expect(html).toContain("Uncommitted Work");
+  });
+
+  test("clean repo hides uncommitted section", async () => {
+    const daemon = createMockDaemon();
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/repos/other/fragment`);
+    const html = await res.text();
+    expect(html).not.toContain("Uncommitted Work");
+  });
+
+  test("returns 404 for unknown repo", async () => {
+    const daemon = createMockDaemon();
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/repos/nonexistent/fragment`);
+    expect(res.status).toBe(404);
+  });
+
+  test("contains no emojis", async () => {
+    const daemon = createMockDaemon();
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/repos/vigil/fragment`);
+    const html = await res.text();
+    expect(html).toContain("<svg");
+    expect(html).not.toMatch(/[\u{1F300}-\u{1F9FF}]/u);
+  });
+});
+
+// ── Phase 4: Metrics Panel ─────────────────────
+
+describe("GET /api/metrics", () => {
+  test("returns valid JSON with all required sections", async () => {
+    const daemon = createMockDaemon();
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/metrics`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("application/json");
+
+    const data = await res.json();
+
+    // Decisions section
+    expect(data.decisions).toBeTruthy();
+    expect(data.decisions.totals).toBeTruthy();
+    expect(data.decisions.totals.SILENT).toBe(80);
+    expect(data.decisions.totals.OBSERVE).toBe(14);
+    expect(data.decisions.totals.NOTIFY).toBe(5);
+    expect(data.decisions.totals.ACT).toBe(1);
+    expect(data.decisions.series).toBeArray();
+
+    // Latency section
+    expect(data.latency).toBeTruthy();
+    expect(data.latency.avg).toBe(1340);
+    expect(data.latency.max).toBe(3200);
+    expect(data.latency.p95).toBeGreaterThan(0);
+    expect(data.latency.count).toBe(27);
+    expect(data.latency.series).toBeArray();
+
+    // Tokens section
+    expect(data.tokens).toBeTruthy();
+    expect(data.tokens.total).toBeGreaterThan(0);
+    expect(data.tokens.costEstimate).toMatch(/^\$/);
+    expect(data.tokens.perTick).toBeTruthy();
+
+    // Tick timing section
+    expect(data.tickTiming).toBeTruthy();
+    expect(data.tickTiming.configured).toBe(30);
+    expect(data.tickTiming.adaptiveCurrent).toBe(24);
+    expect(data.tickTiming.series).toBeArray();
+
+    // Ticks section
+    expect(data.ticks).toBeTruthy();
+    expect(data.ticks.total).toBe(142);
+    expect(data.ticks.sleeping).toBe(30);
+    expect(data.ticks.proactive).toBe(12);
+    expect(data.ticks.current).toBe(42);
+
+    // State section
+    expect(data.state).toBeTruthy();
+    expect(data.state.isSleeping).toBe(false);
+    expect(data.state.model).toBe("claude-haiku-4-5-20251001");
+  });
+
+  test("cost estimate calculates correctly for haiku model", async () => {
+    const daemon = createMockDaemon();
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/metrics`);
+    const data = await res.json();
+
+    // 27 calls * 100 tokens/call = 2700 tokens
+    // Haiku: $0.25/MTok → 2700/1M * 0.25 = $0.000675
+    expect(data.tokens.costEstimate).toBe("$0.0007");
+  });
+
+  test("latency series is ordered and capped", async () => {
+    const daemon = createMockDaemon();
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/metrics`);
+    const data = await res.json();
+
+    expect(data.latency.series.length).toBeLessThanOrEqual(50);
+    for (const pt of data.latency.series) {
+      expect(pt.tick).toBeGreaterThan(0);
+      expect(pt.ms).toBeGreaterThanOrEqual(0);
+    }
+  });
+});
+
+describe("GET /api/metrics/fragment", () => {
+  test("returns HTML with chart canvases and stats", async () => {
+    const daemon = createMockDaemon();
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/metrics/fragment`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+
+    const html = await res.text();
+
+    // Chart canvases present
+    expect(html).toContain('id="chart-decisions"');
+    expect(html).toContain('id="chart-latency"');
+    expect(html).toContain('id="chart-tick-interval"');
+    expect(html).toContain('id="chart-tokens"');
+
+    // Quick stats card
+    expect(html).toContain("Quick Stats");
+    expect(html).toContain("Total Ticks");
+    expect(html).toContain("142");
+    expect(html).toContain("LLM Calls");
+    expect(html).toContain("27");
+
+    // Decision totals
+    expect(html).toContain("Decision Totals");
+    expect(html).toContain("SILENT");
+    expect(html).toContain("80");
+    expect(html).toContain("OBSERVE");
+    expect(html).toContain("14");
+  });
+
+  test("contains no emojis", async () => {
+    const daemon = createMockDaemon();
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/metrics/fragment`);
+    const html = await res.text();
+    expect(html).not.toMatch(/[\u{1F300}-\u{1F9FF}]/u);
+  });
+
+  test("latency stats are formatted correctly", async () => {
+    const daemon = createMockDaemon();
+    server = startDashboard(daemon, port);
+
+    const res = await fetch(`${baseUrl}/api/metrics/fragment`);
+    const html = await res.text();
+    expect(html).toContain("Avg Latency");
+    expect(html).toContain("P95 Latency");
+    expect(html).toContain("Max Latency");
+    // Values should be formatted as seconds (1340ms = 1.34s)
+    expect(html).toContain("1.34s");
+    expect(html).toContain("3.20s");
   });
 });

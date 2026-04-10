@@ -14,8 +14,8 @@ function shortModel(model: string): string {
 
 export function getOverviewJSON(ctx: DashboardContext) {
   const { daemon } = ctx;
-  const tick = daemon["tickEngine"] as any;
-  const session = daemon["session"] as any;
+  const tick = daemon.tickEngine as any;
+  const session = daemon.session as any;
   const config = daemon.config;
 
   const now = Date.now();
@@ -23,7 +23,7 @@ export function getOverviewJSON(ctx: DashboardContext) {
   const uptimeMs = now - startedAt;
   const tickCount = tick.currentTick;
   const adaptiveInterval = Math.round(tick.sleep.getNextInterval());
-  const lastTickAt = tick["lastTickAt"] ?? now;
+  const lastTickAt = tick.lastTickAt ?? now;
   const nextTickIn = Math.max(0, Math.round(config.tickInterval - (now - lastTickAt) / 1000));
 
   const repos = daemon.repoPaths.map((p: string) => {
@@ -34,7 +34,7 @@ export function getOverviewJSON(ctx: DashboardContext) {
   let state: "awake" | "sleeping" | "dreaming" = "awake";
   if (tick.isSleeping) state = "sleeping";
   // dreaming is set during consolidation — approximate via lastConsolidation
-  if (tick["paused"]) state = "dreaming";
+  if (tick.paused) state = "dreaming";
 
   return {
     repos,

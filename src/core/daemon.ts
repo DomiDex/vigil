@@ -102,10 +102,10 @@ export class Daemon {
   config: VigilConfig;
   private tickEngine: TickEngine;
   private gitWatcher: GitWatcher;
-  private eventLog: EventLog;
-  private vectorStore: VectorStore;
+  eventLog: EventLog;
+  vectorStore: VectorStore;
   private decisionEngine: DecisionEngine;
-  private userReply: UserReply;
+  userReply: UserReply;
   private sessionStore: SessionStore;
   notifier: NotificationRouter;
   crossRepoAnalyzer: CrossRepoAnalyzer;
