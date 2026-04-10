@@ -1,10 +1,10 @@
 import { minimatch } from "minimatch";
 import * as z from "zod";
 import { type AgentDefinition, loadAgentDefinition } from "../agent/agent-loader.ts";
-import { buildVigilSystemPrompt } from "../agent/system-prompt.ts";
 import { CircuitBreaker } from "../core/circuit-breaker.ts";
 import type { VigilConfig } from "../core/config.ts";
 import type { MemoryEntry, RepoProfile } from "../memory/store.ts";
+import { PromptBuilder } from "../prompts/builder.ts";
 
 export type Decision = "SILENT" | "OBSERVE" | "NOTIFY" | "ACT";
 
@@ -184,6 +184,7 @@ async function callClaude(prompt: string, systemPrompt: string, model?: string):
 export class DecisionEngine {
   private config: VigilConfig;
   private agentDefinitions = new Map<string, AgentDefinition>();
+  private promptBuilder = new PromptBuilder();
 
   constructor(config: VigilConfig) {
     this.config = config;
@@ -191,6 +192,7 @@ export class DecisionEngine {
 
   updateConfig(config: VigilConfig): void {
     this.config = config;
+    this.promptBuilder.onConfigChanged();
   }
 
   /** Load agent definition for a repo path. Call once per repo at startup. */
@@ -198,6 +200,7 @@ export class DecisionEngine {
     const agent = await loadAgentDefinition(repoPath);
     if (agent) {
       this.agentDefinitions.set(repoPath, agent);
+      this.promptBuilder.onAgentReloaded();
     }
     return agent;
   }
@@ -241,6 +244,16 @@ export class DecisionEngine {
     };
   }
 
+  /** Get prompt cache stats for diagnostics. */
+  getPromptCacheStats() {
+    return this.promptBuilder.getStats();
+  }
+
+  /** Call when a rebase or hard reset is detected. */
+  onRebaseDetected(): void {
+    this.promptBuilder.onRebaseDetected();
+  }
+
   async decide(
     context: string,
     recentMemories: string,
@@ -271,23 +284,34 @@ Decision guide:
 
     let systemPrompt: string;
 
-    // Use agent-aware prompt if we have repo context and a loaded agent
+    // Use cache-aware PromptBuilder when we have repo context
     if (repoContext) {
       const agent = this.agentDefinitions.get(repoContext.repoPath) ?? null;
-      const builtPrompt = buildVigilSystemPrompt({
-        agentDefinition: agent,
-        repoContext: {
-          repoName: repoContext.repoName,
-          currentBranch: repoContext.branch,
-          recentCommits: repoContext.recentCommits,
-          uncommittedFiles: repoContext.uncommittedFiles,
-        },
+      const builtPrompt = await this.promptBuilder.build({
+        agent,
         isProactive,
-        customInstructions: undefined,
+        repoState: () => {
+          const commits =
+            repoContext.recentCommits.length > 0
+              ? repoContext.recentCommits.map((c) => `  - ${c}`).join("\n")
+              : "  none";
+          const files =
+            repoContext.uncommittedFiles.length > 0
+              ? repoContext.uncommittedFiles.map((f) => `  - ${f}`).join("\n")
+              : "  clean";
+          return `# Current Repository Context
+- **Timestamp**: ${new Date().toISOString()}
+- **Repository**: ${repoContext.repoName}
+- **Branch**: ${repoContext.branch}
+- **Recent commits**:
+${commits}
+- **Uncommitted files**:
+${files}`;
+        },
       });
       systemPrompt = `${builtPrompt}\n\n${decisionInstructions}`;
     } else {
-      // Fallback: original hardcoded prompt
+      // Fallback: original hardcoded prompt (no repo context to cache)
       systemPrompt = `You are Vigil, an always-on git monitoring agent. You observe repository state and decide what action to take.\n\n${decisionInstructions}`;
     }
 

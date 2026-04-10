@@ -6,6 +6,8 @@ import { Command } from "commander";
 import { ActionExecutor } from "../action/executor.ts";
 import { getConfigDir, getDataDir, loadConfig, saveConfig } from "../core/config.ts";
 import { Daemon } from "../core/daemon.ts";
+import { FeatureGates } from "../core/feature-gates.ts";
+import { FEATURES, type FeatureName } from "../core/features.ts";
 import { MetricsStore } from "../core/metrics.ts";
 import { GitWatcher } from "../git/watcher.ts";
 import { DecisionEngine } from "../llm/decision-max.ts";
@@ -420,5 +422,94 @@ program
     }
     console.log();
   });
+
+// ── features ──
+program
+  .command("features")
+  .description("View and manage feature gates")
+  .option("--enable <feature>", "Enable a feature in config (Layer 2)")
+  .option("--disable <feature>", "Disable a feature in config (Layer 2)")
+  .option("--diagnose <feature>", "Show per-layer gate status for a feature")
+  .action(async (opts) => {
+    const config = loadConfig();
+    const configPath = join(getConfigDir(), "config.json");
+    const gates = new FeatureGates({ configPath, remoteTTL: 300_000 });
+    gates.loadConfigFlags();
+
+    // Set build flags (all enabled by default)
+    for (const feature of Object.values(FEATURES)) {
+      gates.setBuildFlag(feature, true);
+    }
+
+    if (opts.enable) {
+      const featureName = resolveFeatureName(opts.enable);
+      if (!featureName) {
+        console.error(chalk.red(`  ✗ Unknown feature: ${opts.enable}`));
+        console.log(chalk.gray(`  Available: ${Object.values(FEATURES).join(", ")}`));
+        return;
+      }
+      config.features[featureName] = true;
+      saveConfig(config);
+      console.log(chalk.green(`  ✓ Enabled: ${featureName}`));
+      return;
+    }
+
+    if (opts.disable) {
+      const featureName = resolveFeatureName(opts.disable);
+      if (!featureName) {
+        console.error(chalk.red(`  ✗ Unknown feature: ${opts.disable}`));
+        console.log(chalk.gray(`  Available: ${Object.values(FEATURES).join(", ")}`));
+        return;
+      }
+      config.features[featureName] = false;
+      saveConfig(config);
+      console.log(chalk.green(`  ✓ Disabled: ${featureName}`));
+      return;
+    }
+
+    if (opts.diagnose) {
+      const featureName = resolveFeatureName(opts.diagnose);
+      if (!featureName) {
+        console.error(chalk.red(`  ✗ Unknown feature: ${opts.diagnose}`));
+        return;
+      }
+      const diagnosis = await gates.diagnose(featureName);
+      console.log(chalk.cyan(`\n  Feature Gate Diagnosis: ${featureName}\n`));
+      for (const [layer, status] of Object.entries(diagnosis)) {
+        const icon = status === false ? chalk.red("✗") : status === true ? chalk.green("✓") : chalk.gray("–");
+        const label = status === undefined ? "n/a" : status ? "enabled" : "BLOCKED";
+        console.log(`  ${icon} ${chalk.white(layer.padEnd(10))} ${label}`);
+      }
+      console.log();
+      return;
+    }
+
+    // Default: list all features with status
+    console.log(chalk.cyan("\n  Feature Gates\n"));
+    for (const [_, name] of Object.entries(FEATURES)) {
+      const enabled = gates.isEnabledCached(name);
+      const icon = enabled ? chalk.green("✓") : chalk.red("✗");
+      const configVal = config.features[name];
+      const configLabel =
+        configVal === true ? chalk.green("on") : configVal === false ? chalk.red("off") : chalk.gray("default");
+      console.log(`  ${icon} ${chalk.white(name.padEnd(30))} config: ${configLabel}`);
+    }
+    console.log(chalk.gray(`\n  Use --enable/--disable <feature> to toggle.\n`));
+  });
+
+/** Resolve a feature name — accepts full name or short key */
+function resolveFeatureName(input: string): FeatureName | null {
+  // Try exact match on values
+  const values = Object.values(FEATURES);
+  if (values.includes(input as FeatureName)) return input as FeatureName;
+
+  // Try matching by key (e.g., "VIGIL_BRIEF" or "brief")
+  const upper = input.toUpperCase();
+  const withPrefix = upper.startsWith("VIGIL_") ? upper : `VIGIL_${upper}`;
+  const entry = Object.entries(FEATURES).find(([key]) => key === withPrefix);
+  if (entry) return entry[1];
+
+  return null;
+}
 
 program.parse();

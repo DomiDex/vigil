@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import chalk from "chalk";
 import { ActionExecutor } from "../action/executor.ts";
+import { ChannelHandler } from "../channels/handler.ts";
+import { ChannelPermissionManager } from "../channels/permissions.ts";
 import { type GitEvent, GitWatcher } from "../git/watcher.ts";
 import { DecisionEngine } from "../llm/decision-max.ts";
 import { CrossRepoAnalyzer } from "../memory/cross-repo.ts";
@@ -16,6 +18,7 @@ import { type WebhookEvent, WebhookServer } from "../webhooks/server.ts";
 import { SubscriptionManager } from "../webhooks/subscriptions.ts";
 import type { ActionType } from "./config.ts";
 import { getConfigDir, getLogsDir, loadConfig, stopWatchingConfig, type VigilConfig, watchConfig } from "./config.ts";
+import { FeatureGates } from "./feature-gates.ts";
 import { FEATURES } from "./features.ts";
 import { acquireLock, releaseLock } from "./instance-lock.ts";
 import { MetricsStore } from "./metrics.ts";
@@ -55,6 +58,9 @@ interface DaemonDeps {
   messageRouter?: MessageRouter;
   webhookServer?: WebhookServer;
   subscriptionManager?: SubscriptionManager;
+  channelHandler?: ChannelHandler;
+  channelPermissions?: ChannelPermissionManager;
+  featureGates?: FeatureGates;
 }
 
 export class Daemon {
@@ -75,6 +81,9 @@ export class Daemon {
   private webhookServer: WebhookServer | null = null;
   private subscriptionManager: SubscriptionManager | null = null;
   private webhookProcessor: WebhookProcessor | null = null;
+  channelHandler: ChannelHandler | null = null;
+  channelPermissions: ChannelPermissionManager | null = null;
+  featureGates!: FeatureGates;
   lastConsolidation = Date.now();
   observationsSinceLastDream = 0;
   /** Ring buffer of recent per-repo decisions to prevent redundant observations */
@@ -125,6 +134,19 @@ export class Daemon {
     this.metrics = deps?.metrics ?? new MetricsStore();
     this.userReply = new UserReply();
 
+    // Feature gates — 4-layer gating (Phase 15)
+    this.featureGates =
+      deps?.featureGates ??
+      new FeatureGates({
+        configPath: join(getConfigDir(), "config.json"),
+        remoteTTL: 300_000, // 5 min TTL for remote flags
+      });
+    this.featureGates.loadConfigFlags();
+    // Set build-time flags for all known features (default enabled)
+    for (const feature of Object.values(FEATURES)) {
+      this.featureGates.setBuildFlag(feature, true);
+    }
+
     // Brief mode — CLI flag overrides config
     this.briefMode = options?.brief ?? this.config.briefMode ?? false;
     this.displayFilter = new DisplayFilter(
@@ -155,11 +177,27 @@ export class Daemon {
     }
 
     // Webhook server (Phase 12) — gated by feature flag
-    if (this.config.features[FEATURES.VIGIL_WEBHOOKS]) {
+    if (this.featureGates.isEnabledCached(FEATURES.VIGIL_WEBHOOKS)) {
       this.subscriptionManager = deps?.subscriptionManager ?? new SubscriptionManager(getConfigDir());
       this.subscriptionManager.load();
       this.webhookServer = deps?.webhookServer ?? new WebhookServer(this.config.webhook);
       this.webhookProcessor = new WebhookProcessor(this.subscriptionManager, this.messageRouter);
+    }
+
+    // Channel notifications (Phase 11) — gated by feature flag
+    if (this.featureGates.isEnabledCached(FEATURES.VIGIL_CHANNELS) && this.config.channels?.enabled) {
+      this.channelPermissions = deps?.channelPermissions ?? new ChannelPermissionManager();
+      this.channelHandler =
+        deps?.channelHandler ??
+        new ChannelHandler(this.messageRouter, () => ({
+          featureEnabled: this.featureGates.isEnabledCached(FEATURES.VIGIL_CHANNELS),
+          runtimeEnabled: this.config.channels?.enabled ?? false,
+          isAuthenticated: true, // Local daemon is always authenticated
+          orgChannelsAllowed: true, // No org policy for local daemon
+          sessionChannels: this.config.channels?.sessionChannels ?? [],
+          allowlist: this.config.channels?.allowlist ?? [],
+          devMode: this.config.channels?.devMode ?? false,
+        }));
     }
   }
 
@@ -189,6 +227,14 @@ export class Daemon {
     console.log(chalk.gray(`  Model: ${this.config.tickModel}`));
     console.log(chalk.gray(`  Sleep after: ${this.config.sleepAfter}s idle`));
     console.log(chalk.gray("  Proactive mode: enabled (adaptive tick intervals)"));
+
+    // Log active feature gates
+    const activeFeatures = Object.entries(FEATURES)
+      .filter(([, name]) => this.featureGates.isEnabledCached(name))
+      .map(([key]) => key.replace("VIGIL_", "").toLowerCase());
+    if (activeFeatures.length > 0) {
+      console.log(chalk.gray(`  Features: ${activeFeatures.join(", ")}`));
+    }
     console.log();
 
     // Init stores
@@ -253,6 +299,7 @@ export class Daemon {
         newConfig.tickModel = this.cliOverrides.model;
       }
       this.config = newConfig;
+      this.featureGates.loadConfigFlags(); // Refresh Layer 2 on config change
       this.tickEngine.updateConfig(newConfig);
       this.decisionEngine.updateConfig(newConfig);
       this.actionExecutor.updateGateConfig(newConfig.actions);
@@ -280,6 +327,21 @@ export class Daemon {
       console.log(chalk.green(`  ✓ Webhook server listening on port ${this.webhookServer.getPort()}`));
     }
 
+    // Log channel handler status
+    if (this.channelHandler) {
+      this.channelHandler.on("channel_registered", ({ channel }: { channel: string }) => {
+        console.log(chalk.green(`  ✓ Channel registered: ${channel}`));
+      });
+      this.channelHandler.on("channel_rejected", ({ channel, reason }: { channel: string; reason: string }) => {
+        console.log(chalk.red(`  ✗ Channel rejected: ${channel} — ${reason}`));
+      });
+      this.channelHandler.on("notification_queued", () => {
+        // Wake the tick engine when a channel message arrives
+        this.tickEngine.reportActivity();
+      });
+      console.log(chalk.green("  ✓ Channel notifications enabled"));
+    }
+
     // Start listening for user replies
     this.userReply.start();
 
@@ -302,6 +364,7 @@ export class Daemon {
         this.sessionStore.stop(this.session.id);
       }
       this.webhookServer?.stop();
+      this.channelHandler?.removeAllListeners();
       stopWatchingConfig();
       releaseLock(this.sessionId);
       this.metrics.stop();
@@ -325,6 +388,13 @@ export class Daemon {
       }
       await this.maybeConsolidate();
       return;
+    }
+
+    // Drain channel messages queued since last tick
+    let channelContext = "";
+    if (this.channelHandler?.hasQueuedMessages()) {
+      const channelMessages = this.channelHandler.drainQueue();
+      channelContext = channelMessages.map((m) => m.message).join("\n\n");
     }
 
     // Drain user replies from previous ticks
@@ -370,10 +440,11 @@ export class Daemon {
       // Include cross-repo context when watching multiple repos
       const crossRepoContext = this.repoPaths.length > 1 ? this.crossRepoAnalyzer.getRelatedRepoContext(repoName) : "";
 
-      // Include tick prompt, user replies, cross-repo context, and recent decision history
+      // Include tick prompt, user replies, channel messages, cross-repo context, and recent decision history
       let fullContext = context;
       if (tickPrompt) fullContext += `\n\n${tickPrompt}`;
       if (crossRepoContext) fullContext += `\n\n${crossRepoContext}`;
+      if (channelContext) fullContext += `\n\nInbound channel messages:\n${channelContext}`;
       if (userRepliesContext) fullContext += `\n\nUser feedback from previous ticks:\n${userRepliesContext}`;
 
       // Inject recent decisions so the LLM avoids repeating itself

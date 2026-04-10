@@ -82,6 +82,12 @@ describe("config", () => {
         path: "/webhook/github",
         allowedEvents: ["pull_request", "pull_request_review", "push", "issues", "issue_comment"],
       },
+      channels: {
+        enabled: false,
+        sessionChannels: [],
+        allowlist: [],
+        devMode: false,
+      },
     };
     saveConfig(custom);
     const loaded = loadConfig();

@@ -55,6 +55,16 @@ export interface VigilConfig {
     path: string;
     allowedEvents: string[];
   };
+  /** Channel notifications config (Phase 11) */
+  channels: {
+    enabled: boolean;
+    /** Channel names declared for this session (gate 5) */
+    sessionChannels: string[];
+    /** Approved channel server names (gate 6) */
+    allowlist: string[];
+    /** Bypass allowlist for dev channels */
+    devMode: boolean;
+  };
 }
 
 const DEFAULT_CONFIG: VigilConfig = {
@@ -84,6 +94,12 @@ const DEFAULT_CONFIG: VigilConfig = {
     secret: "",
     path: "/webhook/github",
     allowedEvents: ["pull_request", "pull_request_review", "push", "issues", "issue_comment"],
+  },
+  channels: {
+    enabled: false,
+    sessionChannels: [],
+    allowlist: [],
+    devMode: false,
   },
 };
 

@@ -180,4 +180,82 @@ describe("FeatureGates", () => {
       }
     });
   });
+
+  describe("Config hot-reload integration", () => {
+    it("refreshes config flags when loadConfigFlags is called again", async () => {
+      // Start with feature enabled
+      writeFileSync(configPath, JSON.stringify({ features: { "test.feature": true } }));
+      const gates = makeGates();
+      gates.loadConfigFlags();
+      expect(await gates.isEnabled("test.feature")).toBe(true);
+
+      // Simulate config change — disable the feature
+      writeFileSync(configPath, JSON.stringify({ features: { "test.feature": false } }));
+      gates.loadConfigFlags();
+      expect(await gates.isEnabled("test.feature")).toBe(false);
+    });
+
+    it("re-enables feature when config changes back", async () => {
+      writeFileSync(configPath, JSON.stringify({ features: { "test.feature": false } }));
+      const gates = makeGates();
+      gates.loadConfigFlags();
+      expect(gates.isEnabledCached("test.feature")).toBe(false);
+
+      writeFileSync(configPath, JSON.stringify({ features: {} }));
+      gates.loadConfigFlags();
+      expect(gates.isEnabledCached("test.feature")).toBe(true);
+    });
+  });
+
+  describe("Build flag initialization pattern", () => {
+    it("initializes all FEATURES as build-enabled (daemon pattern)", async () => {
+      const gates = makeGates();
+      for (const feature of Object.values(FEATURES)) {
+        gates.setBuildFlag(feature, true);
+      }
+      // All should be enabled by default
+      for (const feature of Object.values(FEATURES)) {
+        expect(await gates.isEnabled(feature)).toBe(true);
+      }
+    });
+
+    it("config layer can override build-enabled features", async () => {
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          features: { [FEATURES.VIGIL_WEBHOOKS]: false },
+        }),
+      );
+      const gates = makeGates();
+      for (const feature of Object.values(FEATURES)) {
+        gates.setBuildFlag(feature, true);
+      }
+      gates.loadConfigFlags();
+
+      expect(await gates.isEnabled(FEATURES.VIGIL_WEBHOOKS)).toBe(false);
+      expect(await gates.isEnabled(FEATURES.VIGIL_WATCHER)).toBe(true);
+    });
+  });
+
+  describe("Session flag toggling", () => {
+    it("can disable a feature at session level", async () => {
+      const gates = makeGates();
+      gates.setBuildFlag(FEATURES.VIGIL_PUSH, true);
+      expect(await gates.isEnabled(FEATURES.VIGIL_PUSH)).toBe(true);
+
+      gates.setSessionFlag(FEATURES.VIGIL_PUSH, false);
+      expect(await gates.isEnabled(FEATURES.VIGIL_PUSH)).toBe(false);
+
+      // Re-enable
+      gates.setSessionFlag(FEATURES.VIGIL_PUSH, true);
+      expect(await gates.isEnabled(FEATURES.VIGIL_PUSH)).toBe(true);
+    });
+
+    it("session flag does not affect cached check for other features", () => {
+      const gates = makeGates();
+      gates.setSessionFlag(FEATURES.VIGIL_PUSH, false);
+      expect(gates.isEnabledCached(FEATURES.VIGIL_PUSH)).toBe(false);
+      expect(gates.isEnabledCached(FEATURES.VIGIL_WATCHER)).toBe(true);
+    });
+  });
 });
