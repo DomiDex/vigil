@@ -2,13 +2,7 @@ import { existsSync, mkdirSync, readFileSync, watch, writeFileSync } from "node:
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-export type ActionType =
-  | "git_stash"
-  | "git_branch"
-  | "git_commit"
-  | "run_tests"
-  | "run_lint"
-  | "custom_script";
+export type ActionType = "git_stash" | "git_branch" | "git_commit" | "run_tests" | "run_lint" | "custom_script";
 
 export interface ActionGateConfig {
   enabled: boolean;
@@ -40,6 +34,27 @@ export interface VigilConfig {
   desktopNotify: boolean;
   allowModerateActions: boolean;
   actions: ActionGateConfig;
+  /** Brief mode — suppress routine output, only show filtered messages */
+  briefMode: boolean;
+  /** Feature flags — per-feature enable/disable (Layer 2 config gating) */
+  features: Record<string, boolean>;
+  /** Push notification config (Phase 13) */
+  push: {
+    enabled: boolean;
+    minSeverity: "info" | "warning" | "critical";
+    statuses: string[];
+    quietHours?: { start: string; end: string };
+    maxPerHour: number;
+    ntfy?: { topic: string; server?: string; token?: string };
+    native?: boolean;
+  };
+  /** GitHub webhook server config (Phase 12) */
+  webhook: {
+    port: number;
+    secret: string;
+    path: string;
+    allowedEvents: string[];
+  };
 }
 
 const DEFAULT_CONFIG: VigilConfig = {
@@ -56,6 +71,20 @@ const DEFAULT_CONFIG: VigilConfig = {
   desktopNotify: true,
   allowModerateActions: false,
   actions: { ...DEFAULT_GATE_CONFIG },
+  briefMode: false,
+  features: {},
+  push: {
+    enabled: false,
+    minSeverity: "warning",
+    statuses: ["alert", "proactive"],
+    maxPerHour: 10,
+  },
+  webhook: {
+    port: 7433,
+    secret: "",
+    path: "/webhook/github",
+    allowedEvents: ["pull_request", "pull_request_review", "push", "issues", "issue_comment"],
+  },
 };
 
 export function getConfigDir(): string {

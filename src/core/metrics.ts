@@ -37,10 +37,12 @@ export class MetricsStore {
 
   /** Record a gauge value immediately. */
   gauge(name: string, value: number, labels: Record<string, string> = {}): void {
-    this.db.run(
-      "INSERT INTO metrics (name, value, labels, recorded_at) VALUES (?, ?, ?, ?)",
-      [name, value, JSON.stringify(labels), Date.now()],
-    );
+    this.db.run("INSERT INTO metrics (name, value, labels, recorded_at) VALUES (?, ?, ?, ?)", [
+      name,
+      value,
+      JSON.stringify(labels),
+      Date.now(),
+    ]);
   }
 
   /** Record a timing/duration in milliseconds. */
@@ -58,9 +60,7 @@ export class MetricsStore {
   flush(): void {
     if (this.counters.size === 0) return;
     const now = Date.now();
-    const stmt = this.db.prepare(
-      "INSERT INTO metrics (name, value, labels, recorded_at) VALUES (?, ?, '{}', ?)",
-    );
+    const stmt = this.db.prepare("INSERT INTO metrics (name, value, labels, recorded_at) VALUES (?, ?, '{}', ?)");
     for (const [name, value] of this.counters) {
       stmt.run(name, value, now);
     }

@@ -68,6 +68,20 @@ describe("config", () => {
       desktopNotify: true,
       allowModerateActions: false,
       actions: { ...DEFAULT_GATE_CONFIG },
+      briefMode: false,
+      features: {},
+      push: {
+        enabled: false,
+        minSeverity: "warning" as const,
+        statuses: ["alert", "proactive"],
+        maxPerHour: 10,
+      },
+      webhook: {
+        port: 7433,
+        secret: "",
+        path: "/webhook/github",
+        allowedEvents: ["pull_request", "pull_request_review", "push", "issues", "issue_comment"],
+      },
     };
     saveConfig(custom);
     const loaded = loadConfig();

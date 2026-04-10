@@ -6,6 +6,7 @@ import type { TaskManager } from "../core/task-manager.ts";
 import type { CrossRepoAnalyzer } from "../memory/cross-repo.ts";
 import type { EventLog, VectorStore } from "../memory/store.ts";
 import type { TopicTier } from "../memory/topic-tier.ts";
+import { createMessage, type MessageRouter } from "../messaging/index.ts";
 import { listFiles, readFileRange, searchCodebase, summarizeStructure } from "./code-tools.ts";
 
 // ── Types ──
@@ -39,6 +40,7 @@ export interface ToolContext {
   actionExecutor?: ActionExecutor;
   taskManager?: TaskManager;
   crossRepoAnalyzer?: CrossRepoAnalyzer;
+  messageRouter?: MessageRouter;
   repoPath?: string;
 }
 
@@ -403,6 +405,43 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     },
   },
   {
+    name: "send_user_message",
+    description:
+      "Send a structured message to the user. Messages are routed through all registered delivery channels (console, JSONL log, future: Slack, push). Use instead of notify for rich, routed output.",
+    parameters: {
+      type: "object",
+      properties: {
+        message: {
+          type: "string",
+          description: "Markdown-formatted message body",
+        },
+        status: {
+          type: "string",
+          enum: ["normal", "proactive", "scheduled", "alert"],
+          description:
+            "Message status label. 'normal': responding to event, 'proactive': unsolicited insight, 'scheduled': cron-triggered, 'alert': high-priority",
+        },
+        severity: {
+          type: "string",
+          enum: ["info", "warning", "critical"],
+          description: "Message severity (default: info)",
+        },
+        attachments: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              path: { type: "string", description: "File path" },
+            },
+            required: ["path"],
+          },
+          description: "Optional file attachments (metadata resolved at send time)",
+        },
+      },
+      required: ["message", "status"],
+    },
+  },
+  {
     name: "silent",
     description: "No action needed — routine state. Use when nothing interesting is happening.",
     parameters: {
@@ -506,6 +545,8 @@ export class ToolExecutor {
           return this.execAction(call.args);
         case "run_check":
           return this.execRunCheck(call.args);
+        case "send_user_message":
+          return this.execSendUserMessage(call.args);
         case "silent":
           return { tool: "silent", result: "ok" };
         case "subscribe_event":
@@ -872,6 +913,78 @@ export class ToolExecutor {
     return {
       tool: "subscribe_event",
       result: `Subscribed to ${eventType}${filter ? ` (filter: "${filter}")` : ""}. Active subscriptions: ${subs.length}`,
+    };
+  }
+
+  private async execSendUserMessage(args: Record<string, unknown>): Promise<ToolResult> {
+    if (!this.ctx.messageRouter) {
+      return { tool: "send_user_message", result: null, error: "MessageRouter not available" };
+    }
+
+    const messageText = args.message as string;
+    const status = (args.status as "normal" | "proactive" | "scheduled" | "alert") ?? "normal";
+    const severity = (args.severity as "info" | "warning" | "critical") ?? "info";
+    const rawAttachments = (args.attachments as Array<{ path: string }>) ?? [];
+
+    // Resolve attachment metadata at send time
+    const attachments = rawAttachments.map((a) => {
+      let size = 0;
+      let isImage = false;
+      let mimeType: string | undefined;
+      try {
+        const { statSync } = require("node:fs");
+        const { extname } = require("node:path");
+        const repoPath = this.ctx.repoPath || ".";
+        const fullPath = require("node:path").join(repoPath, a.path);
+        const stat = statSync(fullPath);
+        size = stat.size;
+        const ext = extname(a.path).toLowerCase();
+        isImage = [".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"].includes(ext);
+        const mimeMap: Record<string, string> = {
+          ".ts": "text/typescript",
+          ".js": "text/javascript",
+          ".json": "application/json",
+          ".md": "text/markdown",
+          ".png": "image/png",
+          ".jpg": "image/jpeg",
+          ".jpeg": "image/jpeg",
+          ".gif": "image/gif",
+          ".svg": "image/svg+xml",
+          ".txt": "text/plain",
+        };
+        mimeType = mimeMap[ext] ?? "application/octet-stream";
+      } catch {
+        // File doesn't exist or can't be read — still include with zero size
+      }
+      return { path: a.path, size, isImage, mimeType };
+    });
+
+    const msg = createMessage({
+      source: {
+        repo: this.ctx.repo,
+        event: "send_user_message",
+        agent: "vigil",
+      },
+      status,
+      severity,
+      message: messageText,
+      attachments,
+      metadata: { tickNum: this.ctx.tickNum },
+    });
+
+    const results = await this.ctx.messageRouter.route(msg);
+    const delivered = results.filter((r) => r.success).length;
+
+    // Also log to event log for backwards compat
+    this.ctx.eventLog.append(this.ctx.repo, {
+      type: status === "alert" ? "notify" : "observe",
+      detail: messageText,
+      severity,
+    });
+
+    return {
+      tool: "send_user_message",
+      result: `Message sent (${status}/${severity}) → ${delivered} channel(s)`,
     };
   }
 

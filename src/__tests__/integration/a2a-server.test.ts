@@ -262,7 +262,12 @@ describe("rate limiting", () => {
       await Bun.sleep(50);
       return "answer";
     });
-    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher, maxConcurrent: 2, authToken: TEST_TOKEN });
+    server = startA2AServer(port, {
+      engine: mockEngine,
+      watcher: mockWatcher,
+      maxConcurrent: 2,
+      authToken: TEST_TOKEN,
+    });
 
     const body = JSON.stringify(rpcBody("message/send", [{ type: "text", text: "q" }]));
     const opts = { method: "POST", headers: authHeaders, body };
@@ -283,7 +288,12 @@ describe("rate limiting", () => {
           resolve1 = r;
         }),
     );
-    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher, maxConcurrent: 1, authToken: TEST_TOKEN });
+    server = startA2AServer(port, {
+      engine: mockEngine,
+      watcher: mockWatcher,
+      maxConcurrent: 1,
+      authToken: TEST_TOKEN,
+    });
 
     const body = JSON.stringify(rpcBody("message/send", [{ type: "text", text: "q" }]));
     const opts = { method: "POST", headers: authHeaders, body };
@@ -307,7 +317,12 @@ describe("rate limiting", () => {
 
   test("slot freed after request completes", async () => {
     spyOn(mockEngine, "ask").mockResolvedValue("answer");
-    server = startA2AServer(port, { engine: mockEngine, watcher: mockWatcher, maxConcurrent: 1, authToken: TEST_TOKEN });
+    server = startA2AServer(port, {
+      engine: mockEngine,
+      watcher: mockWatcher,
+      maxConcurrent: 1,
+      authToken: TEST_TOKEN,
+    });
 
     const body = JSON.stringify(rpcBody("message/send", [{ type: "text", text: "q" }]));
     const opts = { method: "POST", headers: authHeaders, body };

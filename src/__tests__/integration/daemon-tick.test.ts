@@ -245,7 +245,15 @@ describe("daemon maybeConsolidate", () => {
     daemon.repoPaths = ["/fake/repo1"];
 
     spyOn(mockVectorStore, "getByRepo").mockReturnValue([
-      { id: "m1", timestamp: Date.now(), repo: "repo1", type: "decision", content: "obs 1", metadata: {}, confidence: 0.5 },
+      {
+        id: "m1",
+        timestamp: Date.now(),
+        repo: "repo1",
+        type: "decision",
+        content: "obs 1",
+        metadata: {},
+        confidence: 0.5,
+      },
     ]);
     const consolidateSpy = spyOn(mockEngine, "consolidate").mockResolvedValue({
       summary: "Active development",

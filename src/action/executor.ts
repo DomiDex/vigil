@@ -1,11 +1,6 @@
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
-import {
-  type ActionGateConfig,
-  type ActionType,
-  DEFAULT_GATE_CONFIG,
-  getDataDir,
-} from "../core/config.ts";
+import { type ActionGateConfig, type ActionType, DEFAULT_GATE_CONFIG, getDataDir } from "../core/config.ts";
 
 // ── Types ──
 
@@ -165,10 +160,8 @@ export class ActionExecutor {
     const results: Record<string, boolean> = {
       "1_config_enabled": this.gateConfig.enabled,
       "2_session_optin": this.sessionOptIn,
-      "3_repo_allowed":
-        this.gateConfig.allowedRepos.includes("*") || this.gateConfig.allowedRepos.includes(repo),
-      "4_action_allowed":
-        actionType !== undefined && this.gateConfig.allowedActions.includes(actionType),
+      "3_repo_allowed": this.gateConfig.allowedRepos.includes("*") || this.gateConfig.allowedRepos.includes(repo),
+      "4_action_allowed": actionType !== undefined && this.gateConfig.allowedActions.includes(actionType),
       "5_confidence": confidence >= this.gateConfig.confidenceThreshold,
     };
 
@@ -384,9 +377,7 @@ export class ActionExecutor {
 
   /** Get recent actions (any status) */
   getRecent(limit = 20): ActionRequest[] {
-    const rows = this.db
-      .query("SELECT * FROM action_queue ORDER BY created_at DESC LIMIT ?")
-      .all(limit) as any[];
+    const rows = this.db.query("SELECT * FROM action_queue ORDER BY created_at DESC LIMIT ?").all(limit) as any[];
     return rows.map(this.rowToAction);
   }
 

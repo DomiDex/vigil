@@ -56,9 +56,9 @@ describe("gauge", () => {
     metrics.gauge("latency", 300);
 
     const summary = metrics.getSummary(0);
-    expect(summary["latency"].count).toBe(3);
-    expect(summary["latency"].avg).toBe(200);
-    expect(summary["latency"].max).toBe(300);
+    expect(summary.latency.count).toBe(3);
+    expect(summary.latency.avg).toBe(200);
+    expect(summary.latency.max).toBe(300);
   });
 
   test("gauge with labels stores correctly", () => {
@@ -94,7 +94,7 @@ describe("getSummary", () => {
   test("defaults to last 24h", () => {
     metrics.gauge("recent", 1);
     const summary = metrics.getSummary();
-    expect(summary["recent"]).toBeDefined();
+    expect(summary.recent).toBeDefined();
   });
 });
 
@@ -106,8 +106,8 @@ describe("startFlushing / stop", () => {
     // Counter should have been flushed
     expect(metrics.getCounter("pending")).toBe(0);
     const summary = metrics.getSummary(0);
-    expect(summary["pending"]).toBeDefined();
-    expect(summary["pending"].max).toBe(5);
+    expect(summary.pending).toBeDefined();
+    expect(summary.pending.max).toBe(5);
   });
 
   test("startFlushing is idempotent", () => {

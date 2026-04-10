@@ -1,6 +1,6 @@
-import * as z from "zod";
 import { minimatch } from "minimatch";
-import { loadAgentDefinition, type AgentDefinition } from "../agent/agent-loader.ts";
+import * as z from "zod";
+import { type AgentDefinition, loadAgentDefinition } from "../agent/agent-loader.ts";
 import { buildVigilSystemPrompt } from "../agent/system-prompt.ts";
 import { CircuitBreaker } from "../core/circuit-breaker.ts";
 import type { VigilConfig } from "../core/config.ts";
@@ -224,9 +224,7 @@ export class DecisionEngine {
 
     // Check watchPatterns filter
     if (agent.watchPatterns && files && files.length > 0) {
-      const matches = files.some((f) =>
-        agent.watchPatterns!.some((p) => minimatch(f, p, { dot: true })),
-      );
+      const matches = files.some((f) => agent.watchPatterns!.some((p) => minimatch(f, p, { dot: true })));
       if (!matches) {
         return "No files match agent watch patterns";
       }
@@ -247,7 +245,14 @@ export class DecisionEngine {
     context: string,
     recentMemories: string,
     repoProfile: string,
-    repoContext?: { repoPath: string; repoName: string; branch: string; recentCommits: string[]; uncommittedFiles: string[] },
+    repoContext?: {
+      repoPath: string;
+      repoName: string;
+      branch: string;
+      recentCommits: string[];
+      uncommittedFiles: string[];
+    },
+    isProactive = false,
   ): Promise<DecisionResult> {
     const decisionInstructions = `Respond with ONLY a JSON object, no other text:
 {
@@ -277,7 +282,7 @@ Decision guide:
           recentCommits: repoContext.recentCommits,
           uncommittedFiles: repoContext.uncommittedFiles,
         },
-        isProactive: false,
+        isProactive,
         customInstructions: undefined,
       });
       systemPrompt = `${builtPrompt}\n\n${decisionInstructions}`;

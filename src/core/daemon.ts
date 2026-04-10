@@ -1,13 +1,22 @@
 import { randomUUID } from "node:crypto";
+import { join } from "node:path";
 import chalk from "chalk";
 import { ActionExecutor } from "../action/executor.ts";
 import { type GitEvent, GitWatcher } from "../git/watcher.ts";
 import { DecisionEngine } from "../llm/decision-max.ts";
 import { CrossRepoAnalyzer } from "../memory/cross-repo.ts";
 import { EventLog, type MemoryEntry, VectorStore } from "../memory/store.ts";
+import { NativeBackend } from "../messaging/backends/native.ts";
+import { NtfyBackend } from "../messaging/backends/ntfy.ts";
+import { PushChannel } from "../messaging/channels/push.ts";
+import { ConsoleChannel, createMessage, DisplayFilter, JsonlChannel, MessageRouter } from "../messaging/index.ts";
 import { NotificationRouter } from "../notify/push.ts";
-import { loadConfig, stopWatchingConfig, type VigilConfig, watchConfig } from "./config.ts";
+import { WebhookProcessor } from "../webhooks/processor.ts";
+import { type WebhookEvent, WebhookServer } from "../webhooks/server.ts";
+import { SubscriptionManager } from "../webhooks/subscriptions.ts";
 import type { ActionType } from "./config.ts";
+import { getConfigDir, getLogsDir, loadConfig, stopWatchingConfig, type VigilConfig, watchConfig } from "./config.ts";
+import { FEATURES } from "./features.ts";
 import { acquireLock, releaseLock } from "./instance-lock.ts";
 import { MetricsStore } from "./metrics.ts";
 import { type SessionData, SessionStore } from "./session.ts";
@@ -43,6 +52,9 @@ interface DaemonDeps {
   notifier?: NotificationRouter;
   crossRepoAnalyzer?: CrossRepoAnalyzer;
   metrics?: MetricsStore;
+  messageRouter?: MessageRouter;
+  webhookServer?: WebhookServer;
+  subscriptionManager?: SubscriptionManager;
 }
 
 export class Daemon {
@@ -57,6 +69,12 @@ export class Daemon {
   notifier: NotificationRouter;
   crossRepoAnalyzer: CrossRepoAnalyzer;
   metrics: MetricsStore;
+  messageRouter: MessageRouter;
+  displayFilter: DisplayFilter;
+  briefMode: boolean;
+  private webhookServer: WebhookServer | null = null;
+  private subscriptionManager: SubscriptionManager | null = null;
+  private webhookProcessor: WebhookProcessor | null = null;
   lastConsolidation = Date.now();
   observationsSinceLastDream = 0;
   /** Ring buffer of recent per-repo decisions to prevent redundant observations */
@@ -68,7 +86,11 @@ export class Daemon {
   /** CLI overrides that must survive config hot-reloads */
   private cliOverrides: { tickInterval?: number; model?: string } = {};
 
-  constructor(repoPaths: string[], options?: { tickInterval?: number; model?: string }, deps?: DaemonDeps) {
+  constructor(
+    repoPaths: string[],
+    options?: { tickInterval?: number; model?: string; brief?: boolean },
+    deps?: DaemonDeps,
+  ) {
     this.config = loadConfig();
     if (options?.tickInterval) {
       this.config.tickInterval = options.tickInterval;
@@ -102,6 +124,43 @@ export class Daemon {
     this.crossRepoAnalyzer = deps?.crossRepoAnalyzer ?? new CrossRepoAnalyzer();
     this.metrics = deps?.metrics ?? new MetricsStore();
     this.userReply = new UserReply();
+
+    // Brief mode — CLI flag overrides config
+    this.briefMode = options?.brief ?? this.config.briefMode ?? false;
+    this.displayFilter = new DisplayFilter(
+      this.briefMode
+        ? { showStatuses: ["proactive", "alert", "scheduled"] }
+        : { showStatuses: ["normal", "proactive", "alert", "scheduled"] },
+    );
+
+    // Message router — structured output pipeline
+    this.messageRouter = deps?.messageRouter ?? new MessageRouter();
+    // In brief mode, ConsoleChannel filters what's shown; JSONL always logs everything
+    this.messageRouter.registerChannel(new ConsoleChannel(this.briefMode ? this.displayFilter : undefined));
+    this.messageRouter.registerChannel(new JsonlChannel(join(getLogsDir(), "messages.jsonl")));
+
+    // Push notifications channel (Phase 13)
+    if (this.config.push?.enabled) {
+      const pushChannel = new PushChannel(this.config.push);
+      if (this.config.push.ntfy?.topic) {
+        const { topic, server, token } = this.config.push.ntfy;
+        pushChannel.addBackend(new NtfyBackend(topic, server, token));
+      }
+      if (this.config.push.native) {
+        pushChannel.addBackend(new NativeBackend());
+      }
+      if (pushChannel.getBackends().length > 0) {
+        this.messageRouter.registerChannel(pushChannel);
+      }
+    }
+
+    // Webhook server (Phase 12) — gated by feature flag
+    if (this.config.features[FEATURES.VIGIL_WEBHOOKS]) {
+      this.subscriptionManager = deps?.subscriptionManager ?? new SubscriptionManager(getConfigDir());
+      this.subscriptionManager.load();
+      this.webhookServer = deps?.webhookServer ?? new WebhookServer(this.config.webhook);
+      this.webhookProcessor = new WebhookProcessor(this.subscriptionManager, this.messageRouter);
+    }
   }
 
   async start(): Promise<void> {
@@ -129,6 +188,7 @@ export class Daemon {
     console.log(chalk.gray(`  Tick interval: ${this.config.tickInterval}s`));
     console.log(chalk.gray(`  Model: ${this.config.tickModel}`));
     console.log(chalk.gray(`  Sleep after: ${this.config.sleepAfter}s idle`));
+    console.log(chalk.gray("  Proactive mode: enabled (adaptive tick intervals)"));
     console.log();
 
     // Init stores
@@ -146,9 +206,13 @@ export class Daemon {
     }
     console.log();
 
-    // Wire git events
+    // Wire git events — feed into work detector for proactive mode
     this.gitWatcher.onEvent((event: GitEvent) => {
-      this.tickEngine.reportActivity();
+      this.tickEngine.onGitEvent({
+        type: event.type,
+        detail: event.detail,
+        branch: event.repo,
+      });
       this.eventLog.append(event.repo, {
         type: event.type,
         detail: event.detail,
@@ -156,12 +220,27 @@ export class Daemon {
       console.log(chalk.yellow(`  ⚡ ${event.repo}: ${event.detail}`));
     });
 
-    // Wire tick handler
+    // Wire proactive tick handler — called only when WorkDetector triggers
+    this.tickEngine.onProactiveTick(async (tickNum, analysis, tickPrompt) => {
+      if (this.session) {
+        this.sessionStore.updateTick(this.session.id, tickNum);
+      }
+      this.metrics.increment("ticks.proactive");
+      console.log(
+        chalk.gray(`  [tick ${tickNum}] Proactive: ${analysis.reason} (${analysis.signals.length} signal(s))`),
+      );
+      await this.handleTick(tickNum, false, tickPrompt);
+    });
+
+    // Wire regular tick handler — always fires for sleep/consolidation
     this.tickEngine.onTick(async (tickNum, isSleeping) => {
       if (this.session) {
         this.sessionStore.updateTick(this.session.id, tickNum);
       }
-      await this.handleTick(tickNum, isSleeping);
+      if (isSleeping) {
+        await this.handleTick(tickNum, true);
+      }
+      // When awake, proactive handler drives LLM calls — regular handler only does consolidation
     });
 
     // Watch for config changes at runtime
@@ -189,6 +268,18 @@ export class Daemon {
     this.gitWatcher.startPolling();
     this.tickEngine.start();
 
+    // Start webhook server if configured
+    if (this.webhookServer && this.webhookProcessor) {
+      const processor = this.webhookProcessor;
+      this.webhookServer.on("webhook_event", (event: WebhookEvent) => {
+        processor.process(event).catch((err) => {
+          console.error(chalk.red(`  ✗ Webhook processing error: ${err}`));
+        });
+      });
+      await this.webhookServer.start();
+      console.log(chalk.green(`  ✓ Webhook server listening on port ${this.webhookServer.getPort()}`));
+    }
+
     // Start listening for user replies
     this.userReply.start();
 
@@ -210,6 +301,7 @@ export class Daemon {
       if (this.session) {
         this.sessionStore.stop(this.session.id);
       }
+      this.webhookServer?.stop();
       stopWatchingConfig();
       releaseLock(this.sessionId);
       this.metrics.stop();
@@ -220,7 +312,7 @@ export class Daemon {
     });
   }
 
-  async handleTick(tickNum: number, isSleeping: boolean): Promise<void> {
+  async handleTick(tickNum: number, isSleeping: boolean, tickPrompt?: string): Promise<void> {
     // Clear any pending prompt from the previous tick
     this.userReply.clearPrompt();
 
@@ -278,8 +370,9 @@ export class Daemon {
       // Include cross-repo context when watching multiple repos
       const crossRepoContext = this.repoPaths.length > 1 ? this.crossRepoAnalyzer.getRelatedRepoContext(repoName) : "";
 
-      // Include user replies, cross-repo context, and recent decision history
+      // Include tick prompt, user replies, cross-repo context, and recent decision history
       let fullContext = context;
+      if (tickPrompt) fullContext += `\n\n${tickPrompt}`;
       if (crossRepoContext) fullContext += `\n\n${crossRepoContext}`;
       if (userRepliesContext) fullContext += `\n\nUser feedback from previous ticks:\n${userRepliesContext}`;
 
@@ -305,18 +398,28 @@ export class Daemon {
         : undefined;
 
       const decisionStart = Date.now();
-      const result = await this.decisionEngine.decide(fullContext, memorySummary, profileSummary, repoCtx);
+      const result = await this.decisionEngine.decide(
+        fullContext,
+        memorySummary,
+        profileSummary,
+        repoCtx,
+        !!tickPrompt,
+      );
       this.metrics.timing("llm.decision_ms", Date.now() - decisionStart, { repo: repoName });
       this.metrics.increment(`decisions.${result.decision.toLowerCase()}`);
 
       switch (result.decision) {
-        case "SILENT":
-          console.log(
-            chalk.cyan(`  · tick ${tickNum}`) +
-              chalk.blueBright(` [${repoName}]`) +
-              chalk.white(` ${formatTick(result.reasoning)}`),
-          );
+        case "SILENT": {
+          // In brief mode, SILENT decisions are suppressed entirely
+          if (!this.briefMode) {
+            console.log(
+              chalk.cyan(`  · tick ${tickNum}`) +
+                chalk.blueBright(` [${repoName}]`) +
+                chalk.white(` ${formatTick(result.reasoning)}`),
+            );
+          }
           break;
+        }
 
         case "OBSERVE": {
           const content = result.content || result.reasoning;
@@ -332,7 +435,21 @@ export class Daemon {
           this.vectorStore.store(entry);
           this.eventLog.append(repoName, { type: "observe", detail: content });
           this.observationsSinceLastDream++;
-          console.log(chalk.cyan(`  👁 tick ${tickNum}`) + chalk.white(` [${repoName}] ${formatTick(content)}`));
+
+          const observeMsg = createMessage({
+            source: {
+              repo: repoName,
+              branch: repoState?.currentBranch,
+              event: "observe",
+              agent: repoCtx ? undefined : "vigil",
+            },
+            status: "normal",
+            severity: "info",
+            message: content,
+            metadata: { tickNum, decision: "OBSERVE" },
+          });
+          await this.messageRouter.route(observeMsg);
+
           lastObservation = { repo: repoName, decision: "OBSERVE", content };
           break;
         }
@@ -341,7 +458,21 @@ export class Daemon {
           const content = result.content || result.reasoning;
           this.eventLog.append(repoName, { type: "notify", detail: content });
           this.observationsSinceLastDream++;
-          console.log(chalk.cyan(`  🔔 tick ${tickNum}`) + chalk.yellow(` [${repoName}] ${formatTick(content)}`));
+
+          const notifyMsg = createMessage({
+            source: {
+              repo: repoName,
+              branch: repoState?.currentBranch,
+              event: "notify",
+              agent: repoCtx ? undefined : "vigil",
+            },
+            status: "proactive",
+            severity: "warning",
+            message: content,
+            metadata: { tickNum, decision: "NOTIFY" },
+          });
+          await this.messageRouter.route(notifyMsg);
+
           await this.notifier.send(`Vigil — ${repoName}`, content, "info");
           lastObservation = { repo: repoName, decision: "NOTIFY", content };
           break;
@@ -351,20 +482,27 @@ export class Daemon {
           const content = result.action || result.reasoning;
           this.eventLog.append(repoName, { type: "act", detail: content });
           this.observationsSinceLastDream++;
-          console.log(chalk.cyan(`  ⚡ tick ${tickNum}`) + chalk.red(` [${repoName}] ACTION: ${formatTick(content)}`));
+
+          const actMsg = createMessage({
+            source: {
+              repo: repoName,
+              branch: repoState?.currentBranch,
+              event: "act",
+              agent: repoCtx ? undefined : "vigil",
+            },
+            status: "alert",
+            severity: "critical",
+            message: `ACTION: ${content}`,
+            metadata: { tickNum, decision: "ACT", action: result.action },
+          });
+          await this.messageRouter.route(actMsg);
 
           // Attempt gated action execution if a command is provided
           if (result.action) {
-            const actionResult = await this.actionExecutor.submit(
-              result.action,
-              result.reasoning,
-              repoName,
-              repoPath,
-              {
-                actionType: result.actionType as ActionType | undefined,
-                confidence: result.confidence ?? 0,
-              },
-            );
+            const actionResult = await this.actionExecutor.submit(result.action, result.reasoning, repoName, repoPath, {
+              actionType: result.actionType as ActionType | undefined,
+              confidence: result.confidence ?? 0,
+            });
 
             if (actionResult.status === "executed") {
               console.log(chalk.green(`    ✓ Action executed: ${actionResult.result?.slice(0, 120) || "ok"}`));

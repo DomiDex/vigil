@@ -4,13 +4,14 @@ import { join, resolve } from "node:path";
 import chalk from "chalk";
 import { Command } from "commander";
 import { ActionExecutor } from "../action/executor.ts";
-import { getDataDir, loadConfig, saveConfig } from "../core/config.ts";
+import { getConfigDir, getDataDir, loadConfig, saveConfig } from "../core/config.ts";
 import { Daemon } from "../core/daemon.ts";
+import { MetricsStore } from "../core/metrics.ts";
 import { GitWatcher } from "../git/watcher.ts";
 import { DecisionEngine } from "../llm/decision-max.ts";
-import { MetricsStore } from "../core/metrics.ts";
 import { EventLog, VectorStore } from "../memory/store.ts";
 import { NotificationRouter } from "../notify/push.ts";
+import { SubscriptionManager } from "../webhooks/subscriptions.ts";
 
 const program = new Command();
 
@@ -26,11 +27,13 @@ program
   .argument("<repos...>", "Paths to git repositories")
   .option("-t, --tick <seconds>", "Tick interval in seconds", parseInt)
   .option("-m, --model <model>", "Model for tick decisions")
+  .option("-b, --brief", "Brief mode — only show important messages, suppress routine output")
   .action(async (repos: string[], opts) => {
     const resolvedRepos = repos.map((r) => resolve(r));
     const daemon = new Daemon(resolvedRepos, {
       tickInterval: opts.tick,
       model: opts.model,
+      brief: opts.brief,
     });
     await daemon.start();
     // Keep alive
@@ -354,9 +357,7 @@ program
           : action.status === "failed" || action.status === "rejected"
             ? chalk.red
             : chalk.yellow;
-      console.log(
-        `  ${icon} ${chalk.gray(time)} ${statusColor(`[${action.status}]`)} ${chalk.white(action.command)}`,
-      );
+      console.log(`  ${icon} ${chalk.gray(time)} ${statusColor(`[${action.status}]`)} ${chalk.white(action.command)}`);
       console.log(`    ${chalk.gray(`id: ${action.id.slice(0, 8)}  tier: ${action.tier}  repo: ${action.repo}`)}`);
       if (action.error) {
         console.log(`    ${chalk.red(action.error)}`);
@@ -364,6 +365,60 @@ program
     }
     console.log();
     executor.close();
+  });
+
+// ── webhook ──
+program
+  .command("webhook")
+  .description("Manage PR webhook subscriptions")
+  .option("--subscribe <repo>", "Subscribe to a PR (format: owner/repo#123)")
+  .option("--events <events>", "Comma-separated events to watch", "opened,closed,review_submitted,commented")
+  .option("--unsubscribe <id>", "Unsubscribe by subscription ID")
+  .option("--list", "List all subscriptions")
+  .option("--repo <repo>", "Filter list by repo (owner/repo)")
+  .action((opts) => {
+    const subs = new SubscriptionManager(getConfigDir());
+    subs.load();
+
+    if (opts.subscribe) {
+      const match = opts.subscribe.match(/^(.+)#(\d+)$/);
+      if (!match) {
+        console.error(chalk.red("  ✗ Invalid format. Use: owner/repo#123"));
+        return;
+      }
+      const [, repo, prNum] = match;
+      const events = opts.events.split(",").map((e: string) => e.trim());
+      const sub = subs.subscribe(repo, parseInt(prNum, 10), events);
+      console.log(chalk.green(`  ✓ Subscribed to ${repo}#${prNum} (id: ${sub.id})`));
+      console.log(chalk.gray(`    Events: ${events.join(", ")}`));
+      return;
+    }
+
+    if (opts.unsubscribe) {
+      const removed = subs.unsubscribe(opts.unsubscribe);
+      if (removed) {
+        console.log(chalk.green(`  ✓ Unsubscribed: ${opts.unsubscribe}`));
+      } else {
+        console.log(chalk.red(`  ✗ Subscription not found: ${opts.unsubscribe}`));
+      }
+      return;
+    }
+
+    // Default: list
+    const list = subs.list({ repo: opts.repo });
+    if (list.length === 0) {
+      console.log(chalk.gray("\n  No webhook subscriptions.\n"));
+      return;
+    }
+
+    console.log(chalk.cyan("\n  Webhook Subscriptions\n"));
+    for (const sub of list) {
+      const status = sub.active ? chalk.green("active") : chalk.gray("inactive");
+      console.log(`  ${status} ${chalk.white(`${sub.repo}#${sub.prNumber}`)} ${chalk.gray(`(id: ${sub.id})`)}`);
+      console.log(`    Events: ${sub.events.join(", ")}`);
+      console.log(`    Created: ${new Date(sub.createdAt).toLocaleString()}`);
+    }
+    console.log();
   });
 
 program.parse();

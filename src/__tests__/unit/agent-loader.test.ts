@@ -1,12 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import * as fs from "node:fs/promises";
-import * as path from "node:path";
 import * as os from "node:os";
-import {
-  loadAgentDefinition,
-  listAgentDefinitions,
-  parseAgentFile,
-} from "../../agent/agent-loader.ts";
+import * as path from "node:path";
+import { listAgentDefinitions, loadAgentDefinition, parseAgentFile } from "../../agent/agent-loader.ts";
 
 describe("Agent Loader", () => {
   let tmpDir: string;
@@ -132,10 +128,7 @@ Monitor everything.`,
     it("loads a custom agent file by name", async () => {
       const agentDir = path.join(tmpDir, ".claude", "agents");
       await fs.mkdir(agentDir, { recursive: true });
-      await fs.writeFile(
-        path.join(agentDir, "reviewer.md"),
-        "Review all PRs carefully.",
-      );
+      await fs.writeFile(path.join(agentDir, "reviewer.md"), "Review all PRs carefully.");
 
       const result = await loadAgentDefinition(tmpDir, "reviewer.md");
       expect(result).not.toBeNull();
