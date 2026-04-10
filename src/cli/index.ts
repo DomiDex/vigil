@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import chalk from "chalk";
 import { Command } from "commander";
 import { ActionExecutor } from "../action/executor.ts";
+import { feature } from "../build/features.ts";
 import { getConfigDir, getDataDir, loadConfig, saveConfig } from "../core/config.ts";
 import { Daemon } from "../core/daemon.ts";
 import { FeatureGates } from "../core/feature-gates.ts";
@@ -13,7 +14,13 @@ import { GitWatcher } from "../git/watcher.ts";
 import { DecisionEngine } from "../llm/decision-max.ts";
 import { EventLog, VectorStore } from "../memory/store.ts";
 import { NotificationRouter } from "../notify/push.ts";
-import { SubscriptionManager } from "../webhooks/subscriptions.ts";
+
+// Build-time gated: webhook subscriptions (Phase 12)
+/* eslint-disable @typescript-eslint/no-require-imports */
+const webhookSubMod = feature("VIGIL_WEBHOOKS")
+  ? (require("../webhooks/subscriptions.ts") as typeof import("../webhooks/subscriptions.ts"))
+  : null;
+/* eslint-enable @typescript-eslint/no-require-imports */
 
 const program = new Command();
 
@@ -379,7 +386,11 @@ program
   .option("--list", "List all subscriptions")
   .option("--repo <repo>", "Filter list by repo (owner/repo)")
   .action((opts) => {
-    const subs = new SubscriptionManager(getConfigDir());
+    if (!webhookSubMod) {
+      console.error(chalk.red("  ✗ Webhook feature is disabled in this build."));
+      return;
+    }
+    const subs = new webhookSubMod.SubscriptionManager(getConfigDir());
     subs.load();
 
     if (opts.subscribe) {

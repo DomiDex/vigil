@@ -1771,33 +1771,39 @@ Recommended parallel tracks:
 
 ## Color System
 
+> **Rule: NO EMOJIS.** Use SVG/CSS icons everywhere (Lucide Icons vendored locally).
+
 ```
+Brand:
+  Background → #222745 (deep navy)
+  Accent     → #FF8102 (orange)
+
 Decision Colors:
-  SILENT   → #6b7280 (gray-500)
-  OBSERVE  → #3b82f6 (blue-500)
-  NOTIFY   → #f59e0b (amber-500)
-  ACT      → #ef4444 (red-500)
+  SILENT   → #4a5068 (muted navy)
+  OBSERVE  → #FF8102 (orange — accent)
+  NOTIFY   → #FFB84D (light orange)
+  ACT      → #ef4444 (red)
 
 Severity Colors:
-  info     → #3b82f6 (blue-500)
-  warning  → #f59e0b (amber-500)
-  critical → #ef4444 (red-500)
+  info     → #FF8102 (orange)
+  warning  → #FFB84D (light orange)
+  critical → #ef4444 (red)
 
 State Colors:
-  awake    → #22c55e (green-500)
-  sleeping → #6b7280 (gray-500)
-  dreaming → #8b5cf6 (purple-500)
+  awake    → #22c55e (green)
+  sleeping → #4a5068 (muted navy)
+  dreaming → #a78bfa (purple)
 
 Action Tiers:
-  safe       → #22c55e (green-500)
-  moderate   → #f59e0b (amber-500)
-  dangerous  → #ef4444 (red-500)
+  safe       → #22c55e (green)
+  moderate   → #FF8102 (orange)
+  dangerous  → #ef4444 (red)
 
 Status:
-  success  → #22c55e (green-500)
-  pending  → #f59e0b (amber-500)
-  failed   → #ef4444 (red-500)
-  skipped  → #6b7280 (gray-500)
+  success  → #22c55e (green)
+  pending  → #FF8102 (orange)
+  failed   → #ef4444 (red)
+  skipped  → #4a5068 (muted navy)
 ```
 
 ---
@@ -1806,33 +1812,65 @@ Status:
 
 ```css
 :root {
-  /* Vigil brand */
-  --vigil-bg: #0f172a;
-  --vigil-surface: #1e293b;
-  --vigil-border: #334155;
+  /* Vigil brand — navy + orange */
+  --vigil-bg: #222745;
+  --vigil-surface: #2a3058;
+  --vigil-surface-hover: #323868;
+  --vigil-border: #3d4470;
   --vigil-text: #e2e8f0;
-  --vigil-text-muted: #94a3b8;
+  --vigil-text-muted: #8b92b0;
+  --vigil-accent: #FF8102;
+  --vigil-accent-hover: #FF9A33;
+  --vigil-accent-muted: rgba(255, 129, 2, 0.15);
 
   /* Decision palette */
-  --color-silent: #6b7280;
-  --color-observe: #3b82f6;
-  --color-notify: #f59e0b;
+  --color-silent: #4a5068;
+  --color-observe: #FF8102;
+  --color-notify: #FFB84D;
   --color-act: #ef4444;
 
   /* State palette */
   --color-awake: #22c55e;
-  --color-sleeping: #6b7280;
-  --color-dreaming: #8b5cf6;
+  --color-sleeping: #4a5068;
+  --color-dreaming: #a78bfa;
 
   /* Status palette */
   --color-success: #22c55e;
-  --color-pending: #f59e0b;
+  --color-pending: #FF8102;
   --color-failed: #ef4444;
+  --color-skipped: #4a5068;
 }
+```
+
+## Icons
+
+> **NO EMOJIS anywhere in the dashboard.** Use Lucide Icons (vendored locally).
+
+```
+Download: curl -o src/dashboard/static/vendor/lucide.min.js \
+  https://unpkg.com/lucide@latest/dist/umd/lucide.min.js
+
+Icon mapping (replaces emojis):
+  👁  →  <i data-lucide="eye"></i>              (OBSERVE)
+  🔔  →  <i data-lucide="bell"></i>             (NOTIFY)
+  📦  →  <i data-lucide="git-commit"></i>       (new commit)
+  🌙  →  <i data-lucide="moon"></i>             (dream)
+  💡  →  <i data-lucide="lightbulb"></i>        (insight)
+  🟢  →  <i data-lucide="circle-dot"></i>       (awake) + CSS color
+  ⚠️   →  <i data-lucide="alert-triangle"></i>  (warning)
+  ✓   →  <i data-lucide="check"></i>            (success)
+  ✗   →  <i data-lucide="x"></i>                (failed/rejected)
+  ⏳  →  <i data-lucide="clock"></i>            (pending)
+  🔍  →  <i data-lucide="search"></i>           (search)
+  ⚙   →  <i data-lucide="settings"></i>        (config)
+  🗑   →  <i data-lucide="trash-2"></i>         (delete)
+
+Init in app.js:
+  lucide.createIcons();
 ```
 
 ---
 
 *Total: 14 phases, ~75 API endpoints, 14 HTML fragments, 1 SSE stream, 4 Chart.js instances.*
-*Estimated static bundle: HTMX (~14kb) + Pico CSS (~10kb) + Chart.js (~65kb) = ~89kb total.*
+*Estimated static bundle: HTMX (~14kb) + Pico CSS (~10kb) + Chart.js (~65kb) + Lucide Icons (~30kb) = ~119kb total.*
 *Zero build step. Zero external dependencies at runtime. Works fully offline.*

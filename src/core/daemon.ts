@@ -2,20 +2,13 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import chalk from "chalk";
 import { ActionExecutor } from "../action/executor.ts";
-import { ChannelHandler } from "../channels/handler.ts";
-import { ChannelPermissionManager } from "../channels/permissions.ts";
+import { feature } from "../build/features.ts";
 import { type GitEvent, GitWatcher } from "../git/watcher.ts";
 import { DecisionEngine } from "../llm/decision-max.ts";
 import { CrossRepoAnalyzer } from "../memory/cross-repo.ts";
 import { EventLog, type MemoryEntry, VectorStore } from "../memory/store.ts";
-import { NativeBackend } from "../messaging/backends/native.ts";
-import { NtfyBackend } from "../messaging/backends/ntfy.ts";
-import { PushChannel } from "../messaging/channels/push.ts";
 import { ConsoleChannel, createMessage, DisplayFilter, JsonlChannel, MessageRouter } from "../messaging/index.ts";
 import { NotificationRouter } from "../notify/push.ts";
-import { WebhookProcessor } from "../webhooks/processor.ts";
-import { type WebhookEvent, WebhookServer } from "../webhooks/server.ts";
-import { SubscriptionManager } from "../webhooks/subscriptions.ts";
 import type { ActionType } from "./config.ts";
 import { getConfigDir, getLogsDir, loadConfig, stopWatchingConfig, type VigilConfig, watchConfig } from "./config.ts";
 import { FeatureGates } from "./feature-gates.ts";
@@ -25,6 +18,48 @@ import { MetricsStore } from "./metrics.ts";
 import { type SessionData, SessionStore } from "./session.ts";
 import { TickEngine } from "./tick-engine.ts";
 import { UserReply } from "./user-reply.ts";
+
+// Dead code elimination: conditional imports for feature-gated modules.
+// Kairos pattern — lazy require inside ternary. Bundler constant-folds
+// feature() → eliminates dead branch + transitive dependencies.
+
+/* eslint-disable @typescript-eslint/no-require-imports */
+const channelMod = feature("VIGIL_CHANNELS")
+  ? (require("../channels/handler.ts") as typeof import("../channels/handler.ts"))
+  : null;
+const channelPermMod = feature("VIGIL_CHANNELS")
+  ? (require("../channels/permissions.ts") as typeof import("../channels/permissions.ts"))
+  : null;
+
+const webhookProcMod = feature("VIGIL_WEBHOOKS")
+  ? (require("../webhooks/processor.ts") as typeof import("../webhooks/processor.ts"))
+  : null;
+const webhookServerMod = feature("VIGIL_WEBHOOKS")
+  ? (require("../webhooks/server.ts") as typeof import("../webhooks/server.ts"))
+  : null;
+const webhookSubMod = feature("VIGIL_WEBHOOKS")
+  ? (require("../webhooks/subscriptions.ts") as typeof import("../webhooks/subscriptions.ts"))
+  : null;
+
+const pushMod = feature("VIGIL_PUSH")
+  ? (require("../messaging/channels/push.ts") as typeof import("../messaging/channels/push.ts"))
+  : null;
+const nativeMod = feature("VIGIL_PUSH")
+  ? (require("../messaging/backends/native.ts") as typeof import("../messaging/backends/native.ts"))
+  : null;
+const ntfyMod = feature("VIGIL_PUSH")
+  ? (require("../messaging/backends/ntfy.ts") as typeof import("../messaging/backends/ntfy.ts"))
+  : null;
+
+/* eslint-enable @typescript-eslint/no-require-imports */
+
+// Type-only imports for class fields (zero-cost, erased at compile time)
+import type { ChannelHandler } from "../channels/handler.ts";
+import type { ChannelPermissionManager } from "../channels/permissions.ts";
+import { startDashboard } from "../dashboard/server.ts";
+import type { WebhookProcessor } from "../webhooks/processor.ts";
+import type { WebhookEvent, WebhookServer } from "../webhooks/server.ts";
+import type { SubscriptionManager } from "../webhooks/subscriptions.ts";
 
 const BANNER = `
 ╔══════════════════════════════════════╗
@@ -92,6 +127,7 @@ export class Daemon {
   private sessionId: string;
   private session: SessionData | null = null;
   actionExecutor: ActionExecutor;
+  private dashboardServer: ReturnType<typeof startDashboard> | null = null;
   /** CLI overrides that must survive config hot-reloads */
   private cliOverrides: { tickInterval?: number; model?: string } = {};
 
@@ -143,8 +179,8 @@ export class Daemon {
       });
     this.featureGates.loadConfigFlags();
     // Set build-time flags for all known features (default enabled)
-    for (const feature of Object.values(FEATURES)) {
-      this.featureGates.setBuildFlag(feature, true);
+    for (const feat of Object.values(FEATURES)) {
+      this.featureGates.setBuildFlag(feat, true);
     }
 
     // Brief mode — CLI flag overrides config
@@ -161,35 +197,45 @@ export class Daemon {
     this.messageRouter.registerChannel(new ConsoleChannel(this.briefMode ? this.displayFilter : undefined));
     this.messageRouter.registerChannel(new JsonlChannel(join(getLogsDir(), "messages.jsonl")));
 
-    // Push notifications channel (Phase 13)
-    if (this.config.push?.enabled) {
-      const pushChannel = new PushChannel(this.config.push);
-      if (this.config.push.ntfy?.topic) {
+    // Push notifications channel (Phase 13) — gated by build-time feature flag
+    if (pushMod && this.config.push?.enabled) {
+      const pushChannel = new pushMod.PushChannel(this.config.push);
+      if (this.config.push.ntfy?.topic && ntfyMod) {
         const { topic, server, token } = this.config.push.ntfy;
-        pushChannel.addBackend(new NtfyBackend(topic, server, token));
+        pushChannel.addBackend(new ntfyMod.NtfyBackend(topic, server, token));
       }
-      if (this.config.push.native) {
-        pushChannel.addBackend(new NativeBackend());
+      if (this.config.push.native && nativeMod) {
+        pushChannel.addBackend(new nativeMod.NativeBackend());
       }
       if (pushChannel.getBackends().length > 0) {
         this.messageRouter.registerChannel(pushChannel);
       }
     }
 
-    // Webhook server (Phase 12) — gated by feature flag
-    if (this.featureGates.isEnabledCached(FEATURES.VIGIL_WEBHOOKS)) {
-      this.subscriptionManager = deps?.subscriptionManager ?? new SubscriptionManager(getConfigDir());
+    // Webhook server (Phase 12) — gated by build-time + runtime feature flag
+    if (
+      webhookSubMod &&
+      webhookServerMod &&
+      webhookProcMod &&
+      this.featureGates.isEnabledCached(FEATURES.VIGIL_WEBHOOKS)
+    ) {
+      this.subscriptionManager = deps?.subscriptionManager ?? new webhookSubMod.SubscriptionManager(getConfigDir());
       this.subscriptionManager.load();
-      this.webhookServer = deps?.webhookServer ?? new WebhookServer(this.config.webhook);
-      this.webhookProcessor = new WebhookProcessor(this.subscriptionManager, this.messageRouter);
+      this.webhookServer = deps?.webhookServer ?? new webhookServerMod.WebhookServer(this.config.webhook);
+      this.webhookProcessor = new webhookProcMod.WebhookProcessor(this.subscriptionManager, this.messageRouter);
     }
 
-    // Channel notifications (Phase 11) — gated by feature flag
-    if (this.featureGates.isEnabledCached(FEATURES.VIGIL_CHANNELS) && this.config.channels?.enabled) {
-      this.channelPermissions = deps?.channelPermissions ?? new ChannelPermissionManager();
+    // Channel notifications (Phase 11) — gated by build-time + runtime feature flag
+    if (
+      channelMod &&
+      channelPermMod &&
+      this.featureGates.isEnabledCached(FEATURES.VIGIL_CHANNELS) &&
+      this.config.channels?.enabled
+    ) {
+      this.channelPermissions = deps?.channelPermissions ?? new channelPermMod.ChannelPermissionManager();
       this.channelHandler =
         deps?.channelHandler ??
-        new ChannelHandler(this.messageRouter, () => ({
+        new channelMod.ChannelHandler(this.messageRouter, () => ({
           featureEnabled: this.featureGates.isEnabledCached(FEATURES.VIGIL_CHANNELS),
           runtimeEnabled: this.config.channels?.enabled ?? false,
           isAuthenticated: true, // Local daemon is always authenticated
@@ -342,6 +388,11 @@ export class Daemon {
       console.log(chalk.green("  ✓ Channel notifications enabled"));
     }
 
+    // Start dashboard server
+    const dashPort = (this.config as any).dashboardPort ?? 7480;
+    this.dashboardServer = startDashboard(this, dashPort);
+    console.log(chalk.green(`  ✓ Dashboard: http://localhost:${dashPort}/dash`));
+
     // Start listening for user replies
     this.userReply.start();
 
@@ -364,6 +415,7 @@ export class Daemon {
         this.sessionStore.stop(this.session.id);
       }
       this.webhookServer?.stop();
+      this.dashboardServer?.stop();
       this.channelHandler?.removeAllListeners();
       stopWatchingConfig();
       releaseLock(this.sessionId);

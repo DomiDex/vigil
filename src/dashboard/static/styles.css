@@ -1,0 +1,275 @@
+/* Vigil Dashboard — Navy/Orange Theme */
+/* bg: #222745, accent: #FF8102 */
+
+:root {
+  --vigil-bg: #222745;
+  --vigil-bg-light: #2a3058;
+  --vigil-bg-surface: #313766;
+  --vigil-accent: #FF8102;
+  --vigil-accent-hover: #e67300;
+  --vigil-accent-muted: rgba(255, 129, 2, 0.15);
+  --vigil-text: #e2e4f0;
+  --vigil-text-muted: #8b8fc7;
+  --vigil-border: #3d4478;
+  --vigil-success: #22c55e;
+  --vigil-warning: #eab308;
+  --vigil-error: #ef4444;
+  --vigil-info: #60a5fa;
+  --vigil-purple: #a855f7;
+
+  /* Override Pico dark theme */
+  --pico-background-color: var(--vigil-bg);
+  --pico-color: var(--vigil-text);
+  --pico-card-background-color: var(--vigil-bg-surface);
+  --pico-card-border-color: var(--vigil-border);
+  --pico-muted-color: var(--vigil-text-muted);
+  --pico-primary: var(--vigil-accent);
+  --pico-primary-hover: var(--vigil-accent-hover);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--vigil-bg);
+  color: var(--vigil-text);
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+}
+
+/* ── Top Bar ────────────────────────────────── */
+
+header {
+  background: var(--vigil-bg-light);
+  border-bottom: 1px solid var(--vigil-border);
+  padding: 0.75rem 1.5rem;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.top-bar {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  font-size: 1.1rem;
+  letter-spacing: 0.15em;
+  color: var(--vigil-accent);
+  white-space: nowrap;
+}
+
+.logo-icon {
+  color: var(--vigil-accent);
+}
+
+.stat-cards {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.stat-cards .card {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--vigil-bg-surface);
+  border: 1px solid var(--vigil-border);
+  border-radius: 6px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.stat-cards .card small {
+  color: var(--vigil-text-muted);
+  font-size: 0.7rem;
+}
+
+.stat-cards .card.state.awake {
+  border-color: var(--vigil-success);
+}
+
+.stat-cards .card.state.sleeping {
+  border-color: var(--vigil-text-muted);
+}
+
+.stat-cards .card.state.dreaming {
+  border-color: var(--vigil-purple);
+}
+
+.stat-cards .card svg {
+  flex-shrink: 0;
+  color: var(--vigil-text-muted);
+}
+
+.meta {
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.75rem;
+  color: var(--vigil-text-muted);
+  white-space: nowrap;
+}
+
+/* ── Tab Navigation ─────────────────────────── */
+
+.tab-nav {
+  display: flex;
+  gap: 0;
+  background: var(--vigil-bg-light);
+  border-bottom: 1px solid var(--vigil-border);
+  padding: 0 1.5rem;
+  overflow-x: auto;
+}
+
+.tab-nav .tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--vigil-text-muted);
+  padding: 0.6rem 1rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.tab-nav .tab:hover {
+  color: var(--vigil-text);
+}
+
+.tab-nav .tab.active {
+  color: var(--vigil-accent);
+  border-bottom-color: var(--vigil-accent);
+}
+
+/* ── Tab Panels ─────────────────────────────── */
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.tab-panel {
+  display: none;
+}
+
+.tab-panel.active {
+  display: block;
+}
+
+.tab-panel h2 {
+  font-size: 1.3rem;
+  margin-bottom: 0.5rem;
+  color: var(--vigil-text);
+}
+
+.muted {
+  color: var(--vigil-text-muted);
+  font-size: 0.85rem;
+}
+
+/* ── Overview Grid ──────────────────────────── */
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.overview-card {
+  background: var(--vigil-bg-surface);
+  border: 1px solid var(--vigil-border);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+}
+
+.overview-card h3 {
+  font-size: 0.9rem;
+  color: var(--vigil-accent);
+  margin: 0 0 0.5rem 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ── Repo list in overview ──────────────────── */
+
+.repo-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.repo-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--vigil-border);
+}
+
+.repo-list li:last-child {
+  border-bottom: none;
+}
+
+.repo-list .repo-state {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  background: var(--vigil-accent-muted);
+  color: var(--vigil-accent);
+}
+
+/* ── Scrollbar ──────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--vigil-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--vigil-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--vigil-text-muted);
+}
+
+/* ── Responsive ─────────────────────────────── */
+
+@media (max-width: 640px) {
+  header {
+    padding: 0.5rem 0.75rem;
+  }
+
+  .top-bar {
+    gap: 0.75rem;
+  }
+
+  .meta {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .container {
+    padding: 1rem;
+  }
+}

@@ -4,7 +4,7 @@ import type { Scheduler } from "../core/scheduler.ts";
 import type { GitEventType, SleepController, WakeTrigger } from "../core/sleep-controller.ts";
 import type { TaskManager } from "../core/task-manager.ts";
 import type { CrossRepoAnalyzer } from "../memory/cross-repo.ts";
-import type { EventLog, VectorStore } from "../memory/store.ts";
+import type { EventLog, MemoryEntry, VectorStore } from "../memory/store.ts";
 import type { TopicTier } from "../memory/topic-tier.ts";
 import { createMessage, type MessageRouter } from "../messaging/index.ts";
 import { listFiles, readFileRange, searchCodebase, summarizeStructure } from "./code-tools.ts";
@@ -611,10 +611,10 @@ export class ToolExecutor {
   }
 
   private execSearchMemory(args: Record<string, unknown>): ToolResult {
-    const results = this.ctx.vectorStore.hybridSearch(args.query as string, (args.limit as number) ?? 5);
+    const results = this.ctx.vectorStore.search(args.query as string, (args.limit as number) ?? 5);
     return {
       tool: "search_memory",
-      result: results.map((r) => r.content),
+      result: results.map((r: MemoryEntry) => r.content),
     };
   }
 
@@ -814,14 +814,14 @@ export class ToolExecutor {
     }
 
     // Use hybrid search across all target repos
-    const results = this.ctx.vectorStore.hybridSearch(query, limit * 2);
-    const filtered = results.filter((r) => targetRepos.includes(r.repo)).slice(0, limit);
+    const results = this.ctx.vectorStore.search(query, limit * 2);
+    const filtered = results.filter((r: MemoryEntry) => targetRepos.includes(r.repo)).slice(0, limit);
 
     if (filtered.length === 0) {
       return { tool: "cross_repo_search", result: "No cross-repo matches found" };
     }
 
-    const summary = filtered.map((r) => `[${r.repo}] ${r.content.slice(0, 200)}`).join("\n");
+    const summary = filtered.map((r: MemoryEntry) => `[${r.repo}] ${r.content.slice(0, 200)}`).join("\n");
     return { tool: "cross_repo_search", result: summary };
   }
 

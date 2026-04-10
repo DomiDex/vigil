@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vigil Dashboard</title>
+  <link rel="stylesheet" href="/dash/vendor/pico.min.css">
+  <link rel="stylesheet" href="/dash/styles.css">
+</head>
+<body>
+  <!-- Top Bar — polled via HTMX every 5s -->
+  <header id="top-bar"
+          hx-get="/api/overview/fragment"
+          hx-trigger="every 5s"
+          hx-swap="innerHTML">
+    <div class="top-bar">
+      <span class="logo">
+        <svg class="logo-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <circle cx="12" cy="12" r="3"/>
+          <line x1="12" y1="2" x2="12" y2="5"/>
+          <line x1="12" y1="19" x2="12" y2="22"/>
+          <line x1="2" y1="12" x2="5" y2="12"/>
+          <line x1="19" y1="12" x2="22" y2="12"/>
+        </svg>
+        VIGIL
+      </span>
+      <div class="stat-cards">
+        <div class="card state">Loading...</div>
+      </div>
+      <div class="meta">
+        <span>Connecting...</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Tab Navigation -->
+  <nav class="tab-nav">
+    <button class="tab active" data-tab="overview">Overview</button>
+    <button class="tab" data-tab="timeline">Timeline</button>
+    <button class="tab" data-tab="memory">Memory</button>
+    <button class="tab" data-tab="tasks">Tasks</button>
+    <button class="tab" data-tab="metrics">Metrics</button>
+    <button class="tab" data-tab="config">Config</button>
+  </nav>
+
+  <!-- Tab Content Panels -->
+  <main class="container">
+    <section id="tab-overview" class="tab-panel active">
+      <h2>Live Overview</h2>
+      <p class="muted">Dashboard is connected. The top bar updates every 5 seconds.</p>
+
+      <div class="overview-grid">
+        <article class="overview-card" id="overview-repos"
+                 hx-get="/api/overview"
+                 hx-trigger="every 10s"
+                 hx-swap="innerHTML"
+                 hx-select-oob="#overview-repos-content">
+          <div id="overview-repos-content">
+            <h3>Watched Repos</h3>
+            <p class="muted">Loading...</p>
+          </div>
+        </article>
+        <article class="overview-card" id="overview-connection">
+          <h3>SSE Connection</h3>
+          <p id="sse-status" class="muted">Connecting...</p>
+          <p id="sse-clients" class="muted"></p>
+        </article>
+      </div>
+    </section>
+
+    <section id="tab-timeline" class="tab-panel">
+      <h2>Timeline</h2>
+      <p class="muted">Coming in Phase 2.</p>
+    </section>
+
+    <section id="tab-memory" class="tab-panel">
+      <h2>Memory &amp; Dreams</h2>
+      <p class="muted">Coming in Phase 5.</p>
+    </section>
+
+    <section id="tab-tasks" class="tab-panel">
+      <h2>Tasks</h2>
+      <p class="muted">Coming in Phase 6.</p>
+    </section>
+
+    <section id="tab-metrics" class="tab-panel">
+      <h2>Metrics</h2>
+      <p class="muted">Coming in Phase 4.</p>
+    </section>
+
+    <section id="tab-config" class="tab-panel">
+      <h2>Configuration</h2>
+      <p class="muted">Coming in Phase 12.</p>
+    </section>
+  </main>
+
+  <script src="/dash/vendor/htmx.min.js"></script>
+  <script src="/dash/vendor/htmx-sse.js"></script>
+  <script src="/dash/app.js"></script>
+</body>
+</html>
