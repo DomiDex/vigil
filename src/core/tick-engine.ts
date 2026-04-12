@@ -139,6 +139,11 @@ export class TickEngine {
       this.sleeping = false;
       this.stop();
       this.scheduleNext();
+    } else if (this.proactiveEnabled && this.workDetector.hasUrgentWork()) {
+      // Signal crossed threshold — reschedule immediately instead of
+      // waiting for the current (potentially 300s) adaptive timer
+      this.stop();
+      this.scheduleNext();
     }
   }
 
