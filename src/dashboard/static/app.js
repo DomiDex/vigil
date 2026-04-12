@@ -5,17 +5,26 @@
   "use strict";
 
   // ── Tab Switching ──────────────────────────────
-  const tabs = document.querySelectorAll(".tab-nav .tab");
+  var TAB_ACTIVE = "text-vigil bg-vigil/10";
+  var TAB_INACTIVE = "text-text-muted hover:text-text hover:bg-white/5";
+
+  const tabs = document.querySelectorAll("nav .tab");
   const panels = document.querySelectorAll(".tab-panel");
 
   tabs.forEach(function (tab) {
     tab.addEventListener("click", function () {
       const target = tab.dataset.tab;
 
-      tabs.forEach(function (t) { t.classList.remove("active"); });
+      tabs.forEach(function (t) {
+        t.classList.remove("active");
+        TAB_ACTIVE.split(" ").forEach(function (c) { t.classList.remove(c); });
+        TAB_INACTIVE.split(" ").forEach(function (c) { t.classList.add(c); });
+      });
       panels.forEach(function (p) { p.classList.remove("active"); });
 
       tab.classList.add("active");
+      TAB_INACTIVE.split(" ").forEach(function (c) { tab.classList.remove(c); });
+      TAB_ACTIVE.split(" ").forEach(function (c) { tab.classList.add(c); });
       var panel = document.getElementById("tab-" + target);
       if (panel) panel.classList.add("active");
     });
@@ -137,13 +146,22 @@
   });
 
   // ── Timeline Filter Buttons ───────────────────
+  var TL_FILTER_ACTIVE = "bg-vigil text-black";
+  var TL_FILTER_INACTIVE = "bg-surface-light text-text-muted";
+
   document.body.addEventListener("click", function (e) {
     var btn = e.target.closest(".tl-filter");
     if (!btn) return;
 
     var buttons = document.querySelectorAll(".tl-filter");
-    buttons.forEach(function (b) { b.classList.remove("active"); });
+    buttons.forEach(function (b) {
+      b.classList.remove("active");
+      TL_FILTER_ACTIVE.split(" ").forEach(function (c) { b.classList.remove(c); });
+      TL_FILTER_INACTIVE.split(" ").forEach(function (c) { b.classList.add(c); });
+    });
     btn.classList.add("active");
+    TL_FILTER_INACTIVE.split(" ").forEach(function (c) { btn.classList.remove(c); });
+    TL_FILTER_ACTIVE.split(" ").forEach(function (c) { btn.classList.add(c); });
   });
 
   // ── Repo Nav Active State ─────────────────────
@@ -170,9 +188,10 @@
     if (typeof Chart === "undefined") return;
 
     // Set Chart.js defaults for dark theme
-    Chart.defaults.color = "#8b8fc7";
-    Chart.defaults.borderColor = "rgba(61, 68, 120, 0.4)";
+    Chart.defaults.color = "#9FA3AE";
+    Chart.defaults.borderColor = "rgba(31, 33, 39, 0.6)";
     Chart.defaults.font.size = 11;
+    Chart.defaults.font.family = "system-ui, -apple-system, 'Segoe UI', sans-serif";
 
     fetchMetricsAndRender();
   }
@@ -180,7 +199,15 @@
   function fetchMetricsAndRender() {
     fetch("/api/metrics")
       .then(function (res) { return res.json(); })
-      .then(function (data) { renderMetricsCharts(data); })
+      .then(function (data) {
+        renderMetricsCharts(data);
+        // Force resize after render — charts may have been created while hidden
+        setTimeout(function () {
+          Object.values(metricsCharts).forEach(function (chart) {
+            if (chart && chart.resize) chart.resize();
+          });
+        }, 50);
+      })
       .catch(function () { /* metrics fetch failed, will retry */ });
   }
 
@@ -230,8 +257,8 @@
           datasets: [{
             label: "Latency (ms)",
             data: data.latency.series.map(function (s) { return s.ms; }),
-            borderColor: "#a855f7",
-            backgroundColor: "rgba(168, 85, 247, 0.1)",
+            borderColor: "#FF8102",
+            backgroundColor: "rgba(255, 129, 2, 0.1)",
             tension: 0.3,
             fill: true,
             pointRadius: 2,
@@ -266,7 +293,7 @@
               data: seriesLabels.length > 0
                 ? seriesLabels.map(function () { return configured; })
                 : [configured],
-              borderColor: "rgba(139, 143, 199, 0.5)",
+              borderColor: "rgba(159, 163, 174, 0.5)",
               borderDash: [5, 5],
               pointRadius: 0,
               borderWidth: 1.5
@@ -354,6 +381,226 @@
     var panel = document.getElementById("tab-metrics");
     if (panel && panel.classList.contains("active")) {
       fetchMetricsAndRender();
+    }
+  }, 30000);
+
+  // ── Scheduler Countdown Timers ────────────────
+  setInterval(function () {
+    var panel = document.getElementById("tab-scheduler");
+    if (!panel || !panel.classList.contains("active")) return;
+
+    var countdowns = document.querySelectorAll(".sched-countdown");
+    countdowns.forEach(function (el) {
+      var ms = parseInt(el.getAttribute("data-ms"), 10);
+      if (isNaN(ms) || ms <= 0) return;
+      ms -= 1000;
+      if (ms < 0) ms = 0;
+      el.setAttribute("data-ms", ms.toString());
+
+      var seconds = Math.floor(ms / 1000);
+      var minutes = Math.floor(seconds / 60);
+      var hours = Math.floor(minutes / 60);
+      var days = Math.floor(hours / 24);
+
+      var text;
+      if (days > 0) text = "in " + days + "d " + (hours % 24) + "h";
+      else if (hours > 0) text = "in " + hours + "h " + (minutes % 60) + "m";
+      else if (minutes > 0) text = "in " + minutes + "m " + (seconds % 60) + "s";
+      else text = "in " + seconds + "s";
+
+      el.textContent = text;
+    });
+  }, 1000);
+
+  // ── Schedule Builder ───────────────────────
+  // Generates a cron expression from the visual inputs.
+
+  function updateScheduleCron() {
+    var mode = document.getElementById("sched-mode");
+    var timeInput = document.getElementById("sched-time");
+    var intervalSelect = document.getElementById("sched-interval-val");
+    var cronInput = document.getElementById("sched-cron");
+    var preview = document.getElementById("sched-cron-preview");
+    if (!mode || !cronInput || !preview) return;
+
+    var modeVal = mode.value;
+    var cron = "";
+    var desc = "";
+
+    if (modeVal === "interval") {
+      var iv = intervalSelect ? intervalSelect.value : "6h";
+      if (iv === "30m") { cron = "*/30 * * * *"; desc = "Runs every 30 minutes"; }
+      else if (iv === "1h") { cron = "0 * * * *"; desc = "Runs every hour"; }
+      else if (iv === "2h") { cron = "0 */2 * * *"; desc = "Runs every 2 hours"; }
+      else if (iv === "4h") { cron = "0 */4 * * *"; desc = "Runs every 4 hours"; }
+      else if (iv === "6h") { cron = "0 */6 * * *"; desc = "Runs every 6 hours"; }
+      else if (iv === "12h") { cron = "0 */12 * * *"; desc = "Runs every 12 hours"; }
+    } else {
+      var timeParts = timeInput ? timeInput.value.split(":") : ["2", "00"];
+      var hour = parseInt(timeParts[0], 10) || 0;
+      var minute = parseInt(timeParts[1], 10) || 0;
+      var h12 = hour % 12 || 12;
+      var ampm = hour >= 12 ? "PM" : "AM";
+      var timeStr = h12 + ":" + String(minute).padStart(2, "0") + " " + ampm;
+
+      if (modeVal === "daily") {
+        cron = minute + " " + hour + " * * *";
+        desc = "Runs daily at " + timeStr;
+      } else {
+        // weekly — collect active days
+        var dayBtns = document.querySelectorAll(".sched-day.active");
+        var days = [];
+        var dayNames = { "0": "Sun", "1": "Mon", "2": "Tue", "3": "Wed", "4": "Thu", "5": "Fri", "6": "Sat" };
+        dayBtns.forEach(function (b) { days.push(b.getAttribute("data-day")); });
+        if (days.length === 0) {
+          cron = minute + " " + hour + " * * *";
+          desc = "Runs daily at " + timeStr + " (no days selected)";
+        } else if (days.length === 7) {
+          cron = minute + " " + hour + " * * *";
+          desc = "Runs daily at " + timeStr;
+        } else {
+          cron = minute + " " + hour + " * * " + days.join(",");
+          var names = days.map(function (d) { return dayNames[d] || d; });
+          desc = "Runs " + names.join(", ") + " at " + timeStr;
+        }
+      }
+    }
+
+    cronInput.value = cron;
+    preview.textContent = desc;
+  }
+
+  // Mode switch — show/hide fields
+  document.body.addEventListener("change", function (e) {
+    if (!e.target || e.target.id !== "sched-mode") return;
+    var mode = e.target.value;
+    var daysField = document.getElementById("sched-days-field");
+    var timeField = document.getElementById("sched-time-field");
+    var intervalField = document.getElementById("sched-interval-field");
+
+    if (daysField) daysField.style.display = mode === "weekly" ? "" : "none";
+    if (timeField) timeField.style.display = mode === "interval" ? "none" : "";
+    if (intervalField) intervalField.style.display = mode === "interval" ? "" : "none";
+
+    updateScheduleCron();
+  });
+
+  // Day toggle
+  document.body.addEventListener("click", function (e) {
+    var btn = e.target.closest(".sched-day");
+    if (!btn) return;
+    btn.classList.toggle("active");
+    updateScheduleCron();
+  });
+
+  // Time or interval change
+  document.body.addEventListener("input", function (e) {
+    if (!e.target) return;
+    if (e.target.id === "sched-time" || e.target.id === "sched-interval-val") {
+      updateScheduleCron();
+    }
+  });
+  document.body.addEventListener("change", function (e) {
+    if (!e.target) return;
+    if (e.target.id === "sched-interval-val") {
+      updateScheduleCron();
+    }
+  });
+
+  // Auto-refresh scheduler every 60s when tab is visible
+  setInterval(function () {
+    var panel = document.getElementById("tab-scheduler");
+    if (panel && panel.classList.contains("active")) {
+      var schedPanel = document.getElementById("scheduler-panel");
+      if (schedPanel && window.htmx) {
+        htmx.ajax("GET", "/api/scheduler/fragment", { target: "#scheduler-panel", swap: "innerHTML" });
+      }
+    }
+  }, 60000);
+
+  // ── Tasks Panel ───────────────────────────────
+
+  // Task filter button active state
+  document.body.addEventListener("click", function (e) {
+    var btn = e.target.closest(".task-filter");
+    if (!btn) return;
+    var buttons = document.querySelectorAll(".task-filter");
+    buttons.forEach(function (b) { b.classList.remove("active"); });
+    btn.classList.add("active");
+  });
+
+  // Inline edit toggle for task cards
+  window.toggleTaskEdit = function (btn) {
+    var card = btn.closest(".task-card");
+    if (!card) return;
+    var view = card.querySelector(".task-card-view");
+    var form = card.querySelector(".task-edit-form");
+    if (!view || !form) return;
+
+    var isEditing = form.style.display !== "none";
+    if (isEditing) {
+      form.style.display = "none";
+    } else {
+      form.style.display = "";
+      var titleInput = form.querySelector(".task-edit-title");
+      if (titleInput) titleInput.focus();
+    }
+  };
+
+  // Re-process HTMX on task panel swaps
+  document.body.addEventListener("htmx:afterSwap", function (e) {
+    if (e.detail.target && e.detail.target.id === "tasks-panel") {
+      if (window.htmx) htmx.process(e.detail.target);
+    }
+  });
+
+  // Auto-refresh tasks every 60s when tab is visible
+  setInterval(function () {
+    var panel = document.getElementById("tab-tasks");
+    if (panel && panel.classList.contains("active")) {
+      var tasksPanel = document.getElementById("tasks-panel");
+      if (tasksPanel && window.htmx) {
+        htmx.ajax("GET", "/api/tasks/fragment", { target: "#tasks-panel", swap: "innerHTML" });
+      }
+    }
+  }, 60000);
+
+  // ── Actions Panel ─────────────────────────────
+
+  // Action filter button active state
+  document.body.addEventListener("click", function (e) {
+    var btn = e.target.closest(".act-filter");
+    if (!btn) return;
+    var buttons = document.querySelectorAll(".act-filter");
+    buttons.forEach(function (b) { b.classList.remove("active"); });
+    btn.classList.add("active");
+  });
+
+  // SSE: refresh actions panel when a new pending action arrives
+  function setupActionSSE() {
+    if (!evtSource) return;
+    evtSource.addEventListener("action_pending", function () {
+      var panel = document.getElementById("tab-actions");
+      if (!panel) return;
+
+      var actionsPanel = document.getElementById("actions-panel");
+      if (actionsPanel && window.htmx) {
+        htmx.ajax("GET", "/api/actions/fragment", { target: "#actions-panel", swap: "innerHTML" });
+      }
+    });
+  }
+
+  // Wire up after initial SSE connect
+  setTimeout(setupActionSSE, 500);
+
+  // Auto-refresh actions every 30s when tab is visible
+  setInterval(function () {
+    var panel = document.getElementById("tab-actions");
+    if (panel && panel.classList.contains("active")) {
+      var actionsPanel = document.getElementById("actions-panel");
+      if (actionsPanel && window.htmx) {
+        htmx.ajax("GET", "/api/actions/fragment", { target: "#actions-panel", swap: "innerHTML" });
+      }
     }
   }, 30000);
 

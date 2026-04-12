@@ -93,5 +93,23 @@ export function wireSSE(sse: SSEManager, ctx: DashboardContext): void {
       repo: message.source?.repo,
       severity: message.severity,
     });
+
+    // If this is an ACT decision, check for new pending actions and broadcast
+    if (message.metadata?.decision === "ACT" && daemon.actionExecutor) {
+      const pending = daemon.actionExecutor.getPending();
+      if (pending.length > 0) {
+        sse.broadcast("action_pending", {
+          count: pending.length,
+          latest: {
+            id: pending[0].id,
+            command: pending[0].command,
+            repo: pending[0].repo,
+            tier: pending[0].tier,
+            reason: pending[0].reason,
+            confidence: pending[0].confidence,
+          },
+        });
+      }
+    }
   });
 }

@@ -41,6 +41,10 @@ if (!result.success) {
   process.exit(1);
 }
 
+// Copy dashboard static assets to dist
+import { cpSync } from "fs";
+cpSync("./src/dashboard/static", "./dist/static", { recursive: true });
+
 console.log("Build complete. Features:");
 for (const [key, val] of Object.entries(featureDefines)) {
   const status = val === "true" ? "enabled" : "DISABLED";

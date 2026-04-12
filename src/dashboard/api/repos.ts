@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { gitExec } from "../../git/exec.ts";
 import { TopicTier } from "../../memory/topic-tier.ts";
+import type { VigilMessage } from "../../messaging/schema.ts";
 import type { DashboardContext } from "../server.ts";
 
 // ── Types ────────────────────────────────────────
@@ -63,6 +64,10 @@ function repoNameFromPath(p: string): string {
   return p.split("/").pop() || p;
 }
 
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 async function getRecentCommits(repoPath: string, count = 5): Promise<RepoCommit[]> {
   try {
     const result = await gitExec(repoPath, ["log", `--format=%H|%s|%aI`, `-${count}`]);
@@ -117,14 +122,12 @@ function getDecisionDistribution(ctx: DashboardContext, repoName: string): Decis
     else if (decision === "ACT") dist.ACT++;
   }
 
-  // SILENT decisions aren't routed as messages — estimate from metrics
   const summary = ctx.daemon.metrics.getSummary();
   const totalSilent = summary["decisions.silent"]?.count ?? 0;
   const totalObserve = summary["decisions.observe"]?.count ?? 0;
   const totalNotify = summary["decisions.notify"]?.count ?? 0;
   const totalAct = summary["decisions.act"]?.count ?? 0;
 
-  // For single-repo setups, use global SILENT count. For multi-repo, estimate proportionally.
   const repoCount = ctx.daemon.repoPaths.length;
   if (repoCount <= 1) {
     dist.SILENT = totalSilent;
@@ -147,7 +150,6 @@ function getTopics(repoName: string): TopicInfo[] {
     const topic = topicTier.getTopic(repoName, name);
     if (!topic) return { name, observationCount: 0, trend: "stable" as const };
 
-    // Determine trend from recency — rising if updated in last hour, cooling if >24h
     const age = Date.now() - topic.lastUpdated;
     const ONE_HOUR = 3600_000;
     const ONE_DAY = 86400_000;
@@ -158,6 +160,73 @@ function getTopics(repoName: string): TopicInfo[] {
     return { name, observationCount: topic.observations.length, trend };
   });
 }
+
+// ── Recent Activity ─────────────────────────────
+
+interface RecentMessage {
+  decision: string;
+  message: string;
+  timestamp: string;
+  confidence: number;
+}
+
+function getRecentMessages(ctx: DashboardContext, repoName: string, limit = 10): RecentMessage[] {
+  // Current session messages
+  const messages: VigilMessage[] = ctx.daemon.messageRouter.getHistory({ limit: 200 });
+  const repoMsgs = messages
+    .filter((m) => m.source.repo === repoName)
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, limit);
+
+  return repoMsgs.map((m) => ({
+    decision: ((m.metadata?.decision as string) || "SILENT").toUpperCase(),
+    message: m.message,
+    timestamp: m.timestamp,
+    confidence: (m.metadata?.confidence as number) ?? 0,
+  }));
+}
+
+function formatTimeShort(iso: string): string {
+  const d = new Date(iso);
+  const h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, "0");
+  const ampm = h >= 12 ? "PM" : "AM";
+  return `${h % 12 || 12}:${m} ${ampm}`;
+}
+
+const DECISION_BADGE: Record<string, string> = {
+  SILENT: "bg-surface-light text-text-muted",
+  OBSERVE: "bg-info/15 text-info",
+  NOTIFY: "bg-warning/15 text-warning",
+  ACT: "bg-vigil/15 text-vigil",
+};
+
+const DECISION_BORDER: Record<string, string> = {
+  SILENT: "border-l-border",
+  OBSERVE: "border-l-info",
+  NOTIFY: "border-l-warning",
+  ACT: "border-l-vigil",
+};
+
+const DECISION_ICON: Record<string, string> = {
+  SILENT: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 14V2"/><path d="M9 18.12L5.36 14.47A2 2 0 014 13.06V4a2 2 0 012-2h2"/><path d="M12 18.12L15.64 14.47A2 2 0 0117 13.06"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`,
+  OBSERVE: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/></svg>`,
+  NOTIFY: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>`,
+  ACT: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
+};
+
+// ── Icons ────────────────────────────────────────
+
+const ICON = {
+  branch: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 01-9 9"/></svg>`,
+  commit: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><line x1="1.05" y1="12" x2="7" y2="12"/><line x1="17.01" y1="12" x2="22.96" y2="12"/></svg>`,
+  dirty: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+  clean: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
+  trendUp: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 11 12 6 7 11"/><line x1="12" y1="18" x2="12" y2="6"/></svg>`,
+  trendDown: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="7 13 12 18 17 13"/><line x1="12" y1="6" x2="12" y2="18"/></svg>`,
+  trendFlat: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+  folder: `<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>`,
+};
 
 // ── API: GET /api/repos ──────────────────────────
 
@@ -184,23 +253,27 @@ export function getReposJSON(ctx: DashboardContext): RepoListItem[] {
 export function getRepoNavFragment(ctx: DashboardContext): string {
   const repos = getReposJSON(ctx);
   if (repos.length === 0) {
-    return `<div class="muted">No repos being watched</div>`;
+    return `<div class="px-3 py-4 text-text-muted text-sm">No repos being watched</div>`;
   }
 
   return repos
     .map(
       (r, i) =>
-        `<button class="repo-nav-btn${i === 0 ? " active" : ""}"
+        `<button class="group flex items-center gap-2.5 w-full px-3 py-2.5 text-left rounded-lg transition-all duration-150
+                        ${i === 0 ? "bg-vigil/10 border-l-2 border-vigil" : "border-l-2 border-transparent hover:bg-surface-light hover:border-vigil/40"}"
                 hx-get="/api/repos/${encodeURIComponent(r.name)}/fragment"
                 hx-target="#repo-detail"
                 hx-swap="innerHTML"
                 ${i === 0 ? 'hx-trigger="load, click"' : ""}
-                data-repo="${escapeHtml(r.name)}">
+                data-repo="${escapeHtml(r.name)}"
+                onclick="document.querySelectorAll('[data-repo]').forEach(b=>{b.className=b.className.replace(/bg-vigil\\/10/,'').replace(/border-vigil(?!\\/)/g,'border-transparent')});this.classList.add('bg-vigil/10');this.classList.replace('border-transparent','border-vigil')">
           <svg width="8" height="8" viewBox="0 0 8 8">
-            <circle cx="4" cy="4" r="4" fill="${r.dirty ? "var(--vigil-warning)" : "var(--vigil-success)"}"/>
+            <circle cx="4" cy="4" r="4" fill="${r.dirty ? "#eab308" : "#39E795"}"/>
           </svg>
-          <span class="repo-nav-name">${escapeHtml(r.name)}</span>
-          <span class="repo-nav-branch">${escapeHtml(r.branch)}</span>
+          <div class="flex flex-col min-w-0">
+            <span class="text-sm font-medium text-text truncate">${escapeHtml(r.name)}</span>
+            <span class="text-xs text-text-muted font-mono truncate">${escapeHtml(r.branch)}</span>
+          </div>
         </button>`,
     )
     .join("");
@@ -218,8 +291,6 @@ export async function getRepoDetailJSON(ctx: DashboardContext, repoName: string)
 
   const [commits, dirtyInfo] = await Promise.all([getRecentCommits(repoPath, 5), getDirtyFileCount(repoPath)]);
 
-  // Use RepoState.uncommittedSince as the authoritative dirty signal
-  // (git status may fail on non-existent paths in tests)
   const isDirty = repoState?.uncommittedSince != null || dirtyInfo.count > 0;
 
   const decisions = getDecisionDistribution(ctx, repoName);
@@ -243,128 +314,180 @@ export async function getRepoDetailJSON(ctx: DashboardContext, repoName: string)
   };
 }
 
-// ── API: GET /api/repos/:name/fragment ───────────
+// ── Decision bar helper ──────────────────────────
 
-function escapeHtml(str: string): string {
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-
-function decisionBar(label: string, count: number, total: number, cssClass: string): string {
+function decisionBar(label: string, count: number, total: number, colorClass: string): string {
   const pct = total > 0 ? Math.round((count / total) * 100) : 0;
   const barWidth = total > 0 ? (count / total) * 100 : 0;
-  return `<div class="rs-bar-row">
-    <span class="rs-bar-label">${label}</span>
-    <div class="rs-bar-track">
-      <div class="rs-bar-fill ${cssClass}" style="width:${barWidth}%"></div>
+  return `<div class="flex items-center gap-2 text-xs">
+    <span class="w-16 text-text-muted">${label}</span>
+    <div class="flex-1 h-1.5 bg-surface-dark rounded-full overflow-hidden">
+      <div class="${colorClass} h-full rounded-full transition-all duration-300" style="width:${barWidth}%"></div>
     </div>
-    <span class="rs-bar-pct">${pct}%</span>
+    <span class="w-8 text-right font-mono text-text-muted">${pct}%</span>
   </div>`;
 }
 
 function trendIcon(trend: string): string {
   switch (trend) {
     case "rising":
-      return `<svg class="rs-trend rs-trend-rising" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 11 12 6 7 11"/><line x1="12" y1="18" x2="12" y2="6"/></svg>`;
+      return `<span class="text-success">${ICON.trendUp}</span>`;
     case "cooling":
-      return `<svg class="rs-trend rs-trend-cooling" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="7 13 12 18 17 13"/><line x1="12" y1="6" x2="12" y2="18"/></svg>`;
+      return `<span class="text-text-muted">${ICON.trendDown}</span>`;
     default:
-      return `<svg class="rs-trend rs-trend-stable" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
+      return `<span class="text-text-muted">${ICON.trendFlat}</span>`;
   }
 }
 
-function statusDot(dirty: boolean): string {
-  const color = dirty ? "var(--vigil-warning)" : "var(--vigil-success)";
-  return `<svg width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill="${color}"/></svg>`;
-}
+// ── API: GET /api/repos/:name/fragment ───────────
 
 export async function getRepoFragment(ctx: DashboardContext, repoName: string): Promise<string | null> {
   const detail = await getRepoDetailJSON(ctx, repoName);
   if (!detail) return null;
 
+  // Recent commits
   const commitsHtml = detail.recentCommits
     .map(
       (c) =>
-        `<div class="rs-commit">
-          <span class="rs-sha">${c.sha}</span>
-          <span class="rs-commit-msg">${escapeHtml(c.message)}</span>
+        `<div class="flex items-center gap-2 py-1.5 border-b border-border/50 last:border-0">
+          <span class="text-text-muted">${ICON.commit}</span>
+          <span class="font-mono text-xs text-vigil/80">${c.sha}</span>
+          <span class="text-xs text-text truncate">${escapeHtml(c.message)}</span>
         </div>`,
     )
     .join("");
 
+  // Decision bars
   const barsHtml = [
-    decisionBar("SILENT", detail.decisions.SILENT, detail.decisions.total, "rs-fill-silent"),
-    decisionBar("OBSERVE", detail.decisions.OBSERVE, detail.decisions.total, "rs-fill-observe"),
-    decisionBar("NOTIFY", detail.decisions.NOTIFY, detail.decisions.total, "rs-fill-notify"),
-    decisionBar("ACT", detail.decisions.ACT, detail.decisions.total, "rs-fill-act"),
+    decisionBar("SILENT", detail.decisions.SILENT, detail.decisions.total, "bg-surface-light"),
+    decisionBar("OBSERVE", detail.decisions.OBSERVE, detail.decisions.total, "bg-info"),
+    decisionBar("NOTIFY", detail.decisions.NOTIFY, detail.decisions.total, "bg-warning"),
+    decisionBar("ACT", detail.decisions.ACT, detail.decisions.total, "bg-vigil"),
   ].join("");
 
+  // Patterns
   const patternsHtml =
     detail.patterns.length > 0
-      ? detail.patterns.map((p) => `<li>${escapeHtml(p)}</li>`).join("")
-      : `<li class="muted">No patterns detected yet</li>`;
+      ? detail.patterns
+          .map(
+            (p) =>
+              `<li class="flex items-start gap-2 text-xs text-text py-1">
+                <span class="text-vigil mt-0.5">
+                  <svg width="6" height="6" viewBox="0 0 6 6"><circle cx="3" cy="3" r="3" fill="currentColor"/></svg>
+                </span>
+                ${escapeHtml(p)}
+              </li>`,
+          )
+          .join("")
+      : `<li class="text-xs text-text-muted py-1">No patterns detected yet</li>`;
 
+  // Topics
   const topicsHtml =
     detail.topics.length > 0
       ? detail.topics
           .map(
             (t) =>
-              `<div class="rs-topic">
-                <span class="rs-topic-name">${escapeHtml(t.name)}</span>
-                <span class="rs-topic-count">${t.observationCount}</span>
+              `<div class="flex items-center gap-2 py-1.5 text-xs">
+                <span class="text-text flex-1 truncate">${escapeHtml(t.name)}</span>
+                <span class="font-mono text-text-muted">${t.observationCount}</span>
                 ${trendIcon(t.trend)}
               </div>`,
           )
           .join("")
-      : `<div class="muted">No topics yet</div>`;
+      : `<div class="text-xs text-text-muted py-1">No topics yet</div>`;
 
-  return `<div class="rs-panel" hx-get="/api/repos/${encodeURIComponent(repoName)}/fragment"
+  // Recent activity messages
+  const recentMessages = getRecentMessages(ctx, repoName, 8);
+  const activityHtml = recentMessages.length > 0
+    ? recentMessages.map((m) => {
+        const badge = DECISION_BADGE[m.decision] || DECISION_BADGE.SILENT;
+        const borderColor = DECISION_BORDER[m.decision] || DECISION_BORDER.SILENT;
+        const icon = DECISION_ICON[m.decision] || DECISION_ICON.SILENT;
+        return `<div class="bg-surface rounded-lg border border-border border-l-2 ${borderColor} p-3 mb-2 hover:shadow-[0_0_12px_rgba(255,129,2,0.06)] transition-shadow">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-xs text-text-muted font-mono">${formatTimeShort(m.timestamp)}</span>
+            <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.65rem] font-medium ${badge}">${icon} ${m.decision}</span>
+            ${m.confidence > 0 ? `<span class="text-[0.65rem] text-text-muted ml-auto">${m.confidence.toFixed(2)}</span>` : ""}
+          </div>
+          <div class="text-xs text-text leading-relaxed">${escapeHtml(m.message.length > 200 ? m.message.slice(0, 200) + "..." : m.message)}</div>
+        </div>`;
+      }).join("")
+    : `<div class="text-xs text-text-muted text-center py-4">No activity this session. Waiting for tick signals...</div>`;
+
+  // Status section
+  const statusIcon = detail.dirty ? ICON.dirty : ICON.clean;
+  const statusColor = detail.dirty ? "text-warning" : "text-success";
+  const statusText = detail.dirty ? `${detail.dirtyFileCount} files changed` : "Clean";
+
+  return `<div class="space-y-5" hx-get="/api/repos/${encodeURIComponent(repoName)}/fragment"
                hx-trigger="every 30s" hx-swap="outerHTML">
-  <h3 class="rs-title">${escapeHtml(detail.name)}</h3>
 
-  <div class="rs-section rs-git-info">
-    <div class="rs-row">
-      <span class="rs-label">Branch</span>
-      <span>${escapeHtml(detail.branch)}</span>
+  <!-- Header -->
+  <div class="flex items-center justify-between">
+    <h3 class="text-lg font-semibold text-text">${escapeHtml(detail.name)}</h3>
+    <span class="${statusColor} flex items-center gap-1.5 text-xs font-medium">
+      ${statusIcon} ${statusText}
+    </span>
+  </div>
+
+  <!-- Recent Activity -->
+  <div>
+    <h4 class="text-xs font-medium text-text-muted uppercase tracking-wider mb-2">Recent Activity</h4>
+    <div class="max-h-[300px] overflow-y-auto">${activityHtml}</div>
+  </div>
+
+  <!-- Git Info -->
+  <div class="bg-surface rounded-lg border border-border p-4 space-y-3">
+    <div class="flex items-center gap-2">
+      <span class="text-text-muted">${ICON.branch}</span>
+      <span class="font-mono text-sm text-vigil">${escapeHtml(detail.branch)}</span>
     </div>
-    <div class="rs-row">
-      <span class="rs-label">HEAD</span>
-      <span class="rs-sha">${detail.head}</span>
-      <span class="rs-head-msg">${escapeHtml(detail.headMessage)}</span>
-    </div>
-    <div class="rs-row">
-      <span class="rs-label">Status</span>
-      <span>${statusDot(detail.dirty)} ${detail.dirty ? `${detail.dirtyFileCount} files changed` : "Clean"}</span>
+    <div class="flex items-center gap-2 text-xs">
+      <span class="text-text-muted">HEAD</span>
+      <span class="font-mono text-vigil/80">${detail.head}</span>
+      <span class="text-text-muted truncate">${escapeHtml(detail.headMessage)}</span>
     </div>
   </div>
 
   ${
     detail.dirty
-      ? `<div class="rs-section rs-uncommitted">
-    <h4 class="rs-section-title">Uncommitted Work</h4>
-    <div class="rs-uncommitted-summary">${escapeHtml(detail.uncommittedSummary)}</div>
+      ? `<!-- Uncommitted Work -->
+  <div class="bg-warning/5 border border-warning/20 rounded-lg p-3">
+    <div class="flex items-center gap-2 text-xs font-medium text-warning mb-1">
+      ${ICON.dirty} Uncommitted Work
+    </div>
+    <div class="text-xs text-text-muted">${escapeHtml(detail.uncommittedSummary)}</div>
   </div>`
       : ""
   }
 
-  <div class="rs-section">
-    <h4 class="rs-section-title">Recent Commits</h4>
-    <div class="rs-commits">${commitsHtml || '<div class="muted">No commits</div>'}</div>
+  <!-- Recent Commits -->
+  <div>
+    <h4 class="text-xs font-medium text-text-muted uppercase tracking-wider mb-2">Recent Commits</h4>
+    <div class="bg-surface rounded-lg border border-border p-3">
+      ${commitsHtml || '<div class="text-xs text-text-muted">No commits</div>'}
+    </div>
   </div>
 
-  <div class="rs-section">
-    <h4 class="rs-section-title">Decisions</h4>
-    <div class="rs-bars">${barsHtml}</div>
-    <div class="rs-total muted">${detail.decisions.total} total decisions</div>
+  <!-- Decisions -->
+  <div>
+    <h4 class="text-xs font-medium text-text-muted uppercase tracking-wider mb-2">Decisions</h4>
+    <div class="bg-surface rounded-lg border border-border p-3 space-y-2">
+      ${barsHtml}
+      <div class="text-xs text-text-muted text-right pt-1">${detail.decisions.total} total</div>
+    </div>
   </div>
 
-  <div class="rs-section">
-    <h4 class="rs-section-title">Patterns</h4>
-    <ul class="rs-patterns">${patternsHtml}</ul>
+  <!-- Patterns -->
+  <div>
+    <h4 class="text-xs font-medium text-text-muted uppercase tracking-wider mb-2">Patterns</h4>
+    <ul class="bg-surface rounded-lg border border-border p-3 space-y-0.5">${patternsHtml}</ul>
   </div>
 
-  <div class="rs-section">
-    <h4 class="rs-section-title">Topics</h4>
-    <div class="rs-topics">${topicsHtml}</div>
+  <!-- Topics -->
+  <div>
+    <h4 class="text-xs font-medium text-text-muted uppercase tracking-wider mb-2">Topics</h4>
+    <div class="bg-surface rounded-lg border border-border p-3">${topicsHtml}</div>
   </div>
 </div>`;
 }

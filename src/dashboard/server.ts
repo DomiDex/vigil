@@ -1,11 +1,41 @@
 import { join } from "node:path";
 import type { Daemon } from "../core/daemon.ts";
+import { getDreamPatternsJSON, getDreamsFragment, getDreamsJSON, handleDreamTrigger } from "./api/dreams.ts";
+import {
+  getMemoryFragment,
+  getMemoryJSON,
+  getMemorySearchFragment,
+  getMemorySearchJSON,
+  handleAsk,
+} from "./api/memory.ts";
 import { getMetricsFragment, getMetricsJSON } from "./api/metrics.ts";
 import { getOverviewFragment, getOverviewJSON } from "./api/overview.ts";
 import { getRepoDetailJSON, getRepoFragment, getRepoNavFragment, getReposJSON } from "./api/repos.ts";
+import {
+  getSchedulerFragment,
+  getSchedulerJSON,
+  handleSchedulerCreate,
+  handleSchedulerDelete,
+  handleSchedulerTrigger,
+} from "./api/scheduler.ts";
+import {
+  getActionsFragment,
+  getActionsJSON,
+  getActionsPendingJSON,
+  handleApprove,
+  handleReject,
+} from "./api/actions.ts";
+import {
+  getTasksFragment,
+  getTasksJSON,
+  handleTaskActivate,
+  handleTaskCancel,
+  handleTaskComplete,
+  handleTaskCreate,
+  handleTaskFail,
+  handleTaskUpdate,
+} from "./api/tasks.ts";
 import { SSEManager, wireSSE } from "./api/sse.ts";
-import { getDreamPatternsJSON, getDreamsFragment, getDreamsJSON, handleDreamTrigger } from "./api/dreams.ts";
-import { getMemoryFragment, getMemoryJSON, getMemorySearchFragment, getMemorySearchJSON, handleAsk } from "./api/memory.ts";
 import { getEntryFragment, getTimelineFragment, getTimelineJSON, handleReply } from "./api/timeline.ts";
 
 const STATIC_DIR = join(import.meta.dir, "static");
@@ -75,6 +105,7 @@ export function startDashboard(daemon: Daemon, port = 7480): ReturnType<typeof B
 
   const server = Bun.serve({
     port,
+    idleTimeout: 255, // SSE connections need long-lived sockets
     async fetch(req) {
       const url = new URL(req.url);
       const path = url.pathname;
@@ -188,6 +219,98 @@ export function startDashboard(daemon: Daemon, port = 7480): ReturnType<typeof B
       const patternsMatch = path.match(/^\/api\/dreams\/patterns\/([^/]+)$/);
       if (patternsMatch && req.method === "GET") {
         return json(getDreamPatternsJSON(ctx, decodeURIComponent(patternsMatch[1])));
+      }
+
+      // --- Tasks API ---
+      if (path === "/api/tasks" && req.method === "GET") {
+        const status = url.searchParams.get("status") || undefined;
+        const repo = url.searchParams.get("repo") || undefined;
+        return json(getTasksJSON(ctx, { status, repo }));
+      }
+      if (path === "/api/tasks/fragment" && req.method === "GET") {
+        const status = url.searchParams.get("status") || undefined;
+        const repo = url.searchParams.get("repo") || undefined;
+        return html(getTasksFragment(ctx, { status, repo }));
+      }
+      if (path === "/api/tasks" && req.method === "POST") {
+        const body = await req.formData().catch(() => null);
+        if (!body) return json({ error: "Invalid form data" }, 400);
+        return html(handleTaskCreate(ctx, body));
+      }
+      // Match POST /api/tasks/:id/activate
+      const taskActivateMatch = path.match(/^\/api\/tasks\/([^/]+)\/activate$/);
+      if (taskActivateMatch && req.method === "POST") {
+        return html(handleTaskActivate(ctx, taskActivateMatch[1]));
+      }
+      // Match POST /api/tasks/:id/complete
+      const taskCompleteMatch = path.match(/^\/api\/tasks\/([^/]+)\/complete$/);
+      if (taskCompleteMatch && req.method === "POST") {
+        return html(handleTaskComplete(ctx, taskCompleteMatch[1]));
+      }
+      // Match POST /api/tasks/:id/fail
+      const taskFailMatch = path.match(/^\/api\/tasks\/([^/]+)\/fail$/);
+      if (taskFailMatch && req.method === "POST") {
+        return html(handleTaskFail(ctx, taskFailMatch[1]));
+      }
+      // Match PUT /api/tasks/:id (edit)
+      const taskUpdateMatch = path.match(/^\/api\/tasks\/([^/]+)$/);
+      if (taskUpdateMatch && req.method === "PUT") {
+        const body = await req.formData();
+        return html(handleTaskUpdate(ctx, taskUpdateMatch[1], body));
+      }
+      // Match DELETE /api/tasks/:id
+      const taskDeleteMatch = path.match(/^\/api\/tasks\/([^/]+)$/);
+      if (taskDeleteMatch && req.method === "DELETE") {
+        return html(handleTaskCancel(ctx, taskDeleteMatch[1]));
+      }
+
+      // --- Actions API ---
+      if (path === "/api/actions" && req.method === "GET") {
+        const status = url.searchParams.get("status") || undefined;
+        return json(getActionsJSON(ctx, { status }));
+      }
+      if (path === "/api/actions/pending" && req.method === "GET") {
+        return json(getActionsPendingJSON(ctx));
+      }
+      if (path === "/api/actions/fragment" && req.method === "GET") {
+        const status = url.searchParams.get("status") || undefined;
+        return html(getActionsFragment(ctx, { status }));
+      }
+      // Match POST /api/actions/:id/approve
+      const actionApproveMatch = path.match(/^\/api\/actions\/([^/]+)\/approve$/);
+      if (actionApproveMatch && req.method === "POST") {
+        const result = await handleApprove(ctx, actionApproveMatch[1]);
+        return html(result);
+      }
+      // Match POST /api/actions/:id/reject
+      const actionRejectMatch = path.match(/^\/api\/actions\/([^/]+)\/reject$/);
+      if (actionRejectMatch && req.method === "POST") {
+        return html(handleReject(ctx, actionRejectMatch[1]));
+      }
+
+      // --- Scheduler API ---
+      if (path === "/api/scheduler" && req.method === "GET") {
+        return json(getSchedulerJSON(ctx));
+      }
+      if (path === "/api/scheduler/fragment" && req.method === "GET") {
+        return html(getSchedulerFragment(ctx));
+      }
+      if (path === "/api/scheduler" && req.method === "POST") {
+        const body = await req.formData().catch(() => null);
+        if (!body) return json({ error: "Invalid form data" }, 400);
+        const result = await handleSchedulerCreate(ctx, body);
+        return html(result);
+      }
+      // Match DELETE /api/scheduler/:id
+      const schedDeleteMatch = path.match(/^\/api\/scheduler\/([^/]+)$/);
+      if (schedDeleteMatch && req.method === "DELETE") {
+        return html(handleSchedulerDelete(ctx, schedDeleteMatch[1]));
+      }
+      // Match POST /api/scheduler/:id/trigger
+      const schedTriggerMatch = path.match(/^\/api\/scheduler\/([^/]+)\/trigger$/);
+      if (schedTriggerMatch && req.method === "POST") {
+        const result = await handleSchedulerTrigger(ctx, schedTriggerMatch[1]);
+        return html(result);
       }
 
       // --- Static Files ---

@@ -11,10 +11,46 @@ function createMockDaemon() {
   const messageRouter = new MessageRouter();
 
   const memories = [
-    { id: "mem-1", repo: "vigil", type: "decision", content: "Decision Engine Hardening landed at b2e5501", metadata: "{}", confidence: 0.92, created_at: Date.now() - 3600_000, updated_at: Date.now() - 3600_000 },
-    { id: "mem-2", repo: "vigil", type: "insight", content: "Decision distribution targets: SILENT 80%, OBSERVE 15%", metadata: "{}", confidence: 0.78, created_at: Date.now() - 7200_000, updated_at: Date.now() - 7200_000 },
-    { id: "mem-3", repo: "vigil", type: "consolidated", content: "DecisionEngine strips ANTHROPIC_API_KEY from env", metadata: "{}", confidence: 0.61, created_at: Date.now() - 10800_000, updated_at: Date.now() - 10800_000 },
-    { id: "mem-4", repo: "other", type: "git_event", content: "New commit on feature branch", metadata: "{}", confidence: 0.5, created_at: Date.now() - 1800_000, updated_at: Date.now() - 1800_000 },
+    {
+      id: "mem-1",
+      repo: "vigil",
+      type: "decision",
+      content: "Decision Engine Hardening landed at b2e5501",
+      metadata: "{}",
+      confidence: 0.92,
+      created_at: Date.now() - 3600_000,
+      updated_at: Date.now() - 3600_000,
+    },
+    {
+      id: "mem-2",
+      repo: "vigil",
+      type: "insight",
+      content: "Decision distribution targets: SILENT 80%, OBSERVE 15%",
+      metadata: "{}",
+      confidence: 0.78,
+      created_at: Date.now() - 7200_000,
+      updated_at: Date.now() - 7200_000,
+    },
+    {
+      id: "mem-3",
+      repo: "vigil",
+      type: "consolidated",
+      content: "DecisionEngine strips ANTHROPIC_API_KEY from env",
+      metadata: "{}",
+      confidence: 0.61,
+      created_at: Date.now() - 10800_000,
+      updated_at: Date.now() - 10800_000,
+    },
+    {
+      id: "mem-4",
+      repo: "other",
+      type: "git_event",
+      content: "New commit on feature branch",
+      metadata: "{}",
+      confidence: 0.5,
+      created_at: Date.now() - 1800_000,
+      updated_at: Date.now() - 1800_000,
+    },
   ];
 
   return {
@@ -110,9 +146,15 @@ function createMockDaemon() {
           "ticks.total": { count: 142, avg: 1, max: 1 },
         };
       },
-      getTimeSeries() { return []; },
-      getRawMetrics() { return []; },
-      getMetricNames() { return []; },
+      getTimeSeries() {
+        return [];
+      },
+      getRawMetrics() {
+        return [];
+      },
+      getMetricNames() {
+        return [];
+      },
     },
     userReply: {
       pendingReplies: [] as any[],
@@ -126,7 +168,8 @@ function createMockDaemon() {
       getRepoState(path: string) {
         const name = path.split("/").pop();
         return {
-          path, name,
+          path,
+          name,
           lastCommitHash: "b19bbac1234567890",
           currentBranch: "main",
           uncommittedSince: null,
@@ -142,7 +185,9 @@ function createMockDaemon() {
       lastTickAt: Date.now() - 12_000,
       handlers: [],
       sleep: { getNextInterval: () => 24 },
-      onTick(handler: any) { this.handlers.push(handler); },
+      onTick(handler: any) {
+        this.handlers.push(handler);
+      },
     },
     session: {
       id: "e37c73e5-1234-5678-9abc-def012345678",

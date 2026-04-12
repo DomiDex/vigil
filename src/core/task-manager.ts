@@ -142,6 +142,33 @@ export class TaskManager {
     return this.getById(id);
   }
 
+  /** Update a task's title, description, or repo. */
+  update(id: string, fields: { title?: string; description?: string; repo?: string }): Task | null {
+    const parts: string[] = [];
+    const params: SQLQueryBindings[] = [];
+
+    if (fields.title !== undefined) {
+      parts.push("title = ?");
+      params.push(fields.title);
+    }
+    if (fields.description !== undefined) {
+      parts.push("description = ?");
+      params.push(fields.description);
+    }
+    if (fields.repo !== undefined) {
+      parts.push("repo = ?");
+      params.push(fields.repo);
+    }
+    if (parts.length === 0) return this.getById(id);
+
+    parts.push("updated_at = ?");
+    params.push(Date.now());
+    params.push(id);
+
+    this.db.run(`UPDATE tasks SET ${parts.join(", ")} WHERE id = ?`, params);
+    return this.getById(id);
+  }
+
   /** Cancel a task. */
   cancel(id: string): Task | null {
     this.db.run(

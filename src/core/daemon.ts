@@ -15,7 +15,9 @@ import { FeatureGates } from "./feature-gates.ts";
 import { FEATURES } from "./features.ts";
 import { acquireLock, releaseLock } from "./instance-lock.ts";
 import { MetricsStore } from "./metrics.ts";
+import { Scheduler } from "./scheduler.ts";
 import { type SessionData, SessionStore } from "./session.ts";
+import { TaskManager } from "./task-manager.ts";
 import { TickEngine } from "./tick-engine.ts";
 import { UserReply } from "./user-reply.ts";
 
@@ -127,6 +129,8 @@ export class Daemon {
   private sessionId: string;
   private session: SessionData | null = null;
   actionExecutor: ActionExecutor;
+  scheduler!: Scheduler;
+  taskManager!: TaskManager;
   private dashboardServer: ReturnType<typeof startDashboard> | null = null;
   /** CLI overrides that must survive config hot-reloads */
   private cliOverrides: { tickInterval?: number; model?: string } = {};
@@ -168,6 +172,18 @@ export class Daemon {
       });
     this.crossRepoAnalyzer = deps?.crossRepoAnalyzer ?? new CrossRepoAnalyzer();
     this.metrics = deps?.metrics ?? new MetricsStore();
+    this.scheduler = new Scheduler();
+    this.scheduler.onSchedule(async (entry) => {
+      const action = entry.action.toLowerCase();
+      if (action === "dream" || action === "consolidate") {
+        await this.maybeConsolidate(true);
+      } else if (action === "check" || action === "tick") {
+        await this.handleTick(0, false);
+      } else {
+        console.log(chalk.yellow(`  [scheduler] Unknown action: ${entry.action}`));
+      }
+    });
+    this.taskManager = new TaskManager();
     this.userReply = new UserReply();
 
     // Feature gates — 4-layer gating (Phase 15)
@@ -360,6 +376,7 @@ export class Daemon {
     this.metrics.startFlushing();
     this.gitWatcher.startPolling();
     this.tickEngine.start();
+    this.scheduler.startAll();
 
     // Start webhook server if configured
     if (this.webhookServer && this.webhookProcessor) {
@@ -419,6 +436,7 @@ export class Daemon {
       this.channelHandler?.removeAllListeners();
       stopWatchingConfig();
       releaseLock(this.sessionId);
+      this.scheduler.stopAll();
       this.metrics.stop();
       this.userReply.stop();
       this.tickEngine.stop();
@@ -661,12 +679,14 @@ export class Daemon {
     }
   }
 
-  async maybeConsolidate(): Promise<void> {
-    const idleSec = (Date.now() - this.lastConsolidation) / 1000;
-    if (idleSec < this.config.dreamAfter) return;
+  async maybeConsolidate(force = false): Promise<void> {
+    if (!force) {
+      const idleSec = (Date.now() - this.lastConsolidation) / 1000;
+      if (idleSec < this.config.dreamAfter) return;
 
-    // Don't consolidate if no new observations since last dream
-    if (this.observationsSinceLastDream === 0) return;
+      // Don't consolidate if no new observations since last dream
+      if (this.observationsSinceLastDream === 0) return;
+    }
 
     console.log(chalk.magenta("\n  🌙 Entering dream phase...\n"));
     this.tickEngine.pause();

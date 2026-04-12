@@ -154,103 +154,80 @@ export function getMetricsJSON(ctx: DashboardContext) {
 export function getMetricsFragment(ctx: DashboardContext): string {
   const data = getMetricsJSON(ctx);
 
-  return `<div class="metrics-layout">
+  const STAT_ROW = "flex justify-between items-center py-1.5 border-b border-border last:border-0";
+  const STAT_LABEL = "flex-1 text-sm text-text-muted";
+  const STAT_VALUE = "shrink-0 text-sm font-semibold font-mono text-text";
+
+  return `<div class="flex gap-5 items-start">
   <!-- Left column: Charts -->
-  <div class="metrics-charts">
-    <div class="metrics-chart-card">
-      <h3 class="metrics-chart-title">
+  <div class="flex-1 grid gap-4">
+    <div class="bg-surface rounded-lg border border-border p-5">
+      <h3 class="text-sm font-medium text-text mb-4 flex items-center gap-2">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
         Decisions Over Time
       </h3>
-      <canvas id="chart-decisions" height="180"></canvas>
+      <div class="relative h-[300px]"><canvas id="chart-decisions"></canvas></div>
     </div>
 
-    <div class="metrics-chart-card">
-      <h3 class="metrics-chart-title">
+    <div class="bg-surface rounded-lg border border-border p-5">
+      <h3 class="text-sm font-medium text-text mb-4 flex items-center gap-2">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         LLM Latency
       </h3>
-      <canvas id="chart-latency" height="180"></canvas>
+      <div class="relative h-[300px]"><canvas id="chart-latency"></canvas></div>
     </div>
 
-    <div class="metrics-chart-card">
-      <h3 class="metrics-chart-title">
+    <div class="bg-surface rounded-lg border border-border p-5">
+      <h3 class="text-sm font-medium text-text mb-4 flex items-center gap-2">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         Adaptive Tick Interval
       </h3>
-      <canvas id="chart-tick-interval" height="180"></canvas>
+      <div class="relative h-[300px]"><canvas id="chart-tick-interval"></canvas></div>
     </div>
   </div>
 
   <!-- Right column: Stats -->
-  <div class="metrics-sidebar">
-    <div class="metrics-stat-card">
-      <h3 class="metrics-stat-title">Quick Stats</h3>
-      <div class="metrics-stat-rows">
-        <div class="metrics-stat-row">
-          <span class="metrics-stat-label">Total Ticks</span>
-          <span class="metrics-stat-value">${data.ticks.total}</span>
-        </div>
-        <div class="metrics-stat-row">
-          <span class="metrics-stat-label">LLM Calls</span>
-          <span class="metrics-stat-value">${data.latency.count}</span>
-        </div>
-        <div class="metrics-stat-row">
-          <span class="metrics-stat-label">Tokens (est.)</span>
-          <span class="metrics-stat-value">${data.tokens.total > 1000 ? `${(data.tokens.total / 1000).toFixed(1)}k` : data.tokens.total}</span>
-        </div>
-        <div class="metrics-stat-row">
-          <span class="metrics-stat-label">Cost Est.</span>
-          <span class="metrics-stat-value">${data.tokens.costEstimate}</span>
-        </div>
-        <div class="metrics-stat-row-divider"></div>
-        <div class="metrics-stat-row">
-          <span class="metrics-stat-label">Avg Latency</span>
-          <span class="metrics-stat-value">${formatMs(data.latency.avg)}</span>
-        </div>
-        <div class="metrics-stat-row">
-          <span class="metrics-stat-label">P95 Latency</span>
-          <span class="metrics-stat-value">${formatMs(data.latency.p95)}</span>
-        </div>
-        <div class="metrics-stat-row">
-          <span class="metrics-stat-label">Max Latency</span>
-          <span class="metrics-stat-value">${formatMs(data.latency.max)}</span>
-        </div>
-        <div class="metrics-stat-row-divider"></div>
-        <div class="metrics-stat-row">
-          <span class="metrics-stat-label">Proactive</span>
-          <span class="metrics-stat-value">${data.ticks.proactive}</span>
-        </div>
-        <div class="metrics-stat-row">
-          <span class="metrics-stat-label">Sleeping</span>
-          <span class="metrics-stat-value">${data.ticks.sleeping}</span>
-        </div>
+  <div class="w-60 shrink-0 flex flex-col gap-4">
+    <div class="bg-surface rounded-lg border border-border p-4">
+      <h3 class="text-xs text-text-muted uppercase tracking-wider mb-2 font-medium">Quick Stats</h3>
+      <div class="flex flex-col gap-2">
+        <div class="${STAT_ROW}"><span class="${STAT_LABEL}">Total Ticks</span><span class="${STAT_VALUE}">${data.ticks.total}</span></div>
+        <div class="${STAT_ROW}"><span class="${STAT_LABEL}">LLM Calls</span><span class="${STAT_VALUE}">${data.latency.count}</span></div>
+        <div class="${STAT_ROW}"><span class="${STAT_LABEL}">Tokens (est.)</span><span class="${STAT_VALUE}">${data.tokens.total > 1000 ? `${(data.tokens.total / 1000).toFixed(1)}k` : data.tokens.total}</span></div>
+        <div class="${STAT_ROW}"><span class="${STAT_LABEL}">Cost Est.</span><span class="${STAT_VALUE} text-vigil">${data.tokens.costEstimate}</span></div>
+        <div class="h-px bg-border my-2"></div>
+        <div class="${STAT_ROW}"><span class="${STAT_LABEL}">Avg Latency</span><span class="${STAT_VALUE}">${formatMs(data.latency.avg)}</span></div>
+        <div class="${STAT_ROW}"><span class="${STAT_LABEL}">P95 Latency</span><span class="${STAT_VALUE}">${formatMs(data.latency.p95)}</span></div>
+        <div class="${STAT_ROW}"><span class="${STAT_LABEL}">Max Latency</span><span class="${STAT_VALUE}">${formatMs(data.latency.max)}</span></div>
+        <div class="h-px bg-border my-2"></div>
+        <div class="${STAT_ROW}"><span class="${STAT_LABEL}">Proactive</span><span class="${STAT_VALUE}">${data.ticks.proactive}</span></div>
+        <div class="${STAT_ROW}"><span class="${STAT_LABEL}">Sleeping</span><span class="${STAT_VALUE}">${data.ticks.sleeping}</span></div>
       </div>
     </div>
 
-    <div class="metrics-stat-card">
-      <h3 class="metrics-stat-title">Token Usage / Tick</h3>
-      <canvas id="chart-tokens" height="140"></canvas>
+    <div class="bg-surface rounded-lg border border-border p-4">
+      <h3 class="text-xs text-text-muted uppercase tracking-wider mb-2 font-medium">Token Usage / Tick</h3>
+      <div class="relative h-[300px]"><canvas id="chart-tokens"></canvas></div>
     </div>
 
-    <div class="metrics-stat-card">
-      <h3 class="metrics-stat-title">Decision Totals</h3>
-      <div class="metrics-decision-totals">
-        <div class="metrics-dt-row">
-          <span class="metrics-dt-badge" style="background: rgba(107,114,128,0.2); color: #6b7280;">SILENT</span>
-          <span class="metrics-dt-count">${data.decisions.totals.SILENT}</span>
+    <div class="bg-surface rounded-lg border border-border p-4">
+      <h3 class="text-xs text-text-muted uppercase tracking-wider mb-2 font-medium">Decision Totals</h3>
+      <div class="flex flex-col gap-2">
+        <div class="flex justify-between items-center">
+          <span class="inline-flex items-center gap-1.5 text-[0.7rem] px-2 py-1 rounded" style="background: rgba(107,114,128,0.2); color: #6b7280;">SILENT</span>
+          <span class="font-mono font-bold">${data.decisions.totals.SILENT}</span>
         </div>
-        <div class="metrics-dt-row">
-          <span class="metrics-dt-badge" style="background: rgba(96,165,250,0.15); color: #60a5fa;">OBSERVE</span>
-          <span class="metrics-dt-count">${data.decisions.totals.OBSERVE}</span>
+        <div class="flex justify-between items-center">
+          <span class="inline-flex items-center gap-1.5 text-[0.7rem] px-2 py-1 rounded" style="background: rgba(96,165,250,0.15); color: #60a5fa;">OBSERVE</span>
+          <span class="font-mono font-bold">${data.decisions.totals.OBSERVE}</span>
         </div>
-        <div class="metrics-dt-row">
-          <span class="metrics-dt-badge" style="background: rgba(234,179,8,0.15); color: #eab308;">NOTIFY</span>
-          <span class="metrics-dt-count">${data.decisions.totals.NOTIFY}</span>
+        <div class="flex justify-between items-center">
+          <span class="inline-flex items-center gap-1.5 text-[0.7rem] px-2 py-1 rounded" style="background: rgba(234,179,8,0.15); color: #eab308;">NOTIFY</span>
+          <span class="font-mono font-bold">${data.decisions.totals.NOTIFY}</span>
         </div>
-        <div class="metrics-dt-row">
-          <span class="metrics-dt-badge" style="background: rgba(239,68,68,0.15); color: #ef4444;">ACT</span>
-          <span class="metrics-dt-count">${data.decisions.totals.ACT}</span>
+        <div class="flex justify-between items-center">
+          <span class="inline-flex items-center gap-1.5 text-[0.7rem] px-2 py-1 rounded" style="background: rgba(239,68,68,0.15); color: #ef4444;">ACT</span>
+          <span class="font-mono font-bold">${data.decisions.totals.ACT}</span>
         </div>
       </div>
     </div>

@@ -4,115 +4,120 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Vigil Dashboard</title>
-  <link rel="stylesheet" href="/dash/vendor/pico.min.css">
-  <link rel="stylesheet" href="/dash/styles.css">
+  <link rel="stylesheet" href="/dash/dist/styles.css">
 </head>
-<body>
+<body class="bg-surface-dark text-text m-0">
   <!-- Top Bar — polled via HTMX every 5s -->
   <header id="top-bar"
+          class="sticky top-0 z-50 border-b border-border px-6 py-3 backdrop-blur-xl bg-surface/85"
           hx-get="/api/overview/fragment"
           hx-trigger="every 5s"
           hx-swap="innerHTML">
-    <div class="top-bar">
-      <span class="logo">
-        <svg class="logo-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"/>
-          <circle cx="12" cy="12" r="3"/>
-          <line x1="12" y1="2" x2="12" y2="5"/>
-          <line x1="12" y1="19" x2="12" y2="22"/>
-          <line x1="2" y1="12" x2="5" y2="12"/>
-          <line x1="19" y1="12" x2="22" y2="12"/>
+    <div class="flex items-center gap-5 flex-wrap">
+      <span class="flex items-center gap-2 font-bold text-lg tracking-[0.15em] text-vigil">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>
+          <line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/>
+          <line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/>
         </svg>
         VIGIL
       </span>
-      <div class="stat-cards">
-        <div class="card state">Loading...</div>
+      <div class="flex gap-2 flex-wrap flex-1">
+        <div class="bg-surface border border-border rounded-lg px-3 py-1.5 text-xs text-text-muted">Loading...</div>
       </div>
-      <div class="meta">
-        <span>Connecting...</span>
-      </div>
+      <div class="text-xs text-text-muted">Connecting...</div>
     </div>
   </header>
 
   <!-- Tab Navigation -->
-  <nav class="tab-nav">
-    <button class="tab active" data-tab="overview">Overview</button>
-    <button class="tab" data-tab="timeline">Timeline</button>
-    <button class="tab" data-tab="memory">Memory</button>
-    <button class="tab" data-tab="dreams">Dreams</button>
-    <button class="tab" data-tab="tasks">Tasks</button>
-    <button class="tab" data-tab="metrics">Metrics</button>
-    <button class="tab" data-tab="config">Config</button>
+  <nav class="flex items-center gap-0.5 px-6 py-1.5 border-b border-border bg-[#06070a] overflow-x-auto">
+    <button class="tab active px-2.5 py-1 text-xs font-medium rounded transition-colors text-vigil bg-vigil/10" data-tab="overview">Overview</button>
+    <button class="tab px-2.5 py-1 text-xs font-medium rounded transition-colors text-text-muted hover:text-text hover:bg-white/5" data-tab="timeline">Timeline</button>
+    <button class="tab px-2.5 py-1 text-xs font-medium rounded transition-colors text-text-muted hover:text-text hover:bg-white/5" data-tab="memory">Memory</button>
+    <button class="tab px-2.5 py-1 text-xs font-medium rounded transition-colors text-text-muted hover:text-text hover:bg-white/5" data-tab="dreams">Dreams</button>
+    <button class="tab px-2.5 py-1 text-xs font-medium rounded transition-colors text-text-muted hover:text-text hover:bg-white/5" data-tab="scheduler">Scheduler</button>
+    <button class="tab px-2.5 py-1 text-xs font-medium rounded transition-colors text-text-muted hover:text-text hover:bg-white/5" data-tab="actions">Actions</button>
+    <button class="tab px-2.5 py-1 text-xs font-medium rounded transition-colors text-text-muted hover:text-text hover:bg-white/5" data-tab="tasks">Tasks</button>
+    <button class="tab px-2.5 py-1 text-xs font-medium rounded transition-colors text-text-muted hover:text-text hover:bg-white/5" data-tab="metrics">Metrics</button>
+    <button class="tab px-2.5 py-1 text-xs font-medium rounded transition-colors text-text-muted hover:text-text hover:bg-white/5" data-tab="config">Config</button>
   </nav>
 
   <!-- Tab Content Panels -->
-  <main class="container">
+  <main class="max-w-[1400px] mx-auto px-6 py-5">
+
+    <!-- ═══ OVERVIEW ═══ -->
     <section id="tab-overview" class="tab-panel active">
-      <div class="overview-layout">
-        <!-- Repo Nav -->
-        <nav id="repo-nav" class="repo-nav"
+      <div class="flex gap-5 min-h-[calc(100vh-160px)]">
+        <!-- Repo Nav Sidebar -->
+        <nav id="repo-nav" class="w-56 shrink-0"
              hx-get="/api/repos/fragment"
              hx-trigger="load"
              hx-swap="innerHTML"
              hx-target="#repo-nav-list">
-          <h3 class="repo-nav-title">Repositories</h3>
-          <div id="repo-nav-list">
-            <p class="muted">Loading...</p>
+          <h3 class="text-xs font-medium text-text-muted uppercase tracking-wider px-3 mb-3">Repositories</h3>
+          <div id="repo-nav-list" class="space-y-1">
+            <p class="px-3 text-sm text-text-muted">Loading...</p>
           </div>
-          <div class="repo-nav-footer">
-            <article class="overview-card" id="overview-connection">
-              <h3>SSE</h3>
-              <p id="sse-status" class="muted">Connecting...</p>
-            </article>
+          <div class="mt-auto pt-6 px-3">
+            <div class="bg-surface rounded-lg border border-border p-3">
+              <div class="text-xs font-medium text-text-muted uppercase tracking-wider mb-1">SSE</div>
+              <p id="sse-status" class="text-xs text-text-muted">Connecting...</p>
+            </div>
           </div>
         </nav>
 
-        <!-- Repo Detail Sidebar -->
-        <aside id="repo-detail" class="repo-detail">
-          <div class="rs-empty">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4">
+        <!-- Repo Detail Panel -->
+        <aside id="repo-detail" class="flex-1 min-w-0">
+          <div class="flex flex-col items-center justify-center h-64 text-text-muted">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="mb-3 opacity-30">
               <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
             </svg>
-            <p>Select a repository</p>
+            <p class="text-sm">Select a repository</p>
           </div>
         </aside>
       </div>
     </section>
 
+    <!-- ═══ TIMELINE ═══ -->
     <section id="tab-timeline" class="tab-panel">
       <!-- Filter Bar -->
-      <div class="tl-filters">
-        <div class="tl-filter-buttons">
-          <button class="tl-filter active" data-decision=""
+      <div class="flex items-center justify-between gap-4 mb-5 flex-wrap">
+        <div class="flex items-center gap-2">
+          <button class="tl-filter active px-3 py-1.5 text-xs font-medium rounded-full transition-colors bg-vigil text-black" data-decision=""
                   hx-get="/api/timeline/fragment"
                   hx-target="#timeline-entries"
                   hx-swap="innerHTML">All</button>
-          <button class="tl-filter" data-decision="OBSERVE"
+          <button class="tl-filter px-3 py-1.5 text-xs font-medium rounded-full transition-colors bg-surface-light text-text-muted hover:bg-info/10 hover:text-info" data-decision="OBSERVE"
                   hx-get="/api/timeline/fragment?decision=OBSERVE"
                   hx-target="#timeline-entries"
                   hx-swap="innerHTML">Observe</button>
-          <button class="tl-filter" data-decision="NOTIFY"
+          <button class="tl-filter px-3 py-1.5 text-xs font-medium rounded-full transition-colors bg-surface-light text-text-muted hover:bg-warning/10 hover:text-warning" data-decision="NOTIFY"
                   hx-get="/api/timeline/fragment?decision=NOTIFY"
                   hx-target="#timeline-entries"
                   hx-swap="innerHTML">Notify</button>
-          <button class="tl-filter" data-decision="ACT"
+          <button class="tl-filter px-3 py-1.5 text-xs font-medium rounded-full transition-colors bg-surface-light text-text-muted hover:bg-vigil/10 hover:text-vigil" data-decision="ACT"
                   hx-get="/api/timeline/fragment?decision=ACT"
                   hx-target="#timeline-entries"
                   hx-swap="innerHTML">Act</button>
         </div>
-        <div class="tl-filter-right">
-          <div class="tl-search-wrap">
-            <svg class="tl-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <div class="flex items-center gap-3">
+          <div class="relative">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </span>
             <input type="search" name="q" placeholder="Search messages..."
-                   class="tl-search"
+                   class="bg-surface border border-border rounded-lg pl-9 pr-3 py-2 text-sm text-text placeholder-text-muted w-64 focus:outline-none focus:ring-1 focus:ring-vigil focus:border-vigil transition-all"
                    hx-get="/api/timeline/fragment"
                    hx-trigger="keyup changed delay:300ms"
                    hx-target="#timeline-entries"
                    hx-swap="innerHTML"
                    hx-include="[name=q]">
           </div>
-          <span id="tl-live-indicator" class="tl-live active">
-            <svg width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill="currentColor"/></svg>
+          <span id="tl-live-indicator" class="tl-live active flex items-center gap-1.5 text-xs text-success">
+            <span class="relative flex h-2 w-2">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
+            </span>
             Live
           </span>
         </div>
@@ -123,45 +128,79 @@
            hx-get="/api/timeline/fragment"
            hx-trigger="load"
            hx-swap="innerHTML">
-        <div class="tl-loading">Loading timeline...</div>
+        <div class="flex justify-center py-8 text-text-muted text-sm animate-pulse">Loading timeline...</div>
       </div>
     </section>
 
+    <!-- ═══ MEMORY (unchanged, still uses old CSS) ═══ -->
     <section id="tab-memory" class="tab-panel">
       <div id="memory-panel"
            hx-get="/api/memory/fragment"
            hx-trigger="load"
            hx-swap="innerHTML">
-        <div class="tl-loading">Loading memory...</div>
+        <div class="flex justify-center py-8 text-text-muted text-sm animate-pulse">Loading memory...</div>
       </div>
     </section>
 
+    <!-- ═══ DREAMS (unchanged) ═══ -->
     <section id="tab-dreams" class="tab-panel">
       <div id="dreams-panel"
            hx-get="/api/dreams/fragment"
            hx-trigger="load"
            hx-swap="innerHTML">
-        <div class="tl-loading">Loading dreams...</div>
+        <div class="flex justify-center py-8 text-text-muted text-sm animate-pulse">Loading dreams...</div>
       </div>
     </section>
 
-    <section id="tab-tasks" class="tab-panel">
-      <h2>Tasks</h2>
-      <p class="muted">Coming in Phase 6.</p>
+    <!-- ═══ SCHEDULER (unchanged) ═══ -->
+    <section id="tab-scheduler" class="tab-panel">
+      <div id="scheduler-panel"
+           hx-get="/api/scheduler/fragment"
+           hx-trigger="load"
+           hx-swap="innerHTML">
+        <div class="flex justify-center py-8 text-text-muted text-sm animate-pulse">Loading scheduler...</div>
+      </div>
     </section>
 
+    <!-- ═══ ACTIONS (unchanged) ═══ -->
+    <section id="tab-actions" class="tab-panel">
+      <div id="actions-panel"
+           hx-get="/api/actions/fragment"
+           hx-trigger="load"
+           hx-swap="innerHTML">
+        <div class="flex justify-center py-8 text-text-muted text-sm animate-pulse">Loading actions...</div>
+      </div>
+    </section>
+
+    <!-- ═══ TASKS (unchanged) ═══ -->
+    <section id="tab-tasks" class="tab-panel">
+      <div id="tasks-panel"
+           hx-get="/api/tasks/fragment"
+           hx-trigger="load"
+           hx-swap="innerHTML">
+        <div class="flex justify-center py-8 text-text-muted text-sm animate-pulse">Loading tasks...</div>
+      </div>
+    </section>
+
+    <!-- ═══ METRICS (unchanged) ═══ -->
     <section id="tab-metrics" class="tab-panel">
       <div id="metrics-panel"
            hx-get="/api/metrics/fragment"
            hx-trigger="load"
            hx-swap="innerHTML">
-        <div class="tl-loading">Loading metrics...</div>
+        <div class="flex justify-center py-8 text-text-muted text-sm animate-pulse">Loading metrics...</div>
       </div>
     </section>
 
+    <!-- ═══ CONFIG ═══ -->
     <section id="tab-config" class="tab-panel">
-      <h2>Configuration</h2>
-      <p class="muted">Coming in Phase 12.</p>
+      <div class="flex flex-col items-center justify-center py-20 text-text-muted">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="mb-3 opacity-30">
+          <path d="M12.22 2h-.44a2 2 0 00-2 2v.18a2 2 0 01-1 1.73l-.43.25a2 2 0 01-2 0l-.15-.08a2 2 0 00-2.73.73l-.22.38a2 2 0 00.73 2.73l.15.1a2 2 0 011 1.72v.51a2 2 0 01-1 1.74l-.15.09a2 2 0 00-.73 2.73l.22.38a2 2 0 002.73.73l.15-.08a2 2 0 012 0l.43.25a2 2 0 011 1.73V20a2 2 0 002 2h.44a2 2 0 002-2v-.18a2 2 0 011-1.73l.43-.25a2 2 0 012 0l.15.08a2 2 0 002.73-.73l.22-.39a2 2 0 00-.73-2.73l-.15-.08a2 2 0 01-1-1.74v-.5a2 2 0 011-1.74l.15-.09a2 2 0 00.73-2.73l-.22-.38a2 2 0 00-2.73-.73l-.15.08a2 2 0 01-2 0l-.43-.25a2 2 0 01-1-1.73V4a2 2 0 00-2-2z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+        <p class="text-sm">Coming soon</p>
+      </div>
     </section>
   </main>
 

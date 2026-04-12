@@ -100,54 +100,54 @@ export function getDreamsFragment(ctx: DashboardContext, repo?: string): string 
       ? dreams
           .map(
             (d) => `
-    <div class="dream-entry">
-      <div class="dream-header">
-        <svg class="dream-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
-        <span class="dream-date">${formatDreamDate(d.timestamp)}</span>
-        <span class="dream-sep">---</span>
-        <span class="dream-obs">${d.observationsConsolidated} observations</span>
-        <span class="dream-sep">---</span>
-        <span class="dream-conf">confidence: ${d.confidence.toFixed(2)}</span>
+    <div class="bg-surface rounded-lg border border-purple/20 p-5 mb-1 cursor-pointer transition-all duration-150 hover:border-vigil/30 hover:shadow-[0_0_12px_rgba(255,129,2,0.06)] border-l-3 border-l-purple/40">
+      <div class="flex items-start gap-2 mb-1.5">
+        <svg class="shrink-0 w-4 h-4 text-purple mt-0.5" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+        <span class="flex-1 text-xs text-text-muted">${formatDreamDate(d.timestamp)}</span>
+        <span class="shrink-0 text-border">---</span>
+        <span class="shrink-0 text-[0.65rem] font-semibold text-success">${d.observationsConsolidated} observations</span>
+        <span class="shrink-0 text-border">---</span>
+        <span class="shrink-0 text-[0.65rem] font-semibold text-warning">confidence: ${d.confidence.toFixed(2)}</span>
       </div>
-      <div class="dream-body">
-        <div class="dream-connector"></div>
-        <div class="dream-content">
-          ${d.summary ? `<div class="dream-section"><div class="dream-section-label">Summary</div><div class="dream-section-text">${escapeHtml(d.summary)}</div></div>` : ""}
-          ${d.insights.length > 0 ? `<div class="dream-section"><div class="dream-section-label">Insights</div>${d.insights.map((i) => `<div class="dream-insight"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> ${escapeHtml(i)}</div>`).join("")}</div>` : ""}
-          ${d.patterns.length > 0 ? `<div class="dream-section"><div class="dream-section-label">Patterns</div><ul class="dream-patterns">${d.patterns.map((p) => `<li>${escapeHtml(p)}</li>`).join("")}</ul></div>` : ""}
+      <div class="text-sm text-text leading-relaxed">
+        <div class="pl-6 mt-1 border-l-2 border-border pb-1"></div>
+        <div>
+          ${d.summary ? `<div class="mb-2"><div class="text-xs text-text-muted uppercase tracking-wider mb-1 font-medium">Summary</div><div class="text-xs text-text leading-relaxed">${escapeHtml(d.summary)}</div></div>` : ""}
+          ${d.insights.length > 0 ? `<div class="mb-2"><div class="text-xs text-text-muted uppercase tracking-wider mb-1 font-medium">Insights</div>${d.insights.map((i) => `<div class="text-xs text-text leading-relaxed"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="inline text-vigil"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> ${escapeHtml(i)}</div>`).join("")}</div>` : ""}
+          ${d.patterns.length > 0 ? `<div class="mb-2"><div class="text-xs text-text-muted uppercase tracking-wider mb-1 font-medium">Patterns</div><ul class="list-none p-0 m-0 flex flex-col gap-0.5">${d.patterns.map((p) => `<li class="text-xs text-text"><span class="text-purple">&#9679;</span> ${escapeHtml(p)}</li>`).join("")}</ul></div>` : ""}
         </div>
       </div>
     </div>`,
           )
           .join("")
-      : '<div class="muted" style="padding: 2rem; text-align: center;">No dreams recorded yet. Run the daemon and wait for idle consolidation.</div>';
+      : '<div class="text-sm text-text-muted text-center py-8">No dreams recorded yet. Run the daemon and wait for idle consolidation.</div>';
 
   const patternsHTML =
     sortedPatterns.length > 0
       ? sortedPatterns
           .map(
             ([pattern, count]) => `
-      <div class="dream-pattern-row">
-        <span class="dream-pattern-score">${(count / Math.max(dreams.length, 1)).toFixed(2)}</span>
-        <span class="dream-pattern-text">${escapeHtml(pattern)}</span>
+      <div class="flex items-center gap-2 py-1">
+        <span class="text-xs font-mono text-vigil w-8">${(count / Math.max(dreams.length, 1)).toFixed(2)}</span>
+        <span class="text-xs text-text flex-1">${escapeHtml(pattern)}</span>
       </div>`,
           )
           .join("")
-      : '<div class="muted">No patterns yet.</div>';
+      : '<div class="text-sm text-text-muted text-center py-4">No patterns yet.</div>';
 
   const topicsHTML =
     topicEvolution.length > 0
       ? topicEvolution
           .map(
             (t) => `
-      <div class="dream-topic-row">
-        <span class="dream-topic-name">${escapeHtml(t.name)}</span>
-        <span class="dream-topic-bar">${renderTopicBar(t.count, t.maxCount)}</span>
-        <span class="dream-topic-trend ${t.trend}">${trendIcon(t.trend)}</span>
+      <div class="flex items-center gap-2 py-1.5 border-b border-border last:border-0">
+        <span class="flex-1 text-xs text-text">${escapeHtml(t.name)}</span>
+        <span class="flex-1 font-mono text-[0.65rem] tracking-widest">${renderTopicBar(t.count, t.maxCount)}</span>
+        <span class="shrink-0 text-xs">${trendIcon(t.trend)}</span>
       </div>`,
           )
           .join("")
-      : '<div class="muted">No topics yet.</div>';
+      : '<div class="text-sm text-text-muted text-center py-4">No topics yet.</div>';
 
   // Build repo options from daemon paths
   const repos = ctx.daemon.repoPaths.map((p) => p.split("/").pop() || p);
@@ -156,8 +156,8 @@ export function getDreamsFragment(ctx: DashboardContext, repo?: string): string 
     .join("");
 
   return `
-<div class="dream-toolbar">
-  <button class="dream-trigger-btn" ${triggerDisabled}
+<div class="flex items-center gap-3 mb-4">
+  <button class="inline-flex items-center gap-1.5 bg-purple hover:bg-purple/80 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed" ${triggerDisabled}
           hx-post="/api/dreams/trigger"
           hx-target="#dreams-panel"
           hx-swap="innerHTML"
@@ -165,7 +165,7 @@ export function getDreamsFragment(ctx: DashboardContext, repo?: string): string 
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
     ${triggerLabel}
   </button>
-  <select name="dreamrepo" class="mem-repo-select"
+  <select name="dreamrepo" class="bg-surface-dark border border-border rounded-lg px-3 py-2 text-sm text-text"
           hx-get="/api/dreams/fragment"
           hx-trigger="change"
           hx-target="#dreams-panel"
@@ -176,19 +176,19 @@ export function getDreamsFragment(ctx: DashboardContext, repo?: string): string 
   </select>
 </div>
 
-<div class="dream-layout">
-  <div class="dream-log">
-    <h3 class="dream-log-title">Dream Log</h3>
+<div class="flex gap-5">
+  <div class="flex-1 flex flex-col gap-1 max-h-[600px] overflow-y-auto">
+    <h3 class="text-xs text-text-muted uppercase tracking-wider mb-2 font-medium">Dream Log</h3>
     ${dreamsHTML}
   </div>
 
-  <div class="dream-sidebar">
-    <div class="dream-sidebar-card">
-      <h4 class="dream-sidebar-title">Patterns</h4>
+  <div class="w-60 shrink-0 flex flex-col gap-4">
+    <div class="bg-surface rounded-lg border border-border p-4">
+      <h4 class="text-xs text-text-muted uppercase tracking-wider mb-3 font-medium">Patterns</h4>
       ${patternsHTML}
     </div>
-    <div class="dream-sidebar-card">
-      <h4 class="dream-sidebar-title">Topic Evolution</h4>
+    <div class="bg-surface rounded-lg border border-border p-4">
+      <h4 class="text-xs text-text-muted uppercase tracking-wider mb-3 font-medium">Topic Evolution</h4>
       ${topicsHTML}
     </div>
   </div>
@@ -300,19 +300,19 @@ function categorizeTrend(topic: {
 function renderTopicBar(count: number, maxCount: number): string {
   const pct = maxCount > 0 ? Math.round((count / maxCount) * 100) : 0;
   const filled = Math.round(pct / 20);
-  return '<span class="dream-topic-bar-inner">' + "&#9608;".repeat(filled) + "&#9617;".repeat(5 - filled) + "</span>";
+  return `<span class="text-vigil">${"&#9608;".repeat(filled)}</span><span class="text-border">${"&#9617;".repeat(5 - filled)}</span>`;
 }
 
 function trendIcon(trend: string): string {
   switch (trend) {
     case "rising":
-      return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>';
+      return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-success"><polyline points="18 15 12 9 6 15"/></svg>';
     case "cooling":
-      return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>';
+      return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-error"><polyline points="6 9 12 15 18 9"/></svg>';
     case "new":
-      return '<span class="dream-topic-trend-label">new</span>';
+      return '<span class="bg-vigil/10 text-vigil px-1.5 py-0.5 rounded text-[0.6rem]">new</span>';
     default:
-      return '<span class="dream-topic-trend-label">--</span>';
+      return '<span class="text-text-muted">--</span>';
   }
 }
 

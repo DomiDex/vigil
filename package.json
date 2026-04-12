@@ -4,8 +4,10 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "bun run build.config.ts",
+    "build": "bun run css:build && bun run build.config.ts",
     "build:lite": "bun run build.config.ts --lite",
+    "css:build": "bunx @tailwindcss/cli -i src/dashboard/static/tailwind.css -o src/dashboard/static/dist/styles.css --minify",
+    "css:watch": "bunx @tailwindcss/cli -i src/dashboard/static/tailwind.css -o src/dashboard/static/dist/styles.css --watch",
     "lint": "biome check src/",
     "lint:fix": "biome check --write src/",
     "typecheck": "tsc --noEmit",
@@ -13,7 +15,9 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.10",
-    "@types/bun": "latest"
+    "@tailwindcss/cli": "^4.2.2",
+    "@types/bun": "latest",
+    "tailwindcss": "^4.2.2"
   },
   "peerDependencies": {
     "typescript": "^5"
