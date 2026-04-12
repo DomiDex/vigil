@@ -409,7 +409,7 @@ export async function getRepoFragment(ctx: DashboardContext, repoName: string): 
             <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.65rem] font-medium ${badge}">${icon} ${m.decision}</span>
             ${m.confidence > 0 ? `<span class="text-[0.65rem] text-text-muted ml-auto">${m.confidence.toFixed(2)}</span>` : ""}
           </div>
-          <div class="text-xs text-text leading-relaxed">${escapeHtml(m.message.length > 200 ? m.message.slice(0, 200) + "..." : m.message)}</div>
+          <div class="text-xs text-text leading-relaxed">${escapeHtml(m.message)}</div>
         </div>`;
       }).join("")
     : `<div class="text-xs text-text-muted text-center py-4">No activity this session. Waiting for tick signals...</div>`;
