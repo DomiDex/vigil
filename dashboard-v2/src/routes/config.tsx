@@ -1,4 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
+import ConfigPage from "../plugins/config/ConfigPage";
+
 export const Route = createFileRoute("/config")({
-  component: () => <div>Config -- Coming in Phase 4</div>,
+  component: ConfigPage,
 });

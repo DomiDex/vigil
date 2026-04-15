@@ -208,3 +208,172 @@ export async function triggerSchedule({ data }: { data: { id: string } }) {
     method: "POST",
   });
 }
+
+// --- Config ---
+
+export async function getConfig() {
+  return api("/api/config");
+}
+
+export async function updateConfig({ data }: { data: Record<string, any> }) {
+  return api("/api/config", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getFeatureGates() {
+  return api("/api/config/features");
+}
+
+export async function toggleFeatureGate({
+  data,
+}: {
+  data: { name: string; enabled: boolean };
+}) {
+  return api(`/api/config/features/${encodeURIComponent(data.name)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled: data.enabled }),
+  });
+}
+
+// --- Webhooks ---
+
+export async function getWebhookEvents() {
+  return api("/api/webhooks/events");
+}
+
+export async function getWebhookSubscriptions() {
+  return api("/api/webhooks/subscriptions");
+}
+
+export async function createWebhookSubscription({
+  data,
+}: {
+  data: { repo: string; eventTypes: string[]; expiry?: number };
+}) {
+  return api("/api/webhooks/subscriptions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteWebhookSubscription({
+  data,
+}: {
+  data: { id: string };
+}) {
+  return apiMutate(
+    `/api/webhooks/subscriptions/${encodeURIComponent(data.id)}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function getWebhookStatus() {
+  return api("/api/webhooks/status");
+}
+
+// --- Channels ---
+
+export async function getChannels() {
+  return api("/api/channels");
+}
+
+export async function registerChannel({
+  data,
+}: {
+  data: { name: string; type: string; config?: Record<string, any> };
+}) {
+  return api("/api/channels", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteChannel({ data }: { data: { id: string } }) {
+  return apiMutate(`/api/channels/${encodeURIComponent(data.id)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function getChannelPermissions({
+  data,
+}: {
+  data: { id: string };
+}) {
+  return api(
+    `/api/channels/${encodeURIComponent(data.id)}/permissions`,
+  );
+}
+
+export async function getChannelQueue({ data }: { data: { id: string } }) {
+  return api(`/api/channels/${encodeURIComponent(data.id)}/queue`);
+}
+
+// --- Notifications ---
+
+export async function getNotifications() {
+  return api("/api/notifications");
+}
+
+export async function testNotification() {
+  return api("/api/notifications/test", { method: "POST" });
+}
+
+export async function updateNotificationRules({
+  data,
+}: {
+  data: Record<string, any>;
+}) {
+  return api("/api/notifications/rules", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+// --- Agents ---
+
+export async function getAgents() {
+  return api("/api/agents");
+}
+
+export async function getCurrentAgent() {
+  return api("/api/agents/current");
+}
+
+export async function switchAgent({
+  data,
+}: {
+  data: { agentName: string };
+}) {
+  return api("/api/agents/current", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+// --- Health ---
+
+export async function getHealth() {
+  return api("/api/health");
+}
+
+// --- A2A ---
+
+export async function getA2AStatus() {
+  return api("/api/a2a/status");
+}
+
+export async function getA2ASkills() {
+  return api("/api/a2a/skills");
+}
+
+export async function getA2AHistory() {
+  return api("/api/a2a/history");
+}

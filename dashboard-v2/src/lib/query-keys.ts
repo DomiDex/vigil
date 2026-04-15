@@ -19,15 +19,33 @@ export const vigilKeys = {
   tasks: ["tasks"],
   scheduler: ["scheduler"],
   metrics: ["metrics"],
-  config: ["config"],
+  config: {
+    all: ["config"],
+    features: ["config", "features"],
+  },
   plugins: ["plugins"],
   agents: {
     all: ["agents"],
     current: ["agents", "current"],
   },
   health: ["health"],
-  webhooks: ["webhooks"],
-  channels: ["channels"],
+  webhooks: {
+    all: ["webhooks"],
+    events: ["webhooks", "events"],
+    subscriptions: ["webhooks", "subscriptions"],
+    status: ["webhooks", "status"],
+  },
+  channels: {
+    all: ["channels"],
+    detail: (id: string) => ["channels", id] as const,
+    permissions: (id: string) => ["channels", id, "permissions"] as const,
+    queue: (id: string) => ["channels", id, "queue"] as const,
+  },
   notifications: ["notifications"],
-  a2a: ["a2a"],
+  a2a: {
+    all: ["a2a"],
+    status: ["a2a", "status"],
+    skills: ["a2a", "skills"],
+    history: ["a2a", "history"],
+  },
 } as const;

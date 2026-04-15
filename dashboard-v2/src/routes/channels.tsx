@@ -1,4 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
+import ChannelsPage from "../plugins/channels/ChannelsPage";
+
 export const Route = createFileRoute("/channels")({
-  component: () => <div>Channels -- Coming in Phase 4</div>,
+  component: ChannelsPage,
 });

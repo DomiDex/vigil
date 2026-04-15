@@ -1,4 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
+import NotificationsPage from "../plugins/notifications/NotificationsPage";
+
 export const Route = createFileRoute("/notifications")({
-  component: () => <div>Notifications -- Coming in Phase 4</div>,
+  component: NotificationsPage,
 });
