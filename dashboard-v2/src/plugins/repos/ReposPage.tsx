@@ -19,14 +19,13 @@ export default function ReposPage({ activeRepo }: Partial<WidgetProps> = {}) {
     queryFn: () => getRepos(),
   });
 
-  const repos: RepoListItem[] = (reposData as any)?.repos ?? reposData ?? [];
+  const repos: RepoListItem[] = Array.isArray(reposData) ? reposData : [];
 
-  const { data: detailRaw } = useQuery({
+  const { data: detail } = useQuery<RepoDetail | null>({
     queryKey: vigilKeys.repos.detail(selectedRepo ?? ""),
     queryFn: () => getRepoDetail({ data: { name: selectedRepo! } }),
     enabled: !!selectedRepo,
   });
-  const detail = detailRaw as RepoDetail | null | undefined;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -85,7 +84,7 @@ export default function ReposPage({ activeRepo }: Partial<WidgetProps> = {}) {
               <CardContent>
                 <div className="space-y-1">
                   {Object.entries(
-                    computeDecisionPercentages(detail.decisions as unknown as Record<string, number>),
+                    computeDecisionPercentages(detail.decisions),
                   ).map(([key, pct]) => (
                     <div key={key} className="flex items-center gap-2 text-xs">
                       <span className="w-16 font-mono">{key}</span>

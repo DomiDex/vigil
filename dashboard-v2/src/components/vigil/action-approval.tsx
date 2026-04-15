@@ -30,14 +30,16 @@ const GateIconComponent: Record<string, typeof CheckCircle> = {
   Clock,
 };
 
-export const GATE_LABELS: string[] = [
-  "Config enabled",
-  "Session opted in",
-  "Repo in allowlist",
-  "Action type allowed",
-  "Confidence >= threshold",
-  "User approval",
-];
+export const GATE_LABEL_MAP: Record<string, string> = {
+  configEnabled: "Config enabled",
+  sessionOptedIn: "Session opted in",
+  repoAllowed: "Repo in allowlist",
+  actionTypeAllowed: "Action type allowed",
+  confidenceMet: "Confidence >= threshold",
+  userApproval: "User approval",
+};
+
+export const GATE_LABELS: string[] = Object.values(GATE_LABEL_MAP);
 
 interface ActionApprovalProps {
   action: ActionRequest;
@@ -80,14 +82,14 @@ export function ActionApproval({ action, onApprove, onReject }: ActionApprovalPr
         {gateEntries.length > 0 && (
           <div className="space-y-1">
             <span className="text-xs font-medium">Gates</span>
-            {gateEntries.map(([key, value], i) => {
+            {gateEntries.map(([key, value]) => {
               const iconName = getGateIcon(value as boolean | undefined);
               const Icon = GateIconComponent[iconName] ?? Clock;
               return (
                 <div key={key} className="flex items-center gap-2 text-xs">
                   <Icon className="size-3" />
                   <span className="text-muted-foreground">
-                    {GATE_LABELS[i] ?? key}
+                    {GATE_LABEL_MAP[key] ?? key}
                   </span>
                 </div>
               );

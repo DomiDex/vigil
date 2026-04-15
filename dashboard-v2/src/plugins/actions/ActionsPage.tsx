@@ -1,5 +1,4 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Zap } from "lucide-react";
 import { vigilKeys } from "../../lib/query-keys";
 import { getActions, approveAction, rejectAction } from "../../server/functions";
 import { ActionApproval } from "../../components/vigil/action-approval";

@@ -11,7 +11,6 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
-import { BarChart3 } from "lucide-react";
 import { vigilKeys } from "../../lib/query-keys";
 import { getMetrics } from "../../server/functions";
 import {

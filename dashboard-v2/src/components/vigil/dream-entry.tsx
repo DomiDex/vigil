@@ -2,7 +2,6 @@ import { useState } from "react";
 import { ChevronDown, ChevronUp, Sparkles } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
-import { cn } from "../../lib/cn";
 import type { DreamResult } from "../../types/api";
 
 export function shouldTruncate(summary: string): boolean {

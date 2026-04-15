@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { CheckSquare, Play, X, Check, AlertTriangle } from "lucide-react";
+import { CheckSquare } from "lucide-react";
 import { vigilKeys } from "../../lib/query-keys";
 import {
   getTasks,
@@ -14,7 +14,7 @@ import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { cn } from "../../lib/cn";
 import type { WidgetProps } from "../../types/plugin";
-import type { TasksData, TaskItem } from "../../types/api";
+import type { TasksData } from "../../types/api";
 
 export function getTaskActions(status: string): string[] {
   switch (status) {
