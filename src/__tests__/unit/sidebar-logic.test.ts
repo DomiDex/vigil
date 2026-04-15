@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 
 // --- RepoStateIndicator logic ---
 
@@ -50,9 +50,7 @@ interface PluginWidget {
 }
 
 function getTabPlugins(plugins: PluginWidget[]): PluginWidget[] {
-  return plugins
-    .filter((p) => p.slot === "tab")
-    .sort((a, b) => a.order - b.order);
+  return plugins.filter((p) => p.slot === "tab").sort((a, b) => a.order - b.order);
 }
 
 function getIconPath(tabId: string): string {
@@ -132,9 +130,7 @@ describe("plugin tab filtering", () => {
 
   it("sorts tabs by order ascending", () => {
     const tabs = getTabPlugins(testPlugins);
-    expect(tabs.map((t) => t.id)).toEqual([
-      "timeline", "repos", "dreams", "tasks",
-    ]);
+    expect(tabs.map((t) => t.id)).toEqual(["timeline", "repos", "dreams", "tasks"]);
   });
 
   it("handles empty plugin array", () => {
@@ -143,9 +139,7 @@ describe("plugin tab filtering", () => {
   });
 
   it("handles array with no tab-slot plugins", () => {
-    const sidebarOnly: PluginWidget[] = [
-      { id: "w1", label: "W1", icon: "Box", slot: "sidebar", order: 1 },
-    ];
+    const sidebarOnly: PluginWidget[] = [{ id: "w1", label: "W1", icon: "Box", slot: "sidebar", order: 1 }];
     const tabs = getTabPlugins(sidebarOnly);
     expect(tabs.length).toBe(0);
   });
@@ -176,8 +170,15 @@ describe("tab path mapping", () => {
 describe("Lucide icon string resolution", () => {
   it("validates that icon strings are valid Lucide component names", () => {
     const expectedIcons = [
-      "Clock", "GitBranch", "Sparkles", "CheckSquare",
-      "Zap", "Brain", "BarChart3", "Calendar", "Settings",
+      "Clock",
+      "GitBranch",
+      "Sparkles",
+      "CheckSquare",
+      "Zap",
+      "Brain",
+      "BarChart3",
+      "Calendar",
+      "Settings",
     ];
 
     for (const icon of expectedIcons) {

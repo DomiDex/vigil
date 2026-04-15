@@ -100,7 +100,8 @@ export function getSchedulerFragment(ctx: DashboardContext): string {
       : `<tr><td colspan="5" class="text-sm text-text-muted text-center py-6">No schedules configured yet.</td></tr>`;
 
   // Run history rows
-  const TH = "text-left px-3 py-2 text-xs text-text-muted uppercase tracking-wider border-b border-border bg-surface-dark";
+  const TH =
+    "text-left px-3 py-2 text-xs text-text-muted uppercase tracking-wider border-b border-border bg-surface-dark";
   const historyRows =
     data.history.length > 0
       ? data.history
@@ -120,7 +121,8 @@ export function getSchedulerFragment(ctx: DashboardContext): string {
           .join("")
       : `<tr><td colspan="5" class="text-sm text-text-muted text-center py-6">No runs recorded yet.</td></tr>`;
 
-  const INPUT = "w-full bg-surface-dark border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:ring-1 focus:ring-vigil";
+  const INPUT =
+    "w-full bg-surface-dark border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:ring-1 focus:ring-vigil";
 
   return `
 <div class="flex flex-col gap-4">

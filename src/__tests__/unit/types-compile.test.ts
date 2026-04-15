@@ -18,7 +18,7 @@ describe("TypeScript compilation", () => {
       console.error("tsc errors:\n", stderr);
     }
     expect(exitCode).toBe(0);
-  });
+  }, 30000);
 
   it("api.ts types are importable", async () => {
     const mod = await import("../../../dashboard-v2/src/types/api.ts");

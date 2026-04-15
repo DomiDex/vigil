@@ -1,19 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import type {
-  PluginWidget,
-  WidgetProps,
-  WidgetSlot,
-} from "../../../dashboard-v2/src/types/plugin.ts";
+import type { PluginWidget, WidgetProps, WidgetSlot } from "../../../dashboard-v2/src/types/plugin.ts";
 
 describe("plugin types", () => {
   it("WidgetSlot accepts all valid slot values", () => {
-    const slots: WidgetSlot[] = [
-      "tab",
-      "sidebar",
-      "timeline-card",
-      "overlay",
-      "top-bar",
-    ];
+    const slots: WidgetSlot[] = ["tab", "sidebar", "timeline-card", "overlay", "top-bar"];
     expect(slots).toHaveLength(5);
   });
 

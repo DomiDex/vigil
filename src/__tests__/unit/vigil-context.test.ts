@@ -1,8 +1,5 @@
-import { describe, test, expect, beforeEach } from "bun:test";
-import {
-  setVigilContext,
-  getVigilContext,
-} from "../../../dashboard-v2/src/server/vigil-context";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { getVigilContext, setVigilContext } from "../../../dashboard-v2/src/server/vigil-context";
 
 describe("vigil-context singleton", () => {
   beforeEach(() => {

@@ -26,9 +26,7 @@ describe("route stubs", () => {
   describe("route exports", () => {
     for (const route of EXPECTED_ROUTES) {
       it(`${route.file}.tsx exports Route with path "${route.path}"`, async () => {
-        const mod = await import(
-          `../../../dashboard-v2/src/routes/${route.file}.tsx`
-        );
+        const mod = await import(`../../../dashboard-v2/src/routes/${route.file}.tsx`);
         expect(mod.Route).toBeDefined();
         expect(typeof mod.Route).toBe("object");
       });

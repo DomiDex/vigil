@@ -254,16 +254,15 @@ describe("GET /api/memory/fragment", () => {
     const html = await res.text();
 
     // Pipeline boxes
-    expect(html).toContain("mem-pipeline");
-    expect(html).toContain("mem-pipe-box");
+    expect(html).toContain("Memory Pipeline");
     expect(html).toContain("EventLog");
     expect(html).toContain("VectorStore");
     expect(html).toContain("TopicTier");
     expect(html).toContain("IndexTier");
 
     // Search section
-    expect(html).toContain("mem-search-input");
-    expect(html).toContain("mem-repo-select");
+    expect(html).toContain('name="memq"');
+    expect(html).toContain('name="memrepo"');
 
     // Ask Vigil section
     expect(html).toContain("Ask Vigil");
@@ -347,8 +346,7 @@ describe("GET /api/memory/search/fragment", () => {
     expect(res.headers.get("content-type")).toContain("text/html");
 
     const html = await res.text();
-    expect(html).toContain("mem-result");
-    expect(html).toContain("mem-result-score");
+    expect(html).toContain("bg-surface-light border border-border rounded-lg p-3");
     expect(html).toContain("Decision");
   });
 
@@ -398,13 +396,13 @@ describe("GET /api/dreams/fragment", () => {
     const html = await res.text();
 
     // Trigger button
-    expect(html).toContain("dream-trigger-btn");
+    expect(html).toContain('hx-post="/api/dreams/trigger"');
     expect(html).toContain("Trigger Dream");
 
     // Dream layout
-    expect(html).toContain("dream-layout");
-    expect(html).toContain("dream-log");
-    expect(html).toContain("dream-sidebar");
+    expect(html).toContain("flex gap-5");
+    expect(html).toContain("Dream Log");
+    expect(html).toContain("Topic Evolution");
 
     // Sidebar cards
     expect(html).toContain("Patterns");
@@ -428,7 +426,7 @@ describe("GET /api/dreams/fragment", () => {
     const res = await fetch(`${baseUrl}/api/dreams/fragment?dreamrepo=vigil`);
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain("dream-layout");
+    expect(html).toContain("flex gap-5");
   });
 });
 
@@ -473,7 +471,7 @@ describe("POST /api/memory/ask", () => {
     });
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain("mem-ask-error");
+    expect(html).toContain("bg-error/10 border-l-3 border-l-error");
     expect(html).toContain("Please enter a question");
   });
 
@@ -492,7 +490,7 @@ describe("POST /api/memory/ask", () => {
       body: form,
     });
     const html = await res.text();
-    expect(html).toContain("mem-ask-error");
+    expect(html).toContain("bg-error/10 border-l-3 border-l-error");
     expect(html).toContain("not found");
   });
 });

@@ -1,5 +1,10 @@
 import type { PluginWidget } from "../types/plugin";
 
+// Route modules export Route (TanStack Router convention), not default components.
+// The component field is a placeholder for future plugin lazy-loading — routing is
+// handled by TanStack Router, not the plugin system. Cast to satisfy the type.
+const lazy = (loader: () => Promise<any>) => loader as PluginWidget["component"];
+
 export const corePlugins: PluginWidget[] = [
   {
     id: "timeline",
@@ -7,7 +12,7 @@ export const corePlugins: PluginWidget[] = [
     icon: "Clock",
     slot: "tab",
     order: 1,
-    component: () => import("../routes/index"),
+    component: lazy(() => import("../routes/index")),
   },
   {
     id: "repos",
@@ -15,7 +20,7 @@ export const corePlugins: PluginWidget[] = [
     icon: "GitBranch",
     slot: "tab",
     order: 2,
-    component: () => import("../routes/repos"),
+    component: lazy(() => import("../routes/repos")),
   },
   {
     id: "dreams",
@@ -23,7 +28,7 @@ export const corePlugins: PluginWidget[] = [
     icon: "Sparkles",
     slot: "tab",
     order: 3,
-    component: () => import("../routes/dreams"),
+    component: lazy(() => import("../routes/dreams")),
   },
   {
     id: "tasks",
@@ -31,7 +36,7 @@ export const corePlugins: PluginWidget[] = [
     icon: "CheckSquare",
     slot: "tab",
     order: 4,
-    component: () => import("../routes/tasks"),
+    component: lazy(() => import("../routes/tasks")),
   },
   {
     id: "actions",
@@ -39,7 +44,7 @@ export const corePlugins: PluginWidget[] = [
     icon: "Zap",
     slot: "tab",
     order: 5,
-    component: () => import("../routes/actions"),
+    component: lazy(() => import("../routes/actions")),
   },
   {
     id: "memory",
@@ -47,7 +52,7 @@ export const corePlugins: PluginWidget[] = [
     icon: "Brain",
     slot: "tab",
     order: 6,
-    component: () => import("../routes/memory"),
+    component: lazy(() => import("../routes/memory")),
   },
   {
     id: "metrics",
@@ -55,7 +60,7 @@ export const corePlugins: PluginWidget[] = [
     icon: "BarChart3",
     slot: "tab",
     order: 7,
-    component: () => import("../routes/metrics"),
+    component: lazy(() => import("../routes/metrics")),
   },
   {
     id: "scheduler",
@@ -63,7 +68,7 @@ export const corePlugins: PluginWidget[] = [
     icon: "Calendar",
     slot: "tab",
     order: 8,
-    component: () => import("../routes/scheduler"),
+    component: lazy(() => import("../routes/scheduler")),
   },
   {
     id: "config",
@@ -71,6 +76,6 @@ export const corePlugins: PluginWidget[] = [
     icon: "Settings",
     slot: "tab",
     order: 9,
-    component: () => import("../routes/config"),
+    component: lazy(() => import("../routes/config")),
   },
 ];

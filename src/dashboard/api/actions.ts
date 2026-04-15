@@ -174,7 +174,8 @@ export function getActionsFragment(ctx: DashboardContext, opts?: { status?: stri
   // Filter bar
   const activeFilter = opts?.status || "";
   function filterClass(status: string): string {
-    const base = "act-filter inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm cursor-pointer transition-all duration-150";
+    const base =
+      "act-filter inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm cursor-pointer transition-all duration-150";
     return status === activeFilter
       ? `${base} active bg-vigil/10 text-vigil border border-vigil shadow-[0_0_8px_rgba(255,129,2,0.1)]`
       : `${base} bg-surface text-text-muted border border-border hover:text-text hover:border-vigil/30`;
@@ -259,7 +260,8 @@ export function getActionsFragment(ctx: DashboardContext, opts?: { status?: stri
       : `<tr><td colspan="6" class="text-sm text-text-muted text-center py-6">No actions recorded.</td></tr>`;
 
   // Stats section
-  const totalActions = data.stats.approved + data.stats.rejected + data.stats.executed + data.stats.failed + data.stats.pending;
+  const totalActions =
+    data.stats.approved + data.stats.rejected + data.stats.executed + data.stats.failed + data.stats.pending;
   const statsSection = `
   <div class="bg-surface rounded-lg border border-border p-5">
     <h3 class="flex items-center gap-2 text-sm font-semibold text-text mb-4">Stats</h3>

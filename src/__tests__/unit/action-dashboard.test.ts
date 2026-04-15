@@ -123,8 +123,8 @@ describe("Action Dashboard API", () => {
   describe("getActionsFragment", () => {
     it("returns HTML with empty state", () => {
       const html = getActionsFragment(ctx);
-      expect(html).toContain("act-layout");
-      expect(html).toContain("act-filter-bar");
+      expect(html).toContain("Action History");
+      expect(html).toContain("act-filter");
       expect(html).toContain("Action History");
       expect(html).toContain("No actions recorded");
     });
@@ -136,7 +136,7 @@ describe("Action Dashboard API", () => {
       const html = getActionsFragment(ctx);
       expect(html).toContain("git log --oneline");
       expect(html).toContain("vigil");
-      expect(html).toContain("act-tier-safe");
+      expect(html).toContain("bg-success/15 text-success");
     });
 
     it("renders pending card with gate checklist", async () => {
@@ -147,15 +147,15 @@ describe("Action Dashboard API", () => {
       });
 
       const html = getActionsFragment(ctx);
-      expect(html).toContain("act-pending-card");
+      expect(html).toContain("border-2");
       expect(html).toContain("git stash");
       expect(html).toContain("Save changes");
       expect(html).toContain("85%");
-      expect(html).toContain("act-gate-list");
+      expect(html).toContain("list-none");
       expect(html).toContain("Gate 1: Config enabled");
       expect(html).toContain("Gate 6: User approval");
-      expect(html).toContain("act-btn-approve");
-      expect(html).toContain("act-btn-reject");
+      expect(html).toContain("Approve");
+      expect(html).toContain("Reject");
     });
 
     it("renders tier badges with correct classes", async () => {
@@ -163,7 +163,7 @@ describe("Action Dashboard API", () => {
       await executor.submit("git stash", "Save", "vigil", tmpDir);
 
       const html = getActionsFragment(ctx);
-      expect(html).toContain("act-tier-moderate");
+      expect(html).toContain("bg-warning/15 text-warning");
     });
 
     it("shows stats section", async () => {
@@ -171,7 +171,7 @@ describe("Action Dashboard API", () => {
       await executor.submit("git log", "Check", "vigil", tmpDir);
 
       const html = getActionsFragment(ctx);
-      expect(html).toContain("act-stats-section");
+      expect(html).toContain("Stats");
       expect(html).toContain("Executed");
       expect(html).toContain("Rejected");
     });
@@ -181,7 +181,7 @@ describe("Action Dashboard API", () => {
       await executor.submit("git stash", "Save", "vigil", tmpDir);
 
       const html = getActionsFragment(ctx);
-      expect(html).toContain("act-filter-count");
+      expect(html).toContain("rounded-full text-xs font-mono");
       expect(html).toContain("Pending");
     });
   });
@@ -193,7 +193,7 @@ describe("Action Dashboard API", () => {
       expect(action.status).toBe("pending");
 
       const html = handleReject(ctx, action.id);
-      expect(html).toContain("act-layout");
+      expect(html).toContain("Action History");
 
       // Action should now be rejected
       const updated = executor.getById(action.id);
@@ -202,7 +202,7 @@ describe("Action Dashboard API", () => {
 
     it("handles non-existent action gracefully", () => {
       const html = handleReject(ctx, "non-existent-id");
-      expect(html).toContain("act-layout");
+      expect(html).toContain("Action History");
     });
   });
 
@@ -215,7 +215,7 @@ describe("Action Dashboard API", () => {
       });
 
       const html = getActionsFragment(ctx);
-      expect(html).toContain("act-gate-pass");
+      expect(html).toContain("text-success");
       expect(html).toContain("Gate 2: Session opted in");
       expect(html).toContain("Gate 5: Confidence threshold");
     });
@@ -242,7 +242,7 @@ describe("Action Dashboard API", () => {
       await executor.submit("git log", "Check", "vigil", tmpDir);
 
       const html = getActionsFragment(ctx);
-      expect(html).toContain("act-tier-safe");
+      expect(html).toContain("bg-success/15 text-success");
     });
 
     it("moderate actions get amber badge", async () => {
@@ -250,7 +250,7 @@ describe("Action Dashboard API", () => {
       await executor.submit("git stash", "Save", "vigil", tmpDir);
 
       const html = getActionsFragment(ctx);
-      expect(html).toContain("act-tier-moderate");
+      expect(html).toContain("bg-warning/15 text-warning");
     });
 
     it("dangerous actions get red badge", async () => {
@@ -258,7 +258,7 @@ describe("Action Dashboard API", () => {
       await executor.submit("git push origin main", "Deploy", "vigil", tmpDir);
 
       const html = getActionsFragment(ctx);
-      expect(html).toContain("act-tier-dangerous");
+      expect(html).toContain("bg-error/15 text-error");
     });
   });
 });

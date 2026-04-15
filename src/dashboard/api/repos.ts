@@ -398,12 +398,14 @@ export async function getRepoFragment(ctx: DashboardContext, repoName: string): 
 
   // Recent activity messages
   const recentMessages = getRecentMessages(ctx, repoName, 8);
-  const activityHtml = recentMessages.length > 0
-    ? recentMessages.map((m) => {
-        const badge = DECISION_BADGE[m.decision] || DECISION_BADGE.SILENT;
-        const borderColor = DECISION_BORDER[m.decision] || DECISION_BORDER.SILENT;
-        const icon = DECISION_ICON[m.decision] || DECISION_ICON.SILENT;
-        return `<div class="bg-surface rounded-lg border border-border border-l-2 ${borderColor} p-3 mb-2 hover:shadow-[0_0_12px_rgba(255,129,2,0.06)] transition-shadow">
+  const activityHtml =
+    recentMessages.length > 0
+      ? recentMessages
+          .map((m) => {
+            const badge = DECISION_BADGE[m.decision] || DECISION_BADGE.SILENT;
+            const borderColor = DECISION_BORDER[m.decision] || DECISION_BORDER.SILENT;
+            const icon = DECISION_ICON[m.decision] || DECISION_ICON.SILENT;
+            return `<div class="bg-surface rounded-lg border border-border border-l-2 ${borderColor} p-3 mb-2 hover:shadow-[0_0_12px_rgba(255,129,2,0.06)] transition-shadow">
           <div class="flex items-center gap-2 mb-1">
             <span class="text-xs text-text-muted font-mono">${formatTimeShort(m.timestamp)}</span>
             <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.65rem] font-medium ${badge}">${icon} ${m.decision}</span>
@@ -411,8 +413,9 @@ export async function getRepoFragment(ctx: DashboardContext, repoName: string): 
           </div>
           <div class="text-xs text-text leading-relaxed">${escapeHtml(m.message)}</div>
         </div>`;
-      }).join("")
-    : `<div class="text-xs text-text-muted text-center py-4">No activity this session. Waiting for tick signals...</div>`;
+          })
+          .join("")
+      : `<div class="text-xs text-text-muted text-center py-4">No activity this session. Waiting for tick signals...</div>`;
 
   // Status section
   const statusIcon = detail.dirty ? ICON.dirty : ICON.clean;

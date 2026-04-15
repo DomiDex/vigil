@@ -1,7 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
-import {
-  createFakeDashboardContext,
-} from "../helpers/dashboard-v2-helpers.ts";
+import { createFakeDashboardContext } from "../helpers/dashboard-v2-helpers.ts";
 
 describe("server functions -- reads", () => {
   let ctxSpy: ReturnType<typeof spyOn>;
@@ -9,12 +7,8 @@ describe("server functions -- reads", () => {
 
   beforeEach(async () => {
     fakeCtx = createFakeDashboardContext();
-    const vigilCtxMod = await import(
-      "../../../dashboard-v2/src/server/vigil-context.ts"
-    );
-    ctxSpy = spyOn(vigilCtxMod, "getVigilContext").mockReturnValue(
-      fakeCtx as any,
-    );
+    const vigilCtxMod = await import("../../../dashboard-v2/src/server/vigil-context.ts");
+    ctxSpy = spyOn(vigilCtxMod, "getVigilContext").mockReturnValue(fakeCtx as any);
   });
 
   afterEach(() => {
@@ -23,9 +17,7 @@ describe("server functions -- reads", () => {
 
   describe("getOverview", () => {
     it("calls getOverviewJSON with context", async () => {
-      const overviewMod = await import(
-        "../../dashboard/api/overview.ts"
-      );
+      const overviewMod = await import("../../dashboard/api/overview.ts");
       const handlerSpy = spyOn(overviewMod, "getOverviewJSON").mockReturnValue({
         uptime: 0,
         repos: [],
@@ -34,9 +26,7 @@ describe("server functions -- reads", () => {
         activeTasks: 0,
       } as any);
 
-      const { getOverview } = await import(
-        "../../../dashboard-v2/src/server/functions.ts"
-      );
+      const { getOverview } = await import("../../../dashboard-v2/src/server/functions.ts");
 
       await getOverview();
 
@@ -56,9 +46,7 @@ describe("server functions -- reads", () => {
         recentEvents: [],
       } as any);
 
-      const { getRepoDetail } = await import(
-        "../../../dashboard-v2/src/server/functions.ts"
-      );
+      const { getRepoDetail } = await import("../../../dashboard-v2/src/server/functions.ts");
 
       await getRepoDetail({ data: { name: "vigil" } });
 
@@ -73,18 +61,13 @@ describe("server functions -- reads", () => {
   describe("getTimeline", () => {
     it("calls getTimelineJSON with context and constructed URL", async () => {
       const timelineMod = await import("../../dashboard/api/timeline.ts");
-      const handlerSpy = spyOn(
-        timelineMod,
-        "getTimelineJSON",
-      ).mockReturnValue({
+      const handlerSpy = spyOn(timelineMod, "getTimelineJSON").mockReturnValue({
         messages: [],
         page: 1,
         hasMore: false,
       } as any);
 
-      const { getTimeline } = await import(
-        "../../../dashboard-v2/src/server/functions.ts"
-      );
+      const { getTimeline } = await import("../../../dashboard-v2/src/server/functions.ts");
 
       await getTimeline({
         data: { status: "alert", repo: "vigil", page: 2 },
@@ -105,14 +88,9 @@ describe("server functions -- reads", () => {
   describe("searchMemory", () => {
     it("calls getMemorySearchJSON with query and optional repo", async () => {
       const memoryMod = await import("../../dashboard/api/memory.ts");
-      const handlerSpy = spyOn(
-        memoryMod,
-        "getMemorySearchJSON",
-      ).mockReturnValue({ results: [] } as any);
+      const handlerSpy = spyOn(memoryMod, "getMemorySearchJSON").mockReturnValue({ results: [] } as any);
 
-      const { searchMemory } = await import(
-        "../../../dashboard-v2/src/server/functions.ts"
-      );
+      const { searchMemory } = await import("../../../dashboard-v2/src/server/functions.ts");
 
       await searchMemory({ data: { query: "git merge", repo: "vigil" } });
 
@@ -128,14 +106,9 @@ describe("server functions -- reads", () => {
   describe("getDreamPatterns", () => {
     it("calls getDreamPatternsJSON with context and repo", async () => {
       const dreamsMod = await import("../../dashboard/api/dreams.ts");
-      const handlerSpy = spyOn(
-        dreamsMod,
-        "getDreamPatternsJSON",
-      ).mockReturnValue({ patterns: [] } as any);
+      const handlerSpy = spyOn(dreamsMod, "getDreamPatternsJSON").mockReturnValue({ patterns: [] } as any);
 
-      const { getDreamPatterns } = await import(
-        "../../../dashboard-v2/src/server/functions.ts"
-      );
+      const { getDreamPatterns } = await import("../../../dashboard-v2/src/server/functions.ts");
 
       await getDreamPatterns({ data: { repo: "vigil" } });
 
@@ -150,13 +123,9 @@ describe("server functions -- reads", () => {
   describe("getRepos", () => {
     it("calls getReposJSON with context", async () => {
       const reposMod = await import("../../dashboard/api/repos.ts");
-      const handlerSpy = spyOn(reposMod, "getReposJSON").mockReturnValue(
-        [] as any,
-      );
+      const handlerSpy = spyOn(reposMod, "getReposJSON").mockReturnValue([] as any);
 
-      const { getRepos } = await import(
-        "../../../dashboard-v2/src/server/functions.ts"
-      );
+      const { getRepos } = await import("../../../dashboard-v2/src/server/functions.ts");
 
       await getRepos();
 
@@ -175,9 +144,7 @@ describe("server functions -- reads", () => {
         status: { running: false },
       } as any);
 
-      const { getDreams } = await import(
-        "../../../dashboard-v2/src/server/functions.ts"
-      );
+      const { getDreams } = await import("../../../dashboard-v2/src/server/functions.ts");
 
       await getDreams();
 
@@ -197,9 +164,7 @@ describe("server functions -- reads", () => {
         completionRate: 0,
       } as any);
 
-      const { getTasks } = await import(
-        "../../../dashboard-v2/src/server/functions.ts"
-      );
+      const { getTasks } = await import("../../../dashboard-v2/src/server/functions.ts");
 
       await getTasks({ data: { status: "active", repo: "vigil" } });
 
@@ -220,9 +185,7 @@ describe("server functions -- reads", () => {
         stats: {},
       } as any);
 
-      const { getActions } = await import(
-        "../../../dashboard-v2/src/server/functions.ts"
-      );
+      const { getActions } = await import("../../../dashboard-v2/src/server/functions.ts");
 
       await getActions({ data: { status: "pending" } });
 
@@ -241,9 +204,7 @@ describe("server functions -- reads", () => {
         pending: [],
       } as any);
 
-      const { getActionsPending } = await import(
-        "../../../dashboard-v2/src/server/functions.ts"
-      );
+      const { getActionsPending } = await import("../../../dashboard-v2/src/server/functions.ts");
 
       await getActionsPending();
 
@@ -262,9 +223,7 @@ describe("server functions -- reads", () => {
         profiles: [],
       } as any);
 
-      const { getMemory } = await import(
-        "../../../dashboard-v2/src/server/functions.ts"
-      );
+      const { getMemory } = await import("../../../dashboard-v2/src/server/functions.ts");
 
       await getMemory();
 
@@ -283,9 +242,7 @@ describe("server functions -- reads", () => {
         latency: {},
       } as any);
 
-      const { getMetrics } = await import(
-        "../../../dashboard-v2/src/server/functions.ts"
-      );
+      const { getMetrics } = await import("../../../dashboard-v2/src/server/functions.ts");
 
       await getMetrics();
 
@@ -304,9 +261,7 @@ describe("server functions -- reads", () => {
         history: [],
       } as any);
 
-      const { getScheduler } = await import(
-        "../../../dashboard-v2/src/server/functions.ts"
-      );
+      const { getScheduler } = await import("../../../dashboard-v2/src/server/functions.ts");
 
       await getScheduler();
 

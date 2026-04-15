@@ -1,6 +1,13 @@
 import { join } from "node:path";
+import { setVigilContext } from "../../dashboard-v2/src/server/vigil-context.ts";
 import type { Daemon } from "../core/daemon.ts";
-import type { DashboardContext } from "./types.ts";
+import {
+  getActionsFragment,
+  getActionsJSON,
+  getActionsPendingJSON,
+  handleApprove,
+  handleReject,
+} from "./api/actions.ts";
 import { getDreamPatternsJSON, getDreamsFragment, getDreamsJSON, handleDreamTrigger } from "./api/dreams.ts";
 import {
   getMemoryFragment,
@@ -19,13 +26,7 @@ import {
   handleSchedulerDelete,
   handleSchedulerTrigger,
 } from "./api/scheduler.ts";
-import {
-  getActionsFragment,
-  getActionsJSON,
-  getActionsPendingJSON,
-  handleApprove,
-  handleReject,
-} from "./api/actions.ts";
+import { SSEManager, wireSSE } from "./api/sse.ts";
 import {
   getTasksFragment,
   getTasksJSON,
@@ -36,9 +37,8 @@ import {
   handleTaskFail,
   handleTaskUpdate,
 } from "./api/tasks.ts";
-import { SSEManager, wireSSE } from "./api/sse.ts";
 import { getEntryFragment, getTimelineFragment, getTimelineJSON, handleReply } from "./api/timeline.ts";
-import { setVigilContext } from "../../dashboard-v2/src/server/vigil-context.ts";
+import type { DashboardContext } from "./types.ts";
 
 const STATIC_DIR = join(import.meta.dir, "static");
 const V2_DIST_DIR = join(import.meta.dir, "../../dashboard-v2/dist");

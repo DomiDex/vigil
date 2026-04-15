@@ -90,7 +90,8 @@ const CARD_BORDER: Record<string, string> = {
   waiting: "border-l-3 border-l-warning",
 };
 
-const BTN = "inline-flex items-center gap-1 px-2.5 py-1.5 border border-border rounded-lg bg-transparent text-xs text-text-muted cursor-pointer transition-all duration-150 whitespace-nowrap hover:bg-white/3 hover:text-text";
+const BTN =
+  "inline-flex items-center gap-1 px-2.5 py-1.5 border border-border rounded-lg bg-transparent text-xs text-text-muted cursor-pointer transition-all duration-150 whitespace-nowrap hover:bg-white/3 hover:text-text";
 const BTN_PRIMARY = `${BTN} bg-vigil border-vigil text-white font-medium hover:bg-vigil-hover`;
 const BTN_DONE = `${BTN} border-success/30 text-success hover:bg-success/10`;
 const BTN_DANGER = `${BTN} border-transparent text-text-muted opacity-60 hover:opacity-100 hover:text-error`;
@@ -230,7 +231,8 @@ export function getTasksFragment(ctx: DashboardContext, opts?: { status?: string
   // Filter tabs
   const activeFilter = opts?.status || "";
   function filterClass(status: string): string {
-    const base = "task-filter inline-flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-sm cursor-pointer transition-all duration-150";
+    const base =
+      "task-filter inline-flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-sm cursor-pointer transition-all duration-150";
     return status === activeFilter
       ? `${base} active bg-vigil border-vigil text-black shadow-[0_0_8px_rgba(255,129,2,0.1)]`
       : `${base} bg-transparent text-text-muted border-border hover:border-vigil/30`;
@@ -270,8 +272,9 @@ export function getTasksFragment(ctx: DashboardContext, opts?: { status?: string
 
   // Progress bar
   const barWidth = Math.max(data.completionRate, 0);
-  const progressBar = allCount > 0
-    ? `<div class="flex flex-col gap-1.5 mb-4">
+  const progressBar =
+    allCount > 0
+      ? `<div class="flex flex-col gap-1.5 mb-4">
         <div class="flex justify-between items-center">
           <span class="text-xs text-text-muted">${data.counts.completed} of ${allCount} complete</span>
           <span class="text-xs text-text-muted font-mono">${data.completionRate}%</span>
@@ -280,7 +283,7 @@ export function getTasksFragment(ctx: DashboardContext, opts?: { status?: string
           <div class="h-full bg-success rounded-full transition-all duration-400" style="width: ${barWidth}%"></div>
         </div>
       </div>`
-    : "";
+      : "";
 
   // Create form
   const createForm = `

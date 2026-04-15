@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TaskManager } from "../../core/task-manager.ts";
-import { getTasksJSON, getTasksFragment, handleTaskCreate, handleTaskUpdate } from "../../dashboard/api/tasks.ts";
+import { getTasksFragment, getTasksJSON, handleTaskCreate, handleTaskUpdate } from "../../dashboard/api/tasks.ts";
 import type { DashboardContext } from "../../dashboard/server.ts";
 
 function makeMockCtx(taskManager: TaskManager): DashboardContext {
@@ -97,8 +97,8 @@ describe("Task Dashboard API", () => {
     it("returns HTML with empty state message", () => {
       const html = getTasksFragment(ctx);
       expect(html).toContain("No tasks yet");
-      expect(html).toContain("task-layout");
-      expect(html).toContain("task-create-form");
+      expect(html).toContain('hx-post="/api/tasks"');
+      expect(html).toContain("What needs to be done");
     });
 
     it("renders task cards", () => {
@@ -117,7 +117,7 @@ describe("Task Dashboard API", () => {
         waitCondition: { type: "event", eventType: "new_commit" },
       });
       const html = getTasksFragment(ctx);
-      expect(html).toContain("task-card-wait");
+      expect(html).toContain("Waiting for:");
       expect(html).toContain("event");
       expect(html).toContain("new_commit");
     });
@@ -126,9 +126,9 @@ describe("Task Dashboard API", () => {
       const t = tm.create({ repo: "vigil", title: "Active task" });
       tm.activate(t.id);
       const html = getTasksFragment(ctx);
-      expect(html).toContain("task-card-btn-done");    // Done button
-      expect(html).toContain("task-card-btn-danger");   // Failed button
-      expect(html).not.toContain("Start\n");            // No start button for active
+      expect(html).toContain('title="Mark as done"'); // Done button
+      expect(html).toContain('title="Mark as failed"'); // Failed button
+      expect(html).not.toContain("Start\n"); // No start button for active
     });
 
     it("shows no action buttons for completed tasks", () => {
@@ -147,7 +147,7 @@ describe("Task Dashboard API", () => {
       tm.create({ repo: "vigil", title: "Pending" });
 
       const html = getTasksFragment(ctx);
-      expect(html).toContain("task-progress-bar");
+      expect(html).toContain("bg-success rounded-full");
       expect(html).toContain("50%");
     });
 
@@ -212,7 +212,7 @@ describe("Task Dashboard API", () => {
 
       const html = handleTaskCreate(ctx, form);
       expect(html).toContain("Check result");
-      expect(html).toContain("task-layout");
+      expect(html).toContain('hx-post="/api/tasks"');
     });
   });
 
@@ -309,7 +309,7 @@ describe("Task Dashboard API", () => {
         waitCondition: { type: "task", taskId: parent.id },
       });
       const html = getTasksFragment(ctx);
-      expect(html).toContain("task-card-wait");
+      expect(html).toContain("Waiting for:");
       expect(html).toContain("Waiting for: task");
     });
   });
