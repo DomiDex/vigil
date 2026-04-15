@@ -13,7 +13,7 @@ export default defineConfig({
   plugins: [
     tailwindcss(),
     tanstackStart({
-      srcDirectory: "app",
+      srcDirectory: "src",
     }),
     viteReact(),
   ],

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { startDashboard } from "../../dashboard/server.ts";
 import { createMockDaemon } from "../helpers/mock-daemon.ts";
 
-const BUILD_DIR = join(import.meta.dir, "../../dashboard/app/dist/server");
+const BUILD_DIR = join(import.meta.dir, "../../../dashboard-v2/dist/server");
 const buildExists = existsSync(BUILD_DIR);
 
 let server: ReturnType<typeof Bun.serve>;

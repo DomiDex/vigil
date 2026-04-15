@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { cn } from "../../dashboard/app/app/lib/cn";
+import { cn } from "../../../dashboard-v2/src/lib/cn";
 
 describe("cn() utility", () => {
   test("merges class strings", () => {
