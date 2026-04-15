@@ -25,6 +25,12 @@ export const routeLabels: Record<string, string> = {
   "/metrics": "Metrics",
   "/scheduler": "Scheduler",
   "/config": "Config",
+  "/agents": "Agents",
+  "/health": "Health",
+  "/webhooks": "Webhooks",
+  "/channels": "Channels",
+  "/notifications": "Notifications",
+  "/a2a": "A2A",
 };
 
 export function SiteHeader() {
@@ -39,17 +45,19 @@ export function SiteHeader() {
   });
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-surface-dark px-4">
-      <SidebarTrigger className="-ml-1 text-text-muted" />
-      <Separator orientation="vertical" className="mr-2 h-4" />
+    <header className="flex h-14 shrink-0 items-center gap-3 border-b border-white/[0.06] bg-black/20 px-6 backdrop-blur-sm">
+      <SidebarTrigger className="-ml-1 text-text-muted hover:text-text transition-colors" />
+      <Separator orientation="vertical" className="mr-2 h-4 bg-white/[0.08]" />
       <Breadcrumb>
         <BreadcrumbList>
           <BreadcrumbItem>
-            <BreadcrumbLink href="/">Vigil</BreadcrumbLink>
+            <BreadcrumbLink href="/" className="text-text-muted hover:text-vigil transition-colors text-sm">
+              Vigil
+            </BreadcrumbLink>
           </BreadcrumbItem>
-          <BreadcrumbSeparator />
+          <BreadcrumbSeparator className="text-text-dimmed" />
           <BreadcrumbItem>
-            <BreadcrumbPage>{pageLabel}</BreadcrumbPage>
+            <BreadcrumbPage className="text-text font-medium text-sm">{pageLabel}</BreadcrumbPage>
           </BreadcrumbItem>
         </BreadcrumbList>
       </Breadcrumb>
@@ -57,9 +65,14 @@ export function SiteHeader() {
       <div className="flex-1" />
 
       {overview && (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           <NextTickCountdown nextTickIn={overview.nextTickIn} />
-          <Badge variant="outline">{overview.repoCount} repos</Badge>
+          <Badge
+            variant="outline"
+            className="border-white/[0.08] text-text-muted text-xs font-mono"
+          >
+            {overview.repoCount} repos
+          </Badge>
         </div>
       )}
     </header>

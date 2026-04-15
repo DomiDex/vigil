@@ -7,6 +7,7 @@ import { getTimeline, getRepos } from "../../server/functions";
 import { TimelineEntry } from "../../components/vigil/timeline-entry";
 import { DecisionFilter } from "./DecisionFilter";
 import type { WidgetProps } from "../../types/plugin";
+import type { RepoListItem, TimelineMessage } from "../../types/api";
 
 const PAGE_SIZE = 20;
 
@@ -60,8 +61,8 @@ export default function TimelinePage({ activeRepo }: Partial<WidgetProps> = {}) 
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-1 text-xs">
           <span className="relative flex size-2">
-            <span className="absolute inline-flex size-full animate-ping rounded-full bg-green-400 opacity-75" />
-            <span className="relative inline-flex size-2 rounded-full bg-green-500" />
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-success opacity-75" />
+            <span className="relative inline-flex size-2 rounded-full bg-success" />
           </span>
           <span className="text-muted-foreground">Live</span>
         </div>
@@ -89,7 +90,7 @@ export default function TimelinePage({ activeRepo }: Partial<WidgetProps> = {}) 
           }
         >
           <option value="">All repos</option>
-          {repos?.map((r) => (
+          {repos?.map((r: RepoListItem) => (
             <option key={r.name} value={r.name}>
               {r.name}
             </option>
@@ -111,7 +112,7 @@ export default function TimelinePage({ activeRepo }: Partial<WidgetProps> = {}) 
             Failed to load data: {error?.message}
           </div>
         )}
-        {messages.map((msg) => (
+        {messages.map((msg: TimelineMessage) => (
           <TimelineEntry key={msg.id} message={msg} />
         ))}
         {!isLoading && messages.length === 0 && (

@@ -18,6 +18,7 @@ import {
 import { getOverview, getRepos } from "../../server/functions";
 import { vigilKeys } from "../../lib/query-keys";
 import type { PluginWidget } from "../../types/plugin";
+import type { RepoListItem } from "../../types/api";
 
 interface AppSidebarProps {
   plugins: PluginWidget[];
@@ -31,21 +32,21 @@ function RepoStateIndicator({
   dirty: boolean;
 }) {
   return (
-    <span className="flex items-center gap-1">
-      {dirty && <span className="size-1.5 rounded-full bg-warning" />}
+    <span className="flex items-center gap-1.5">
+      {dirty && <span className="size-1.5 rounded-full bg-warning animate-pulse" />}
       {state === "active" && (
-        <Circle className="size-3 fill-green-500 text-green-500" />
+        <Circle className="size-2.5 fill-success text-success" />
       )}
-      {state === "sleeping" && <Moon className="size-3 text-text-muted" />}
-      {state === "dreaming" && <Sparkles className="size-3 text-vigil" />}
+      {state === "sleeping" && <Moon className="size-2.5 text-text-dimmed" />}
+      {state === "dreaming" && <Sparkles className="size-2.5 text-vigil" />}
     </span>
   );
 }
 
 function DaemonStateIcon({ state }: { state?: string }) {
-  if (state === "sleeping") return <Moon className="size-4" />;
-  if (state === "dreaming") return <Sparkles className="size-4" />;
-  return <Circle className="size-4 fill-green-500 text-green-500" />;
+  if (state === "sleeping") return <Moon className="size-4 text-text-muted" />;
+  if (state === "dreaming") return <Sparkles className="size-4 text-vigil" />;
+  return <Circle className="size-4 fill-success text-success" />;
 }
 
 export function AppSidebar({ plugins }: AppSidebarProps) {
@@ -74,12 +75,12 @@ export function AppSidebar({ plugins }: AppSidebarProps) {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link to="/">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-vigil text-white">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-vigil text-white shadow-[0_0_12px_rgba(255,129,2,0.3)]">
                   <Activity className="size-4" />
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
-                  <span className="font-semibold">Vigil</span>
-                  <span className="text-xs text-text-muted">Dashboard</span>
+                  <span className="font-semibold tracking-tight text-text">Vigil</span>
+                  <span className="text-[11px] text-text-dimmed font-medium">Dashboard</span>
                 </div>
               </Link>
             </SidebarMenuButton>
@@ -89,7 +90,9 @@ export function AppSidebar({ plugins }: AppSidebarProps) {
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-[10px] uppercase tracking-[0.08em] text-text-dimmed font-semibold">
+            Navigation
+          </SidebarGroupLabel>
           <SidebarMenu>
             {tabs.map((tab) => {
               const Icon = (LucideIcons as Record<string, any>)[tab.icon];
@@ -101,10 +104,11 @@ export function AppSidebar({ plugins }: AppSidebarProps) {
                     asChild
                     isActive={isActive}
                     tooltip={tab.label}
+                    className={isActive ? "text-vigil" : "text-text-muted hover:text-text"}
                   >
                     <Link to={path}>
-                      {Icon && <Icon />}
-                      <span>{tab.label}</span>
+                      {Icon && <Icon className="size-4" />}
+                      <span className="text-sm font-medium">{tab.label}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -114,13 +118,15 @@ export function AppSidebar({ plugins }: AppSidebarProps) {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Repositories</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-[10px] uppercase tracking-[0.08em] text-text-dimmed font-semibold">
+            Repositories
+          </SidebarGroupLabel>
           <SidebarMenu>
-            {repos?.map((repo) => (
+            {repos?.map((repo: RepoListItem) => (
               <SidebarMenuItem key={repo.name}>
-                <SidebarMenuButton tooltip={repo.name}>
-                  <GitBranch />
-                  <span>{repo.name}</span>
+                <SidebarMenuButton tooltip={repo.name} className="text-text-muted hover:text-text">
+                  <GitBranch className="size-3.5" />
+                  <span className="text-sm">{repo.name}</span>
                 </SidebarMenuButton>
                 <SidebarMenuBadge>
                   <RepoStateIndicator
@@ -139,15 +145,15 @@ export function AppSidebar({ plugins }: AppSidebarProps) {
           <SidebarMenuItem>
             <SidebarMenuButton
               tooltip={`${overview?.state ?? "..."} — Tick ${overview?.tickCount ?? 0}`}
+              className="text-text-muted"
             >
               <DaemonStateIcon state={overview?.state} />
               <div className="flex flex-col gap-0.5 text-xs leading-none">
-                <span className="capitalize">
+                <span className="capitalize font-medium text-text">
                   {overview?.state ?? "..."}
                 </span>
-                <span className="text-text-muted">
-                  Tick {overview?.tickCount ?? 0} —{" "}
-                  {overview?.uptime ?? "..."}
+                <span className="text-text-dimmed text-[11px]">
+                  Tick {overview?.tickCount ?? 0} — {overview?.uptime ?? "..."}
                 </span>
               </div>
             </SidebarMenuButton>

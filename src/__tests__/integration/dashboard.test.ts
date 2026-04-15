@@ -19,7 +19,7 @@ afterEach(() => {
 describe("dashboard static files", () => {
   test("GET /dash returns 200 with HTML", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/dash`);
     expect(res.status).toBe(200);
@@ -31,7 +31,7 @@ describe("dashboard static files", () => {
 
   test("GET /dash/ also works", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/dash/`);
     expect(res.status).toBe(200);
@@ -39,7 +39,7 @@ describe("dashboard static files", () => {
 
   test("GET / returns 200 via TanStack Start or redirects to /dash", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/`, { redirect: "manual" });
     // TanStack Start handler serves HTML at / (200), or fallback redirects to /dash (302)
@@ -48,7 +48,7 @@ describe("dashboard static files", () => {
 
   test("GET /dash/styles.css returns CSS", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/dash/styles.css`);
     expect(res.status).toBe(200);
@@ -57,7 +57,7 @@ describe("dashboard static files", () => {
 
   test("GET /dash/vendor/htmx.min.js returns JS", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/dash/vendor/htmx.min.js`);
     expect(res.status).toBe(200);
@@ -66,7 +66,7 @@ describe("dashboard static files", () => {
 
   test("GET /dash/nonexistent returns 404", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/dash/nonexistent.html`);
     expect(res.status).toBe(404);
@@ -74,7 +74,7 @@ describe("dashboard static files", () => {
 
   test("directory traversal is blocked", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/dash/../../../etc/passwd`);
     // Blocked by either 403 (path check) or 404 (resolved path outside static dir)
@@ -85,7 +85,7 @@ describe("dashboard static files", () => {
 describe("GET /api/overview", () => {
   test("returns valid JSON with all required fields", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/overview`);
     expect(res.status).toBe(200);
@@ -110,7 +110,7 @@ describe("GET /api/overview", () => {
 
   test("repos have name, path, state", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/overview`);
     const data = await res.json();
@@ -125,7 +125,7 @@ describe("GET /api/overview", () => {
     daemon.tickEngine.isSleeping = true;
     // Make isSleeping a getter that returns true
     Object.defineProperty(daemon.tickEngine, "isSleeping", { value: true });
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/overview`);
     const data = await res.json();
@@ -136,7 +136,7 @@ describe("GET /api/overview", () => {
 describe("GET /api/overview/fragment", () => {
   test("returns HTML partial with top bar", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/overview/fragment`);
     expect(res.status).toBe(200);
@@ -153,7 +153,7 @@ describe("GET /api/overview/fragment", () => {
 
   test("contains no emojis", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/overview/fragment`);
     const html = await res.text();
@@ -166,7 +166,7 @@ describe("GET /api/overview/fragment", () => {
 describe("SSE endpoint", () => {
   test("GET /api/sse returns event stream", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/sse`);
     expect(res.status).toBe(200);
@@ -187,7 +187,7 @@ describe("SSE endpoint", () => {
 describe("404 handling", () => {
   test("unknown API routes return 404", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/nonexistent`);
     expect(res.status).toBe(404);
@@ -221,7 +221,7 @@ describe("GET /api/timeline", () => {
   test("returns JSON with messages array", async () => {
     const daemon = createMockDaemon();
     seedMessages(daemon, 3);
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/timeline`);
     expect(res.status).toBe(200);
@@ -237,7 +237,7 @@ describe("GET /api/timeline", () => {
   test("messages sorted by timestamp descending", async () => {
     const daemon = createMockDaemon();
     seedMessages(daemon, 3);
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/timeline`);
     const data = await res.json();
@@ -252,7 +252,7 @@ describe("GET /api/timeline", () => {
   test("filters by decision type", async () => {
     const daemon = createMockDaemon();
     seedMessages(daemon, 8);
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/timeline?decision=OBSERVE`);
     const data = await res.json();
@@ -266,7 +266,7 @@ describe("GET /api/timeline", () => {
   test("filters by repo", async () => {
     const daemon = createMockDaemon();
     seedMessages(daemon, 6);
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/timeline?repo=vigil`);
     const data = await res.json();
@@ -280,7 +280,7 @@ describe("GET /api/timeline", () => {
   test("pagination works", async () => {
     const daemon = createMockDaemon();
     seedMessages(daemon, 10);
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/timeline?limit=3&page=1`);
     const data = await res.json();
@@ -298,7 +298,7 @@ describe("GET /api/timeline", () => {
   test("each message has expected fields", async () => {
     const daemon = createMockDaemon();
     seedMessages(daemon, 1);
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/timeline`);
     const data = await res.json();
@@ -317,7 +317,7 @@ describe("GET /api/timeline/fragment", () => {
   test("returns HTML with entry cards", async () => {
     const daemon = createMockDaemon();
     seedMessages(daemon, 3);
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/timeline/fragment`);
     expect(res.status).toBe(200);
@@ -331,7 +331,7 @@ describe("GET /api/timeline/fragment", () => {
   test("filter buttons return only matching decisions", async () => {
     const daemon = createMockDaemon();
     seedMessages(daemon, 8);
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/timeline/fragment?decision=NOTIFY`);
     const html = await res.text();
@@ -343,7 +343,7 @@ describe("GET /api/timeline/fragment", () => {
 
   test("empty results show empty state", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/timeline/fragment`);
     const html = await res.text();
@@ -353,7 +353,7 @@ describe("GET /api/timeline/fragment", () => {
   test("infinite scroll sentinel appears when hasMore", async () => {
     const daemon = createMockDaemon();
     seedMessages(daemon, 10);
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/timeline/fragment?limit=3`);
     const html = await res.text();
@@ -366,7 +366,7 @@ describe("GET /api/timeline/:id/fragment", () => {
   test("expanded view shows detail panel", async () => {
     const daemon = createMockDaemon();
     const messages = seedMessages(daemon, 1);
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const id = messages[0].id;
     const res = await fetch(`${baseUrl}/api/timeline/${id}/fragment`);
@@ -382,7 +382,7 @@ describe("GET /api/timeline/:id/fragment", () => {
   test("collapsed=1 returns collapsed card", async () => {
     const daemon = createMockDaemon();
     const messages = seedMessages(daemon, 1);
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const id = messages[0].id;
     const res = await fetch(`${baseUrl}/api/timeline/${id}/fragment?collapsed=1`);
@@ -394,7 +394,7 @@ describe("GET /api/timeline/:id/fragment", () => {
 
   test("unknown ID returns 404", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/timeline/nonexistent-id/fragment`);
     expect(res.status).toBe(404);
@@ -405,7 +405,7 @@ describe("POST /api/timeline/:id/reply", () => {
   test("submits reply and shows confirmation", async () => {
     const daemon = createMockDaemon();
     const messages = seedMessages(daemon, 1);
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const id = messages[0].id;
     const form = new FormData();
@@ -429,7 +429,7 @@ describe("POST /api/timeline/:id/reply", () => {
   test("empty reply shows error", async () => {
     const daemon = createMockDaemon();
     const messages = seedMessages(daemon, 1);
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const id = messages[0].id;
     const form = new FormData();
@@ -446,7 +446,7 @@ describe("POST /api/timeline/:id/reply", () => {
 
   test("reply to unknown message shows error", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const form = new FormData();
     form.set("reply", "test");
@@ -465,7 +465,7 @@ describe("timeline contains no emojis", () => {
   test("entry cards use SVG icons not emojis", async () => {
     const daemon = createMockDaemon();
     seedMessages(daemon, 4);
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/timeline/fragment`);
     const html = await res.text();
@@ -479,7 +479,7 @@ describe("timeline contains no emojis", () => {
 describe("GET /api/repos", () => {
   test("returns list of watched repos", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/repos`);
     expect(res.status).toBe(200);
@@ -499,7 +499,7 @@ describe("GET /api/repos", () => {
 describe("GET /api/repos/fragment", () => {
   test("returns HTML nav buttons for repos", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/repos/fragment`);
     expect(res.status).toBe(200);
@@ -517,7 +517,7 @@ describe("GET /api/repos/:name", () => {
   test("returns full repo detail", async () => {
     const daemon = createMockDaemon();
     seedMessages(daemon, 4);
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/repos/vigil`);
     expect(res.status).toBe(200);
@@ -536,7 +536,7 @@ describe("GET /api/repos/:name", () => {
 
   test("returns 404 for unknown repo", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/repos/nonexistent`);
     expect(res.status).toBe(404);
@@ -547,7 +547,7 @@ describe("GET /api/repos/:name/fragment", () => {
   test("returns HTML sidebar panel", async () => {
     const daemon = createMockDaemon();
     seedMessages(daemon, 4);
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/repos/vigil/fragment`);
     expect(res.status).toBe(200);
@@ -563,7 +563,7 @@ describe("GET /api/repos/:name/fragment", () => {
   test("decision bars render proportionally", async () => {
     const daemon = createMockDaemon();
     seedMessages(daemon, 4);
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/repos/vigil/fragment`);
     const html = await res.text();
@@ -579,7 +579,7 @@ describe("GET /api/repos/:name/fragment", () => {
 
   test("patterns and topics sections render", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/repos/vigil/fragment`);
     const html = await res.text();
@@ -593,7 +593,7 @@ describe("GET /api/repos/:name/fragment", () => {
 
   test("sidebar has 30s auto-refresh via hx-trigger", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/repos/vigil/fragment`);
     const html = await res.text();
@@ -602,7 +602,7 @@ describe("GET /api/repos/:name/fragment", () => {
 
   test("dirty repo shows uncommitted section", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/repos/vigil/fragment`);
     const html = await res.text();
@@ -611,7 +611,7 @@ describe("GET /api/repos/:name/fragment", () => {
 
   test("clean repo hides uncommitted section", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/repos/other/fragment`);
     const html = await res.text();
@@ -620,7 +620,7 @@ describe("GET /api/repos/:name/fragment", () => {
 
   test("returns 404 for unknown repo", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/repos/nonexistent/fragment`);
     expect(res.status).toBe(404);
@@ -628,7 +628,7 @@ describe("GET /api/repos/:name/fragment", () => {
 
   test("contains no emojis", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/repos/vigil/fragment`);
     const html = await res.text();
@@ -642,7 +642,7 @@ describe("GET /api/repos/:name/fragment", () => {
 describe("GET /api/metrics", () => {
   test("returns valid JSON with all required sections", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/metrics`);
     expect(res.status).toBe(200);
@@ -694,7 +694,7 @@ describe("GET /api/metrics", () => {
 
   test("cost estimate calculates correctly for haiku model", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/metrics`);
     const data = await res.json();
@@ -706,7 +706,7 @@ describe("GET /api/metrics", () => {
 
   test("latency series is ordered and capped", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/metrics`);
     const data = await res.json();
@@ -722,7 +722,7 @@ describe("GET /api/metrics", () => {
 describe("GET /api/metrics/fragment", () => {
   test("returns HTML with chart canvases and stats", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/metrics/fragment`);
     expect(res.status).toBe(200);
@@ -753,7 +753,7 @@ describe("GET /api/metrics/fragment", () => {
 
   test("contains no emojis", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/metrics/fragment`);
     const html = await res.text();
@@ -762,7 +762,7 @@ describe("GET /api/metrics/fragment", () => {
 
   test("latency stats are formatted correctly", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/metrics/fragment`);
     const html = await res.text();

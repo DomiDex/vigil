@@ -2,7 +2,7 @@ import { Circle, Moon, Sparkles, GitBranch } from "lucide-react";
 import { Card, CardContent } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { cn } from "../../lib/cn";
-import type { RepoListItem } from "../../types/api";
+import type { RepoListItem, DecisionDistribution } from "../../types/api";
 
 const STATE_ICON_MAP: Record<string, string> = {
   active: "Circle",
@@ -25,7 +25,7 @@ export function formatSha(sha: string): string {
 }
 
 export function computeDecisionPercentages(
-  decisions: Record<string, number>,
+  decisions: DecisionDistribution,
 ): Record<string, number> {
   const total = Object.values(decisions).reduce((a, b) => a + b, 0);
   const result: Record<string, number> = {};

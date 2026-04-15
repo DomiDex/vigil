@@ -145,7 +145,7 @@ async function serveStatic(path: string): Promise<Response> {
   });
 }
 
-export function startDashboard(daemon: Daemon, port = 7480): ReturnType<typeof Bun.serve> {
+export async function startDashboard(daemon: Daemon, port = 7480): Promise<ReturnType<typeof Bun.serve>> {
   const sse = new SSEManager();
   const ctx: DashboardContext = { daemon, sse };
 
@@ -155,21 +155,15 @@ export function startDashboard(daemon: Daemon, port = 7480): ReturnType<typeof B
   // Wire SSE events from daemon
   wireSSE(sse, ctx);
 
-  // Load user plugins from ~/.vigil/plugins/
-  let userPlugins: Awaited<ReturnType<typeof loadUserPlugins>> = [];
-  let pluginApiRoutes: Map<string, PluginApiRoute[]> = new Map();
-
-  loadUserPlugins()
-    .then((plugins) => {
-      userPlugins = plugins;
-      pluginApiRoutes = getPluginApiRoutes();
-      if (plugins.length > 0) {
-        console.log(`[dashboard] Loaded ${plugins.length} user plugin(s): ${plugins.map((p) => p.id).join(", ")}`);
-      }
-    })
-    .catch((err) => {
-      console.warn("[dashboard] Failed to load user plugins:", err);
-    });
+  // Load user plugins from ~/.vigil/plugins/ — await before serving
+  const userPlugins = await loadUserPlugins().catch((err) => {
+    console.warn("[dashboard] Failed to load user plugins:", err);
+    return [] as Awaited<ReturnType<typeof loadUserPlugins>>;
+  });
+  const pluginApiRoutes = getPluginApiRoutes();
+  if (userPlugins.length > 0) {
+    console.log(`[dashboard] Loaded ${userPlugins.length} user plugin(s): ${userPlugins.map((p) => p.id).join(", ")}`);
+  }
 
   const server = Bun.serve({
     port,
@@ -528,7 +522,8 @@ export function startDashboard(daemon: Daemon, port = 7480): ReturnType<typeof B
           if (route) {
             try {
               return await route.handler(req);
-            } catch {
+            } catch (err) {
+              console.error(`[plugins] Route handler error in ${pluginId}:`, err);
               return json({ error: "Plugin error" }, 500);
             }
           }

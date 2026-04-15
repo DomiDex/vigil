@@ -38,7 +38,7 @@ describe.skipIf(!buildExists)("spike handler embedding", () => {
 
   test("embedded handler serves HTML for root path", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/`);
     expect(res.status).toBe(200);
@@ -48,7 +48,7 @@ describe.skipIf(!buildExists)("spike handler embedding", () => {
 
   test("existing API routes still work", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/overview`);
     expect(res.status).toBe(200);
@@ -60,7 +60,7 @@ describe.skipIf(!buildExists)("spike handler embedding", () => {
 
   test("API routes take priority over handler", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/overview`);
     expect(res.status).toBe(200);

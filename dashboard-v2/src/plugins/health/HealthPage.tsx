@@ -157,7 +157,7 @@ export default function HealthPage({
                     </div>
                     <div className="h-2 rounded-full bg-surface overflow-hidden">
                       <div
-                        className="h-full rounded-full bg-blue-500 transition-all"
+                        className="h-full rounded-full bg-vigil transition-all"
                         style={{ width: "100%" }}
                       />
                     </div>

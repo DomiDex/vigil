@@ -211,7 +211,7 @@ afterEach(() => {
 describe("GET /api/memory", () => {
   test("returns pipeline stats and profiles", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/memory`);
     expect(res.status).toBe(200);
@@ -245,7 +245,7 @@ describe("GET /api/memory", () => {
 describe("GET /api/memory/fragment", () => {
   test("returns HTML with pipeline visualization", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/memory/fragment`);
     expect(res.status).toBe(200);
@@ -276,7 +276,7 @@ describe("GET /api/memory/fragment", () => {
 
   test("contains no emojis", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/memory/fragment`);
     const html = await res.text();
@@ -288,7 +288,7 @@ describe("GET /api/memory/fragment", () => {
 describe("GET /api/memory/search", () => {
   test("returns ranked results for matching query", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/memory/search?memq=Decision`);
     expect(res.status).toBe(200);
@@ -307,7 +307,7 @@ describe("GET /api/memory/search", () => {
 
   test("filters by repo when specified", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/memory/search?memq=Decision&memrepo=vigil`);
     const data = await res.json();
@@ -319,7 +319,7 @@ describe("GET /api/memory/search", () => {
 
   test("returns empty results for no query", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/memory/search?memq=`);
     const data = await res.json();
@@ -328,7 +328,7 @@ describe("GET /api/memory/search", () => {
 
   test("returns empty results for non-matching query", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/memory/search?memq=xyznonexistent`);
     const data = await res.json();
@@ -339,7 +339,7 @@ describe("GET /api/memory/search", () => {
 describe("GET /api/memory/search/fragment", () => {
   test("returns HTML results for matching query", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/memory/search/fragment?memq=Decision`);
     expect(res.status).toBe(200);
@@ -352,7 +352,7 @@ describe("GET /api/memory/search/fragment", () => {
 
   test("shows empty state for no query", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/memory/search/fragment?memq=`);
     const html = await res.text();
@@ -361,7 +361,7 @@ describe("GET /api/memory/search/fragment", () => {
 
   test("shows no results message for non-matching query", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/memory/search/fragment?memq=xyznonexistent`);
     const html = await res.text();
@@ -372,7 +372,7 @@ describe("GET /api/memory/search/fragment", () => {
 describe("GET /api/dreams", () => {
   test("returns dreams array and status", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/dreams`);
     expect(res.status).toBe(200);
@@ -387,7 +387,7 @@ describe("GET /api/dreams", () => {
 describe("GET /api/dreams/fragment", () => {
   test("returns HTML with dream UI elements", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/dreams/fragment`);
     expect(res.status).toBe(200);
@@ -411,7 +411,7 @@ describe("GET /api/dreams/fragment", () => {
 
   test("contains no emojis", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/dreams/fragment`);
     const html = await res.text();
@@ -421,7 +421,7 @@ describe("GET /api/dreams/fragment", () => {
 
   test("filters by repo when specified", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/dreams/fragment?dreamrepo=vigil`);
     expect(res.status).toBe(200);
@@ -433,7 +433,7 @@ describe("GET /api/dreams/fragment", () => {
 describe("GET /api/dreams/patterns/:repo", () => {
   test("returns patterns for known repo", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/dreams/patterns/vigil`);
     expect(res.status).toBe(200);
@@ -447,7 +447,7 @@ describe("GET /api/dreams/patterns/:repo", () => {
 
   test("returns empty patterns for unknown repo", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/api/dreams/patterns/nonexistent`);
     const data = await res.json();
@@ -460,7 +460,7 @@ describe("GET /api/dreams/patterns/:repo", () => {
 describe("POST /api/memory/ask", () => {
   test("returns error for empty question", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const form = new FormData();
     form.set("askq", "");
@@ -479,7 +479,7 @@ describe("POST /api/memory/ask", () => {
     const daemon = createMockDaemon();
     // Remove all repo paths to force "not found"
     daemon.repoPaths = [];
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const form = new FormData();
     form.set("askq", "What patterns exist?");
@@ -498,7 +498,7 @@ describe("POST /api/memory/ask", () => {
 describe("Memory tab HTML structure", () => {
   test("index.html has memory tab panel with HTMX trigger", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/dash`);
     const html = await res.text();
@@ -510,7 +510,7 @@ describe("Memory tab HTML structure", () => {
 
   test("index.html has dreams tab panel with HTMX trigger", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/dash`);
     const html = await res.text();
@@ -522,7 +522,7 @@ describe("Memory tab HTML structure", () => {
 
   test("tab navigation includes Memory and Dreams tabs", async () => {
     const daemon = createMockDaemon();
-    server = startDashboard(daemon, port);
+    server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/dash`);
     const html = await res.text();

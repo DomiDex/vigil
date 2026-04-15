@@ -34,7 +34,7 @@ interface NotificationsData {
 }
 
 const SEVERITY_COLORS: Record<string, string> = {
-  info: "text-blue-400",
+  info: "text-info",
   warning: "text-amber-400",
   error: "text-red-400",
   critical: "text-red-500",

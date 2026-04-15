@@ -131,7 +131,7 @@ export class Daemon {
   actionExecutor: ActionExecutor;
   scheduler!: Scheduler;
   taskManager!: TaskManager;
-  private dashboardServer: ReturnType<typeof startDashboard> | null = null;
+  private dashboardServer: Awaited<ReturnType<typeof startDashboard>> | null = null;
   /** CLI overrides that must survive config hot-reloads */
   private cliOverrides: { tickInterval?: number; model?: string } = {};
 
@@ -407,7 +407,7 @@ export class Daemon {
 
     // Start dashboard server
     const dashPort = (this.config as any).dashboardPort ?? 7480;
-    this.dashboardServer = startDashboard(this, dashPort);
+    this.dashboardServer = await startDashboard(this, dashPort);
     console.log(chalk.green(`  ✓ Dashboard: http://localhost:${dashPort}/dash`));
 
     // Start listening for user replies

@@ -24,15 +24,26 @@ export const Route = createRootRoute({
       { name: "viewport", content: "width=device-width, initial-scale=1" },
     ],
     title: "Vigil Dashboard",
+    links: [
+      {
+        rel: "preconnect",
+        href: "https://fonts.googleapis.com",
+      },
+      {
+        rel: "preconnect",
+        href: "https://fonts.gstatic.com",
+        crossOrigin: "anonymous",
+      },
+    ],
   }),
   notFoundComponent: () => (
     <div className="flex items-center justify-center h-screen">
       <div className="text-center">
-        <h1 className="text-2xl font-bold mb-2">Page Not Found</h1>
-        <p className="text-muted-foreground mb-4">
+        <h1 className="text-2xl font-bold mb-2 text-text">Page Not Found</h1>
+        <p className="text-text-muted mb-4">
           The page you are looking for does not exist.
         </p>
-        <Link to="/" className="text-primary hover:underline">
+        <Link to="/" className="text-vigil hover:text-vigil-light transition-colors">
           Back to dashboard
         </Link>
       </div>
@@ -61,7 +72,7 @@ function AppShell() {
       <AppSidebar plugins={corePlugins} />
       <SidebarInset>
         <SiteHeader />
-        <main className="flex-1 overflow-y-auto p-4">
+        <main className="flex-1 overflow-y-auto p-6">
           <Outlet />
         </main>
       </SidebarInset>
@@ -71,11 +82,11 @@ function AppShell() {
 
 function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <head>
         <HeadContent />
       </head>
-      <body className="bg-background text-text min-h-screen">
+      <body className="bg-background text-text min-h-screen antialiased">
         {children}
         <Scripts />
       </body>
