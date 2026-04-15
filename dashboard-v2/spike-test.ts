@@ -2,7 +2,7 @@
  * Temporary spike test — sets up mock DashboardContext for Phase 0 validation.
  * Delete after Phase 0 is complete.
  */
-import { setVigilContext } from "./app/server/vigil-context.ts";
+import { setVigilContext } from "./src/server/vigil-context.ts";
 
 const mockDaemon = {
   repoPaths: ["/tmp/fake-repo"],

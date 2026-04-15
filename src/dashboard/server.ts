@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { Daemon } from "../core/daemon.ts";
+import type { DashboardContext } from "./types.ts";
 import { getDreamPatternsJSON, getDreamsFragment, getDreamsJSON, handleDreamTrigger } from "./api/dreams.ts";
 import {
   getMemoryFragment,
@@ -37,10 +38,10 @@ import {
 } from "./api/tasks.ts";
 import { SSEManager, wireSSE } from "./api/sse.ts";
 import { getEntryFragment, getTimelineFragment, getTimelineJSON, handleReply } from "./api/timeline.ts";
-import { setVigilContext } from "./app/app/server/vigil-context.ts";
+import { setVigilContext } from "../../dashboard-v2/src/server/vigil-context.ts";
 
 const STATIC_DIR = join(import.meta.dir, "static");
-const V2_DIST_DIR = join(import.meta.dir, "app/dist");
+const V2_DIST_DIR = join(import.meta.dir, "../../dashboard-v2/dist");
 
 // TanStack Start handler (loaded lazily on first request)
 let startHandler: { fetch: (req: Request) => Response | Promise<Response> } | null = null;
@@ -50,7 +51,7 @@ async function loadStartHandler(): Promise<typeof startHandler> {
   if (startHandlerLoaded) return startHandler;
   startHandlerLoaded = true;
   try {
-    const mod = await import("./app/dist/server/server.js");
+    const mod = await import("../../dashboard-v2/dist/server/server.js");
     if (mod.default?.fetch) {
       startHandler = mod.default;
       console.log("[dashboard] TanStack Start handler loaded");
@@ -66,11 +67,8 @@ async function loadStartHandler(): Promise<typeof startHandler> {
   return startHandler;
 }
 
-/** Shared context passed to all API handlers */
-export interface DashboardContext {
-  daemon: Daemon;
-  sse: SSEManager;
-}
+// Re-export from types.ts for backward compatibility
+export type { DashboardContext } from "./types.ts";
 
 const MIME_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",

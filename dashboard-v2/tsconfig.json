@@ -6,9 +6,13 @@
     "target": "ES2022",
     "skipLibCheck": true,
     "strictNullChecks": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
     "paths": {
-      "@/*": ["./app/*"]
-    }
+      "@/*": ["./src/*"]
+    },
+    "types": ["bun"]
   },
-  "include": ["app/**/*", "vite.config.ts"]
+  "include": ["src/**/*", "vite.config.ts"],
+  "exclude": ["node_modules"]
 }

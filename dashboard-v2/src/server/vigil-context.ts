@@ -1,4 +1,4 @@
-import type { DashboardContext } from "../../../server.ts";
+import type { DashboardContext } from "../../../src/dashboard/types.ts";
 
 declare global {
   var __vigil_ctx__: DashboardContext | null;

@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { getDataDir } from "../../core/config.ts";
 import { TopicTier } from "../../memory/topic-tier.ts";
-import type { DashboardContext } from "../server.ts";
+import type { DashboardContext } from "../types.ts";
 
 // ── Helpers ──
 

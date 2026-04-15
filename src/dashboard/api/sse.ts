@@ -1,4 +1,4 @@
-import type { DashboardContext } from "../server.ts";
+import type { DashboardContext } from "../types.ts";
 
 const HEARTBEAT_INTERVAL = 15_000; // 15s
 

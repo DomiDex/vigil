@@ -2,7 +2,7 @@ import { describe, test, expect, beforeEach } from "bun:test";
 import {
   setVigilContext,
   getVigilContext,
-} from "../../dashboard/app/app/server/vigil-context";
+} from "../../../dashboard-v2/src/server/vigil-context";
 
 describe("vigil-context singleton", () => {
   beforeEach(() => {

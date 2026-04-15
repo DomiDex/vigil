@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { gitExec } from "../../git/exec.ts";
 import { TopicTier } from "../../memory/topic-tier.ts";
 import type { VigilMessage } from "../../messaging/schema.ts";
-import type { DashboardContext } from "../server.ts";
+import type { DashboardContext } from "../types.ts";
 
 // ── Types ────────────────────────────────────────
 

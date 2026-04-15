@@ -4,7 +4,7 @@ import { getDataDir, getLogsDir } from "../../core/config.ts";
 import { type AskContext, AskEngine } from "../../llm/ask-engine.ts";
 import { IndexTier } from "../../memory/index-tier.ts";
 import { TopicTier } from "../../memory/topic-tier.ts";
-import type { DashboardContext } from "../server.ts";
+import type { DashboardContext } from "../types.ts";
 
 // ── Helpers ──
 

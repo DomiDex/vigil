@@ -2,13 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const APP_DIR = join(import.meta.dir, "../../dashboard/app");
+const APP_DIR = join(import.meta.dir, "../../../dashboard-v2");
 const BUILD_DIR = join(APP_DIR, "dist");
 const buildExists = existsSync(BUILD_DIR);
 
 describe("tailwind theme source", () => {
   test("app.css contains @theme tokens", () => {
-    const cssPath = join(APP_DIR, "app/app.css");
+    const cssPath = join(APP_DIR, "src/app.css");
     expect(existsSync(cssPath)).toBe(true);
 
     const css = readFileSync(cssPath, "utf-8");
