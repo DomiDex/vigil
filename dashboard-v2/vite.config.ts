@@ -6,6 +6,12 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
   server: {
     port: 3000,
+    proxy: {
+      "/api": {
+        target: "http://localhost:7480",
+        changeOrigin: true,
+      },
+    },
   },
   resolve: {
     tsconfigPaths: true,

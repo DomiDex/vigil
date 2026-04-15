@@ -279,8 +279,8 @@ Investigate using the tools above, then call "answer" when ready.`;
     try {
       switch (call.tool) {
         case "search_memory": {
-          const results = ctx.vectorStore.hybridSearch(call.args.query as string, (call.args.limit as number) ?? 5);
-          return { tool: "search_memory", result: results.map((r) => r.content) };
+          const results = ctx.vectorStore.search(call.args.query as string, (call.args.limit as number) ?? 5);
+          return { tool: "search_memory", result: results.map((r: any) => r.content) };
         }
 
         case "load_topic": {

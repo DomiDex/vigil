@@ -102,8 +102,8 @@ interface DaemonDeps {
 
 export class Daemon {
   config: VigilConfig;
-  private tickEngine: TickEngine;
-  private gitWatcher: GitWatcher;
+  tickEngine: TickEngine;
+  gitWatcher: GitWatcher;
   eventLog: EventLog;
   vectorStore: VectorStore;
   private decisionEngine: DecisionEngine;
@@ -127,7 +127,7 @@ export class Daemon {
   private recentDecisions = new Map<string, { decision: string; summary: string; tick: number }[]>();
   repoPaths: string[];
   private sessionId: string;
-  private session: SessionData | null = null;
+  session: SessionData | null = null;
   actionExecutor: ActionExecutor;
   scheduler!: Scheduler;
   taskManager!: TaskManager;
