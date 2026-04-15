@@ -551,7 +551,7 @@ export class Daemon {
 
       switch (result.decision) {
         case "SILENT": {
-          // In brief mode, SILENT decisions are suppressed entirely
+          // In brief mode, SILENT decisions are suppressed from console
           if (!this.briefMode) {
             console.log(
               chalk.cyan(`  · tick ${tickNum}`) +
@@ -559,6 +559,21 @@ export class Daemon {
                 chalk.white(` ${formatTick(result.reasoning)}`),
             );
           }
+          // Route SILENT to messageRouter so dashboard can show all tick activity
+          const silentContent = result.reasoning || "No significant changes detected.";
+          const silentMsg = createMessage({
+            source: {
+              repo: repoName,
+              branch: repoState?.currentBranch,
+              event: "silent",
+              agent: repoCtx ? undefined : "vigil",
+            },
+            status: "normal",
+            severity: "info",
+            message: silentContent,
+            metadata: { tickNum, decision: "SILENT", confidence: result.confidence ?? 0 },
+          });
+          await this.messageRouter.route(silentMsg);
           break;
         }
 

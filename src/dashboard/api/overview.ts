@@ -2,8 +2,10 @@ import type { DashboardContext } from "../server.ts";
 
 function formatUptime(ms: number): string {
   const totalSec = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSec / 3600);
+  const days = Math.floor(totalSec / 86400);
+  const hours = Math.floor((totalSec % 86400) / 3600);
   const minutes = Math.floor((totalSec % 3600) / 60);
+  if (days > 0) return `${days}d ${hours}h`;
   if (hours > 0) return `${hours}h ${minutes}m`;
   return `${minutes}m`;
 }

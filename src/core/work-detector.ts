@@ -101,6 +101,21 @@ export class WorkDetector {
     return this.signals.length;
   }
 
+  /** Check if accumulated weight exceeds threshold (non-consuming, for scheduling) */
+  hasUrgentWork(): boolean {
+    const now = Date.now();
+    const activeSignals = this.signals
+      .map((s) => ({
+        ...s,
+        weight: s.weight * Math.exp(-this.config.decayRatePerSec * ((now - s.timestamp) / 1000)),
+      }))
+      .filter((s) => s.weight > 0.01);
+
+    if (activeSignals.some((s) => s.weight >= 0.9)) return true;
+    const totalWeight = activeSignals.reduce((sum, s) => sum + s.weight, 0);
+    return totalWeight >= this.config.triggerThreshold;
+  }
+
   /** Reset last LLM call timestamp (e.g. after external LLM call) */
   recordLLMCall(): void {
     this.lastLLMCallAt = Date.now();
