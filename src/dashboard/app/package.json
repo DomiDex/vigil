@@ -1,0 +1,29 @@
+{
+  "name": "vigil-dashboard-v2",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "latest",
+    "@tanstack/react-router": "latest",
+    "@tanstack/react-start": "latest",
+    "class-variance-authority": "latest",
+    "clsx": "latest",
+    "nitro": "^3.0.260311-beta",
+    "react": "^19",
+    "react-dom": "^19",
+    "tailwind-merge": "latest"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "latest",
+    "vite": "latest",
+    "@tailwindcss/vite": "latest",
+    "tailwindcss": "^4",
+    "typescript": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@types/node": "latest"
+  }
+}

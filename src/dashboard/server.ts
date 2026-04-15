@@ -37,8 +37,29 @@ import {
 } from "./api/tasks.ts";
 import { SSEManager, wireSSE } from "./api/sse.ts";
 import { getEntryFragment, getTimelineFragment, getTimelineJSON, handleReply } from "./api/timeline.ts";
+import { setVigilContext } from "./app/app/server/vigil-context.ts";
 
 const STATIC_DIR = join(import.meta.dir, "static");
+const V2_DIST_DIR = join(import.meta.dir, "app/dist");
+
+// TanStack Start handler (loaded lazily on first request)
+let startHandler: { fetch: (req: Request) => Response | Promise<Response> } | null = null;
+let startHandlerLoaded = false;
+
+async function loadStartHandler(): Promise<typeof startHandler> {
+  if (startHandlerLoaded) return startHandler;
+  startHandlerLoaded = true;
+  try {
+    const mod = await import("./app/dist/server/server.js");
+    if (mod.default?.fetch) {
+      startHandler = mod.default;
+      console.log("[dashboard] TanStack Start handler loaded");
+    }
+  } catch {
+    console.log("[dashboard] TanStack Start handler not found, serving legacy HTML");
+  }
+  return startHandler;
+}
 
 /** Shared context passed to all API handlers */
 export interface DashboardContext {
@@ -99,6 +120,9 @@ async function serveStatic(path: string): Promise<Response> {
 export function startDashboard(daemon: Daemon, port = 7480): ReturnType<typeof Bun.serve> {
   const sse = new SSEManager();
   const ctx: DashboardContext = { daemon, sse };
+
+  // Set context for TanStack Start server functions
+  setVigilContext(ctx);
 
   // Wire SSE events from daemon
   wireSSE(sse, ctx);
@@ -313,7 +337,7 @@ export function startDashboard(daemon: Daemon, port = 7480): ReturnType<typeof B
         return html(result);
       }
 
-      // --- Static Files ---
+      // --- Static Files (legacy HTMX dashboard) ---
       if (path === "/dash" || path === "/dash/") {
         return serveStatic("index.html");
       }
@@ -322,7 +346,28 @@ export function startDashboard(daemon: Daemon, port = 7480): ReturnType<typeof B
         return serveStatic(subPath);
       }
 
-      // Root redirect to dashboard
+      // --- TanStack Start v2 dashboard ---
+      // Serve static assets from the client build
+      if (path.startsWith("/assets/")) {
+        const assetPath = join(V2_DIST_DIR, "client", path);
+        const file = Bun.file(assetPath);
+        if (await file.exists()) {
+          return new Response(file, {
+            headers: {
+              "Content-Type": getMime(assetPath),
+              "Cache-Control": "public, max-age=31536000, immutable",
+            },
+          });
+        }
+      }
+
+      // Try TanStack Start handler for all other routes
+      const handler = await loadStartHandler();
+      if (handler) {
+        return handler.fetch(req);
+      }
+
+      // Fallback: redirect root to legacy dashboard
       if (path === "/") {
         return Response.redirect("/dash", 302);
       }
