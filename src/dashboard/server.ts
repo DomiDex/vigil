@@ -38,6 +38,29 @@ import {
   handleTaskUpdate,
 } from "./api/tasks.ts";
 import { getEntryFragment, getTimelineFragment, getTimelineJSON, handleReply } from "./api/timeline.ts";
+import { getConfigJSON, handleConfigUpdate, getFeatureGatesJSON, handleFeatureToggle } from "./api/config.ts";
+import {
+  getWebhookEventsJSON,
+  getWebhookSubscriptionsJSON,
+  handleSubscriptionCreate,
+  handleSubscriptionDelete,
+  getWebhookStatusJSON,
+} from "./api/webhooks.ts";
+import {
+  getChannelsJSON,
+  handleChannelRegister,
+  handleChannelDelete,
+  getChannelPermissionsJSON,
+  getChannelQueueJSON,
+} from "./api/channels.ts";
+import {
+  getNotificationsJSON,
+  handleTestNotification,
+  handleNotificationRulesUpdate,
+} from "./api/notifications.ts";
+import { getAgentsJSON, getCurrentAgentJSON, handleAgentSwitch } from "./api/agents.ts";
+import { getHealthJSON } from "./api/health.ts";
+import { getA2AStatusJSON, getA2ASkillsJSON, getA2AHistoryJSON } from "./api/a2a-status.ts";
 import type { DashboardContext } from "./types.ts";
 
 const STATIC_DIR = join(import.meta.dir, "static");
@@ -338,6 +361,118 @@ export function startDashboard(daemon: Daemon, port = 7480): ReturnType<typeof B
       if (schedTriggerMatch && req.method === "POST") {
         const result = await handleSchedulerTrigger(ctx, schedTriggerMatch[1]);
         return html(result);
+      }
+
+      // --- Config API ---
+      if (path === "/api/config" && req.method === "GET") {
+        return json(getConfigJSON(ctx));
+      }
+      if (path === "/api/config" && req.method === "PUT") {
+        const body = await req.json().catch(() => null);
+        if (!body) return json({ error: "Invalid JSON body" }, 400);
+        return json(await handleConfigUpdate(ctx, body));
+      }
+      if (path === "/api/config/features" && req.method === "GET") {
+        return json(getFeatureGatesJSON(ctx));
+      }
+      if (req.method === "PATCH") {
+        const featureToggleMatch = path.match(/^\/api\/config\/features\/([^/]+)$/);
+        if (featureToggleMatch) {
+          const name = decodeURIComponent(featureToggleMatch[1]);
+          const body = await req.json().catch(() => null);
+          if (!body) return json({ error: "Invalid JSON body" }, 400);
+          return json(await handleFeatureToggle(ctx, name, body.enabled));
+        }
+      }
+
+      // --- Webhooks API ---
+      if (path === "/api/webhooks/events" && req.method === "GET") {
+        return json(getWebhookEventsJSON(ctx));
+      }
+      if (path === "/api/webhooks/subscriptions" && req.method === "GET") {
+        return json(getWebhookSubscriptionsJSON(ctx));
+      }
+      if (path === "/api/webhooks/subscriptions" && req.method === "POST") {
+        const body = await req.json().catch(() => null);
+        if (!body) return json({ error: "Invalid JSON body" }, 400);
+        return json(await handleSubscriptionCreate(ctx, body));
+      }
+      if (req.method === "DELETE") {
+        const webhookSubDeleteMatch = path.match(/^\/api\/webhooks\/subscriptions\/([^/]+)$/);
+        if (webhookSubDeleteMatch) {
+          return json(await handleSubscriptionDelete(ctx, decodeURIComponent(webhookSubDeleteMatch[1])));
+        }
+      }
+      if (path === "/api/webhooks/status" && req.method === "GET") {
+        return json(getWebhookStatusJSON(ctx));
+      }
+
+      // --- Channels API ---
+      if (path === "/api/channels" && req.method === "GET") {
+        return json(getChannelsJSON(ctx));
+      }
+      if (path === "/api/channels" && req.method === "POST") {
+        const body = await req.json().catch(() => null);
+        if (!body) return json({ error: "Invalid JSON body" }, 400);
+        return json(await handleChannelRegister(ctx, body));
+      }
+      if (req.method === "DELETE") {
+        const channelDeleteMatch = path.match(/^\/api\/channels\/([^/]+)$/);
+        if (channelDeleteMatch) {
+          return json(await handleChannelDelete(ctx, decodeURIComponent(channelDeleteMatch[1])));
+        }
+      }
+      if (req.method === "GET") {
+        const channelPermsMatch = path.match(/^\/api\/channels\/([^/]+)\/permissions$/);
+        if (channelPermsMatch) {
+          return json(getChannelPermissionsJSON(ctx, decodeURIComponent(channelPermsMatch[1])));
+        }
+        const channelQueueMatch = path.match(/^\/api\/channels\/([^/]+)\/queue$/);
+        if (channelQueueMatch) {
+          return json(getChannelQueueJSON(ctx, decodeURIComponent(channelQueueMatch[1])));
+        }
+      }
+
+      // --- Notifications API ---
+      if (path === "/api/notifications" && req.method === "GET") {
+        return json(getNotificationsJSON(ctx));
+      }
+      if (path === "/api/notifications/test" && req.method === "POST") {
+        return json(await handleTestNotification(ctx));
+      }
+      if (path === "/api/notifications/rules" && req.method === "PATCH") {
+        const body = await req.json().catch(() => null);
+        if (!body) return json({ error: "Invalid JSON body" }, 400);
+        return json(await handleNotificationRulesUpdate(ctx, body));
+      }
+
+      // --- Agents API ---
+      if (path === "/api/agents/current" && req.method === "GET") {
+        return json(getCurrentAgentJSON(ctx));
+      }
+      if (path === "/api/agents/current" && req.method === "PATCH") {
+        const body = await req.json().catch(() => null);
+        if (!body) return json({ error: "Invalid JSON body" }, 400);
+        return json(await handleAgentSwitch(ctx, body));
+      }
+      if (path === "/api/agents" && req.method === "GET") {
+        return json(await getAgentsJSON(ctx));
+      }
+
+      // --- Health API ---
+      if (path === "/api/health" && req.method === "GET") {
+        return json(getHealthJSON(ctx));
+      }
+
+      // --- A2A API ---
+      if (path === "/api/a2a/status" && req.method === "GET") {
+        return json(getA2AStatusJSON(ctx));
+      }
+      if (path === "/api/a2a/skills" && req.method === "GET") {
+        return json(getA2ASkillsJSON(ctx));
+      }
+      if (path === "/api/a2a/history" && req.method === "GET") {
+        return json(getA2AHistoryJSON(ctx));
       }
 
       // --- Static Files (legacy HTMX dashboard) ---

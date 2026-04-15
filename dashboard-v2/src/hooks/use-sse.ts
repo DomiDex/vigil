@@ -13,12 +13,12 @@ export const SSE_EVENT_MAP = {
   dream_started: [vigilKeys.dreams],
   dream_completed: [vigilKeys.dreams, vigilKeys.memory.stats],
   state_change: [vigilKeys.overview],
-  config_changed: [vigilKeys.config],
+  config_changed: [vigilKeys.config.all],
   task_updated: [vigilKeys.tasks],
   schedule_fired: [vigilKeys.scheduler],
-  webhook: [["webhooks"]],
-  channel: [["channels"]],
-  health: [["health"]],
+  webhook: [vigilKeys.webhooks.all],
+  channel: [vigilKeys.channels.all],
+  health: [vigilKeys.health],
 } as const satisfies Record<string, readonly (readonly unknown[])[]>;
 
 export function useSSE() {

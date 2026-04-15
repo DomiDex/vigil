@@ -1,4 +1,14 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, lazyRouteComponent } from "@tanstack/react-router";
+import { vigilKeys } from "../lib/query-keys";
+import { getChannels } from "../server/functions";
+
 export const Route = createFileRoute("/channels")({
-  component: () => <div>Channels -- Coming in Phase 4</div>,
+  loader: async ({ context }) => {
+    const qc = (context as any).queryClient;
+    await qc.ensureQueryData({ queryKey: vigilKeys.channels.all, queryFn: getChannels });
+  },
+  component: lazyRouteComponent(
+    () => import("../plugins/channels/ChannelsPage"),
+    "default",
+  ),
 });

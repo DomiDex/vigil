@@ -1,13 +1,5 @@
 import type { PluginWidget } from "../types/plugin";
 
-/**
- * Stub loader for plugins not yet ported to the plugin component contract.
- * Route modules export `Route` (TanStack Router convention), not a default
- * component matching WidgetProps. These stubs will be replaced as each
- * plugin is ported in future phases.
- */
-const stub = (loader: () => Promise<any>) => loader as PluginWidget["component"];
-
 export const corePlugins: PluginWidget[] = [
   {
     id: "timeline",
@@ -97,7 +89,7 @@ export const corePlugins: PluginWidget[] = [
     icon: "Settings",
     slot: "tab",
     order: 75,
-    component: stub(() => import("../routes/config")),
+    component: () => import("./config/ConfigPage"),
     sseEvents: ["config_changed"],
     queryKeys: [["config"]],
   },
@@ -107,7 +99,7 @@ export const corePlugins: PluginWidget[] = [
     icon: "Bot",
     slot: "tab",
     order: 80,
-    component: stub(() => import("../routes/agents")),
+    component: () => import("./agents/AgentsPage"),
     queryKeys: [["agents"]],
     featureGate: "VIGIL_AGENT_IDENTITY",
   },
@@ -117,7 +109,7 @@ export const corePlugins: PluginWidget[] = [
     icon: "HeartPulse",
     slot: "tab",
     order: 85,
-    component: stub(() => import("../routes/health")),
+    component: () => import("./health/HealthPage"),
     sseEvents: ["health"],
     queryKeys: [["health"]],
   },
@@ -126,22 +118,20 @@ export const corePlugins: PluginWidget[] = [
     label: "Webhooks",
     icon: "Webhook",
     slot: "tab",
-    order: 90,
-    component: stub(() => import("../routes/webhooks")),
+    order: 88,
+    component: () => import("./webhooks/WebhooksPage"),
     sseEvents: ["webhook"],
     queryKeys: [["webhooks"]],
-    featureGate: "VIGIL_WEBHOOKS",
   },
   {
     id: "channels",
     label: "Channels",
     icon: "Radio",
     slot: "tab",
-    order: 91,
-    component: stub(() => import("../routes/channels")),
+    order: 90,
+    component: () => import("./channels/ChannelsPage"),
     sseEvents: ["channel"],
     queryKeys: [["channels"]],
-    featureGate: "VIGIL_CHANNELS",
   },
   {
     id: "notifications",
@@ -149,10 +139,9 @@ export const corePlugins: PluginWidget[] = [
     icon: "Bell",
     slot: "tab",
     order: 92,
-    component: stub(() => import("../routes/notifications")),
+    component: () => import("./notifications/NotificationsPage"),
     sseEvents: ["message"],
     queryKeys: [["notifications"]],
-    featureGate: "VIGIL_PUSH",
   },
   {
     id: "a2a",
@@ -160,7 +149,7 @@ export const corePlugins: PluginWidget[] = [
     icon: "Network",
     slot: "tab",
     order: 93,
-    component: stub(() => import("../routes/a2a")),
+    component: () => import("./a2a/A2APage"),
     queryKeys: [["a2a"]],
     featureGate: "VIGIL_A2A",
   },
