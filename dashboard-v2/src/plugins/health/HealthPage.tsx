@@ -27,15 +27,16 @@ interface HealthData {
     runtime: string;
     pid: number;
     uptime: number;
-    memory: {
-      heapUsed: number;
-      heapTotal: number;
-      rss: number;
-    };
+    heap: number;
+    rss: number;
+    external: number;
   };
-  databases: DbSize[];
-  errors: ErrorCount[];
-  uptimeSegments: UptimeSegment[];
+  databases: Record<string, number>;
+  errors: {
+    total: number;
+    details: Record<string, any>;
+  };
+  uptimeTimeline: Array<{ start: number; end: number; state: string }>;
 }
 
 function formatUptime(ms: number): string {
@@ -135,20 +136,14 @@ export default function HealthPage({
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-muted-foreground">Heap</span>
                       <span className="font-mono">
-                        {formatBytes(health.process.memory.heapUsed)} /{" "}
-                        {formatBytes(health.process.memory.heapTotal)}
+                        {formatBytes(health.process.heap)}
                       </span>
                     </div>
                     <div className="h-2 rounded-full bg-surface overflow-hidden">
                       <div
                         className="h-full rounded-full bg-vigil transition-all"
                         style={{
-                          width: `${Math.min(
-                            100,
-                            (health.process.memory.heapUsed /
-                              health.process.memory.heapTotal) *
-                              100,
-                          )}%`,
+                          width: `${Math.min(100, health.process.rss > 0 ? (health.process.heap / health.process.rss) * 100 : 0)}%`,
                         }}
                       />
                     </div>
@@ -157,20 +152,13 @@ export default function HealthPage({
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-muted-foreground">RSS</span>
                       <span className="font-mono">
-                        {formatBytes(health.process.memory.rss)}
+                        {formatBytes(health.process.rss)}
                       </span>
                     </div>
                     <div className="h-2 rounded-full bg-surface overflow-hidden">
                       <div
                         className="h-full rounded-full bg-blue-500 transition-all"
-                        style={{
-                          width: `${Math.min(
-                            100,
-                            (health.process.memory.rss /
-                              (health.process.memory.heapTotal * 2)) *
-                              100,
-                          )}%`,
-                        }}
+                        style={{ width: "100%" }}
                       />
                     </div>
                   </div>
@@ -180,7 +168,7 @@ export default function HealthPage({
           </div>
 
           {/* Database Sizes */}
-          {health.databases.length > 0 && (
+          {health.databases && Object.keys(health.databases).length > 0 && (
             <div className="space-y-3">
               <h4 className="text-xs font-medium text-muted-foreground uppercase">
                 Databases
@@ -188,17 +176,17 @@ export default function HealthPage({
               <Card>
                 <CardContent>
                   <div className="space-y-2">
-                    {health.databases.map((db) => (
+                    {Object.entries(health.databases).map(([name, size]) => (
                       <div
-                        key={db.name}
+                        key={name}
                         className="flex items-center justify-between"
                       >
                         <div className="flex items-center gap-2">
                           <Database className="size-3 text-muted-foreground" />
-                          <span className="text-sm">{db.name}</span>
+                          <span className="text-sm">{name}</span>
                         </div>
                         <span className="text-xs font-mono text-muted-foreground">
-                          {formatBytes(db.size)}
+                          {formatBytes(size)}
                         </span>
                       </div>
                     ))}
@@ -209,36 +197,39 @@ export default function HealthPage({
           )}
 
           {/* Error Counts */}
-          {health.errors.length > 0 && (
+          {health.errors && (
             <div className="space-y-3">
               <h4 className="text-xs font-medium text-muted-foreground uppercase">
                 Errors
               </h4>
               <Card>
                 <CardContent>
-                  <div className="space-y-2">
-                    {health.errors.map((err) => (
-                      <div
-                        key={err.type}
-                        className="flex items-center justify-between"
-                      >
-                        <div className="flex items-center gap-2">
-                          <AlertTriangle className="size-3 text-red-400" />
-                          <span className="text-sm">{err.type}</span>
-                        </div>
-                        <Badge variant="outline" className="text-xs text-red-400">
-                          {err.count}
-                        </Badge>
-                      </div>
-                    ))}
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertTriangle className="size-3 text-red-400" />
+                    <span className="text-sm">Total errors</span>
+                    <Badge variant="outline" className="text-xs text-red-400">
+                      {health.errors.total}
+                    </Badge>
                   </div>
+                  {health.errors.details && Object.keys(health.errors.details).length > 0 && (
+                    <div className="space-y-1 mt-2">
+                      {Object.entries(health.errors.details)
+                        .filter(([k]) => k.startsWith("errors."))
+                        .map(([key, val]: [string, any]) => (
+                          <div key={key} className="flex items-center justify-between text-xs">
+                            <span className="text-muted-foreground font-mono">{key}</span>
+                            <span className="font-mono">{val.count ?? 0}</span>
+                          </div>
+                        ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
           )}
 
           {/* Uptime Timeline */}
-          {health.uptimeSegments.length > 0 && (
+          {health.uptimeTimeline && health.uptimeTimeline.length > 0 && (
             <div className="space-y-3">
               <h4 className="text-xs font-medium text-muted-foreground uppercase">
                 Uptime Timeline
@@ -246,31 +237,35 @@ export default function HealthPage({
               <Card>
                 <CardContent>
                   <div className="flex h-6 rounded overflow-hidden gap-px">
-                    {health.uptimeSegments.map((seg, i) => {
-                      const totalSpan =
-                        health.uptimeSegments[health.uptimeSegments.length - 1]
-                          .end - health.uptimeSegments[0].start;
+                    {health.uptimeTimeline.map((seg, i) => {
+                      const first = health.uptimeTimeline[0];
+                      const last = health.uptimeTimeline[health.uptimeTimeline.length - 1];
+                      const totalSpan = last.end - first.start;
                       const segSpan = seg.end - seg.start;
-                      const pct =
-                        totalSpan > 0 ? (segSpan / totalSpan) * 100 : 0;
+                      const pct = totalSpan > 0 ? (segSpan / totalSpan) * 100 : 100;
+                      const stateColor = seg.state === "running" ? "bg-green-500" : seg.state === "sleeping" ? "bg-amber-500" : "bg-red-500";
                       return (
                         <div
                           key={`${seg.start}-${i}`}
-                          className={`${SEGMENT_COLORS[seg.status] ?? "bg-gray-500"} transition-all`}
+                          className={`${stateColor} transition-all`}
                           style={{ width: `${Math.max(pct, 0.5)}%` }}
-                          title={`${seg.status} (${formatUptime(seg.end - seg.start)})`}
+                          title={`${seg.state} (${formatUptime((seg.end - seg.start) / 1000)})`}
                         />
                       );
                     })}
                   </div>
                   <div className="flex items-center gap-4 mt-2">
-                    {Object.entries(SEGMENT_COLORS).map(([status, color]) => (
+                    {[
+                      { state: "running", color: "bg-green-500" },
+                      { state: "sleeping", color: "bg-amber-500" },
+                      { state: "down", color: "bg-red-500" },
+                    ].map(({ state, color }) => (
                       <div
-                        key={status}
+                        key={state}
                         className="flex items-center gap-1.5 text-xs text-muted-foreground"
                       >
                         <div className={`size-2 rounded-full ${color}`} />
-                        <span>{status}</span>
+                        <span>{state}</span>
                       </div>
                     ))}
                   </div>

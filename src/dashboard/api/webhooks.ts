@@ -7,14 +7,21 @@ const subscriptionCreateSchema = z.object({
   expiry: z.number().optional(),
 });
 
+function getProcessor(ctx: DashboardContext) {
+  try {
+    const p = (ctx.daemon as any).webhookProcessor;
+    return p && typeof p.getEvents === "function" ? p : null;
+  } catch {
+    return null;
+  }
+}
+
 export function getWebhookEventsJSON(ctx: DashboardContext) {
-  const processor = (ctx.daemon as any).webhookProcessor;
-  return processor?.getEvents() ?? [];
+  return getProcessor(ctx)?.getEvents() ?? [];
 }
 
 export function getWebhookSubscriptionsJSON(ctx: DashboardContext) {
-  const processor = (ctx.daemon as any).webhookProcessor;
-  return processor?.getSubscriptions() ?? [];
+  return getProcessor(ctx)?.getSubscriptions() ?? [];
 }
 
 export async function handleSubscriptionCreate(
@@ -26,7 +33,7 @@ export async function handleSubscriptionCreate(
     return { error: result.error.issues.map((i) => i.message).join("; ") };
   }
 
-  const processor = (ctx.daemon as any).webhookProcessor;
+  const processor = getProcessor(ctx);
   if (!processor) return { error: "Webhook processor not available" };
 
   const id = processor.addSubscription(result.data);
@@ -37,7 +44,7 @@ export async function handleSubscriptionDelete(
   ctx: DashboardContext,
   id: string,
 ): Promise<{ success?: boolean; error?: string }> {
-  const processor = (ctx.daemon as any).webhookProcessor;
+  const processor = getProcessor(ctx);
   if (!processor) return { error: "Webhook processor not available" };
 
   const removed = processor.removeSubscription(id);
@@ -47,6 +54,5 @@ export async function handleSubscriptionDelete(
 }
 
 export function getWebhookStatusJSON(ctx: DashboardContext) {
-  const processor = (ctx.daemon as any).webhookProcessor;
-  return processor?.getStatus() ?? { running: false, port: 0, eventsReceived: 0, errors: 0 };
+  return getProcessor(ctx)?.getStatus() ?? { running: false, port: 0, eventsReceived: 0, errors: 0 };
 }

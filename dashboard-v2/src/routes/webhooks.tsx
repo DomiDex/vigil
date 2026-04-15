@@ -5,7 +5,7 @@ import { getWebhookStatus, getWebhookSubscriptions, getWebhookEvents } from "../
 export const Route = createFileRoute("/webhooks")({
   loader: async ({ context }) => {
     const qc = (context as any).queryClient;
-    await Promise.all([
+    await Promise.allSettled([
       qc.ensureQueryData({ queryKey: vigilKeys.webhooks.status, queryFn: getWebhookStatus }),
       qc.ensureQueryData({ queryKey: vigilKeys.webhooks.subscriptions, queryFn: getWebhookSubscriptions }),
       qc.ensureQueryData({ queryKey: vigilKeys.webhooks.events, queryFn: getWebhookEvents }),

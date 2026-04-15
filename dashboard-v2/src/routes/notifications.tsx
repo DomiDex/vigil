@@ -5,7 +5,7 @@ import { getNotifications } from "../server/functions";
 export const Route = createFileRoute("/notifications")({
   loader: async ({ context }) => {
     const qc = (context as any).queryClient;
-    await qc.ensureQueryData({ queryKey: vigilKeys.notifications, queryFn: getNotifications });
+    await qc.ensureQueryData({ queryKey: vigilKeys.notifications, queryFn: getNotifications }).catch(() => {});
   },
   component: lazyRouteComponent(
     () => import("../plugins/notifications/NotificationsPage"),

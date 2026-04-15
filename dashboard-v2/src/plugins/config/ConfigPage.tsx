@@ -13,9 +13,10 @@ import { Button } from "../../components/ui/button";
 import type { WidgetProps } from "../../types/plugin";
 
 interface FeatureGate {
+  key: string;
   name: string;
   enabled: boolean;
-  layers: string[];
+  layers: Record<string, boolean>;
 }
 
 interface ConfigData {
@@ -183,15 +184,16 @@ export default function ConfigPage({
                             {gate.name}
                           </span>
                           <div className="flex gap-1">
-                            {gate.layers.map((layer) => (
-                              <Badge
-                                key={layer}
-                                variant="outline"
-                                className={`text-[10px] ${LAYER_VARIANTS[layer] ?? ""}`}
-                              >
-                                {layer}
-                              </Badge>
-                            ))}
+                            {gate.layers && typeof gate.layers === "object" &&
+                              Object.entries(gate.layers).map(([layer, value]) => (
+                                <Badge
+                                  key={layer}
+                                  variant="outline"
+                                  className={`text-[10px] ${value ? (LAYER_VARIANTS[layer] ?? "") : "bg-red-500/20 text-red-400 line-through"}`}
+                                >
+                                  {layer}
+                                </Badge>
+                              ))}
                           </div>
                         </div>
                         <Button

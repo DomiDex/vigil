@@ -22,15 +22,23 @@ const notificationRulesSchema = z
   .partial()
   .strict();
 
+function getNotifier(ctx: DashboardContext) {
+  try {
+    const n = (ctx.daemon as any).pushNotifier;
+    return n && typeof n.getHistory === "function" ? n : null;
+  } catch {
+    return null;
+  }
+}
+
 export function getNotificationsJSON(ctx: DashboardContext) {
-  const notifier = (ctx.daemon as any).pushNotifier;
-  return notifier?.getHistory() ?? [];
+  return getNotifier(ctx)?.getHistory() ?? [];
 }
 
 export async function handleTestNotification(
   ctx: DashboardContext,
 ): Promise<{ success?: boolean; backend?: string; message?: string; error?: string }> {
-  const notifier = (ctx.daemon as any).pushNotifier;
+  const notifier = getNotifier(ctx);
   if (!notifier) return { error: "Push notifier not available" };
 
   return notifier.sendTest();
@@ -45,7 +53,7 @@ export async function handleNotificationRulesUpdate(
     return { error: result.error.issues.map((i) => i.message).join("; ") };
   }
 
-  const notifier = (ctx.daemon as any).pushNotifier;
+  const notifier = getNotifier(ctx);
   if (!notifier) return { error: "Push notifier not available" };
 
   notifier.updateRules(result.data);

@@ -110,11 +110,20 @@ export async function getAgentsJSON(
   return agents;
 }
 
+function getEngine(ctx: DashboardContext) {
+  try {
+    const e = (ctx.daemon as any).decisionEngine;
+    return e && typeof e.getSystemPrompt === "function" ? e : null;
+  } catch {
+    return null;
+  }
+}
+
 export function getCurrentAgentJSON(ctx: DashboardContext) {
-  const engine = (ctx.daemon as any).decisionEngine;
+  const engine = getEngine(ctx);
   return {
     name: engine?.currentAgent ?? "default",
-    systemPrompt: engine?.getSystemPrompt() ?? "",
+    systemPrompt: engine?.getSystemPrompt?.() ?? "",
   };
 }
 
@@ -127,7 +136,7 @@ export async function handleAgentSwitch(
     return { error: result.error.issues.map((i) => i.message).join("; ") };
   }
 
-  const engine = (ctx.daemon as any).decisionEngine;
+  const engine = getEngine(ctx);
   if (!engine) return { error: "Decision engine not available" };
 
   engine.restart(result.data.agentName);

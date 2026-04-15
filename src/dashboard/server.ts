@@ -61,6 +61,8 @@ import {
 import { getAgentsJSON, getCurrentAgentJSON, handleAgentSwitch } from "./api/agents.ts";
 import { getHealthJSON } from "./api/health.ts";
 import { getA2AStatusJSON, getA2ASkillsJSON, getA2AHistoryJSON } from "./api/a2a-status.ts";
+import { loadUserPlugins, getPluginApiRoutes, type PluginApiRoute } from "./plugin-loader.ts";
+import { corePlugins } from "../../dashboard-v2/src/plugins/index.ts";
 import type { DashboardContext } from "./types.ts";
 
 const STATIC_DIR = join(import.meta.dir, "static");
@@ -152,6 +154,22 @@ export function startDashboard(daemon: Daemon, port = 7480): ReturnType<typeof B
 
   // Wire SSE events from daemon
   wireSSE(sse, ctx);
+
+  // Load user plugins from ~/.vigil/plugins/
+  let userPlugins: Awaited<ReturnType<typeof loadUserPlugins>> = [];
+  let pluginApiRoutes: Map<string, PluginApiRoute[]> = new Map();
+
+  loadUserPlugins()
+    .then((plugins) => {
+      userPlugins = plugins;
+      pluginApiRoutes = getPluginApiRoutes();
+      if (plugins.length > 0) {
+        console.log(`[dashboard] Loaded ${plugins.length} user plugin(s): ${plugins.map((p) => p.id).join(", ")}`);
+      }
+    })
+    .catch((err) => {
+      console.warn("[dashboard] Failed to load user plugins:", err);
+    });
 
   const server = Bun.serve({
     port,
@@ -373,7 +391,7 @@ export function startDashboard(daemon: Daemon, port = 7480): ReturnType<typeof B
         return json(await handleConfigUpdate(ctx, body));
       }
       if (path === "/api/config/features" && req.method === "GET") {
-        return json(getFeatureGatesJSON(ctx));
+        return json(await getFeatureGatesJSON(ctx));
       }
       if (req.method === "PATCH") {
         const featureToggleMatch = path.match(/^\/api\/config\/features\/([^/]+)$/);
@@ -473,6 +491,49 @@ export function startDashboard(daemon: Daemon, port = 7480): ReturnType<typeof B
       }
       if (path === "/api/a2a/history" && req.method === "GET") {
         return json(getA2AHistoryJSON(ctx));
+      }
+
+      // --- Plugin Manifest Endpoint ---
+      if (path === "/api/plugins" && req.method === "GET") {
+        const allPlugins = [
+          ...corePlugins.map((p) => ({ ...p, source: "core" as const })),
+          ...userPlugins.map((p) => ({ ...p, source: "user" as const })),
+        ];
+        const metadata = allPlugins
+          .map(({ id, label, icon, slot, order, source, sseEvents, queryKeys }) => ({
+            id,
+            label,
+            icon,
+            slot,
+            order,
+            source,
+            sseEvents: sseEvents ?? [],
+            queryKeys: queryKeys ?? [],
+            hasApiRoutes: pluginApiRoutes.has(id),
+          }))
+          .sort((a, b) => a.order - b.order);
+        return json(metadata);
+      }
+
+      // --- User Plugin API Routes ---
+      if (path.startsWith("/api/plugins/")) {
+        const segments = path.split("/");
+        const pluginId = segments[3];
+        const pluginPath = "/" + segments.slice(4).join("/");
+        const routes = pluginApiRoutes.get(pluginId);
+        if (routes) {
+          const route = routes.find(
+            (r) => r.path === pluginPath && r.method === req.method,
+          );
+          if (route) {
+            try {
+              return await route.handler(req);
+            } catch {
+              return json({ error: "Plugin error" }, 500);
+            }
+          }
+        }
+        return json({ error: "Not found" }, 404);
       }
 
       // --- Static Files (legacy HTMX dashboard) ---

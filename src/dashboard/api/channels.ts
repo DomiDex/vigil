@@ -7,9 +7,17 @@ const channelRegisterSchema = z.object({
   config: z.record(z.string(), z.unknown()).optional().default({}),
 });
 
+function getManager(ctx: DashboardContext) {
+  try {
+    const m = (ctx.daemon as any).channelManager;
+    return m && typeof m.getChannels === "function" ? m : null;
+  } catch {
+    return null;
+  }
+}
+
 export function getChannelsJSON(ctx: DashboardContext) {
-  const manager = (ctx.daemon as any).channelManager;
-  return manager?.getChannels() ?? [];
+  return getManager(ctx)?.getChannels() ?? [];
 }
 
 export async function handleChannelRegister(
@@ -21,7 +29,7 @@ export async function handleChannelRegister(
     return { error: result.error.issues.map((i) => i.message).join("; ") };
   }
 
-  const manager = (ctx.daemon as any).channelManager;
+  const manager = getManager(ctx);
   if (!manager) return { error: "Channel manager not available" };
 
   const id = manager.register(result.data);
@@ -32,7 +40,7 @@ export async function handleChannelDelete(
   ctx: DashboardContext,
   id: string,
 ): Promise<{ success?: boolean; error?: string }> {
-  const manager = (ctx.daemon as any).channelManager;
+  const manager = getManager(ctx);
   if (!manager) return { error: "Channel manager not available" };
 
   const removed = manager.unregister(id);
@@ -42,11 +50,9 @@ export async function handleChannelDelete(
 }
 
 export function getChannelPermissionsJSON(ctx: DashboardContext, channelId: string) {
-  const manager = (ctx.daemon as any).channelManager;
-  return manager?.getPermissions(channelId) ?? { read: false, write: false, execute: false, admin: false, subscribe: false };
+  return getManager(ctx)?.getPermissions(channelId) ?? { read: false, write: false, execute: false, admin: false, subscribe: false };
 }
 
 export function getChannelQueueJSON(ctx: DashboardContext, channelId: string) {
-  const manager = (ctx.daemon as any).channelManager;
-  return manager?.getQueue(channelId) ?? [];
+  return getManager(ctx)?.getQueue(channelId) ?? [];
 }
