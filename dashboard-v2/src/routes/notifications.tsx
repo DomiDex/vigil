@@ -1,6 +1,14 @@
-import { createFileRoute } from "@tanstack/react-router";
-import NotificationsPage from "../plugins/notifications/NotificationsPage";
+import { createFileRoute, lazyRouteComponent } from "@tanstack/react-router";
+import { vigilKeys } from "../lib/query-keys";
+import { getNotifications } from "../server/functions";
 
 export const Route = createFileRoute("/notifications")({
-  component: NotificationsPage,
+  loader: async ({ context }) => {
+    const qc = (context as any).queryClient;
+    await qc.ensureQueryData({ queryKey: vigilKeys.notifications, queryFn: getNotifications });
+  },
+  component: lazyRouteComponent(
+    () => import("../plugins/notifications/NotificationsPage"),
+    "default",
+  ),
 });

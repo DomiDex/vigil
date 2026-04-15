@@ -18,8 +18,13 @@ export function createFakeDashboardContext(opts: FakeContextOptions = {}) {
     tickModel: "claude-haiku-4-5-20251001",
     escalationModel: "claude-sonnet-4-6",
     notifyBackends: [],
-    notificationBackends: [],
-    actionAllowlist: ["git_stash", "run_tests", "run_lint"],
+    actions: {
+      enabled: true,
+      autoApprove: false,
+      confidenceThreshold: 0.8,
+      allowedRepos: ["/home/user/projects/vigil"],
+      allowedActions: ["git_stash", "run_tests", "run_lint"],
+    },
     features: {},
     push: {
       enabled: false,

@@ -368,17 +368,21 @@ export function startDashboard(daemon: Daemon, port = 7480): ReturnType<typeof B
         return json(getConfigJSON(ctx));
       }
       if (path === "/api/config" && req.method === "PUT") {
-        const body = await req.json();
+        const body = await req.json().catch(() => null);
+        if (!body) return json({ error: "Invalid JSON body" }, 400);
         return json(await handleConfigUpdate(ctx, body));
       }
       if (path === "/api/config/features" && req.method === "GET") {
         return json(getFeatureGatesJSON(ctx));
       }
-      const featureToggleMatch = path.match(/^\/api\/config\/features\/([^/]+)$/);
-      if (featureToggleMatch && req.method === "PATCH") {
-        const name = decodeURIComponent(featureToggleMatch[1]);
-        const body = await req.json();
-        return json(await handleFeatureToggle(ctx, name, body.enabled));
+      if (req.method === "PATCH") {
+        const featureToggleMatch = path.match(/^\/api\/config\/features\/([^/]+)$/);
+        if (featureToggleMatch) {
+          const name = decodeURIComponent(featureToggleMatch[1]);
+          const body = await req.json().catch(() => null);
+          if (!body) return json({ error: "Invalid JSON body" }, 400);
+          return json(await handleFeatureToggle(ctx, name, body.enabled));
+        }
       }
 
       // --- Webhooks API ---
@@ -389,12 +393,15 @@ export function startDashboard(daemon: Daemon, port = 7480): ReturnType<typeof B
         return json(getWebhookSubscriptionsJSON(ctx));
       }
       if (path === "/api/webhooks/subscriptions" && req.method === "POST") {
-        const body = await req.json();
+        const body = await req.json().catch(() => null);
+        if (!body) return json({ error: "Invalid JSON body" }, 400);
         return json(await handleSubscriptionCreate(ctx, body));
       }
-      const webhookSubDeleteMatch = path.match(/^\/api\/webhooks\/subscriptions\/([^/]+)$/);
-      if (webhookSubDeleteMatch && req.method === "DELETE") {
-        return json(await handleSubscriptionDelete(ctx, decodeURIComponent(webhookSubDeleteMatch[1])));
+      if (req.method === "DELETE") {
+        const webhookSubDeleteMatch = path.match(/^\/api\/webhooks\/subscriptions\/([^/]+)$/);
+        if (webhookSubDeleteMatch) {
+          return json(await handleSubscriptionDelete(ctx, decodeURIComponent(webhookSubDeleteMatch[1])));
+        }
       }
       if (path === "/api/webhooks/status" && req.method === "GET") {
         return json(getWebhookStatusJSON(ctx));
@@ -405,20 +412,25 @@ export function startDashboard(daemon: Daemon, port = 7480): ReturnType<typeof B
         return json(getChannelsJSON(ctx));
       }
       if (path === "/api/channels" && req.method === "POST") {
-        const body = await req.json();
+        const body = await req.json().catch(() => null);
+        if (!body) return json({ error: "Invalid JSON body" }, 400);
         return json(await handleChannelRegister(ctx, body));
       }
-      const channelDeleteMatch = path.match(/^\/api\/channels\/([^/]+)$/);
-      if (channelDeleteMatch && req.method === "DELETE") {
-        return json(await handleChannelDelete(ctx, decodeURIComponent(channelDeleteMatch[1])));
+      if (req.method === "DELETE") {
+        const channelDeleteMatch = path.match(/^\/api\/channels\/([^/]+)$/);
+        if (channelDeleteMatch) {
+          return json(await handleChannelDelete(ctx, decodeURIComponent(channelDeleteMatch[1])));
+        }
       }
-      const channelPermsMatch = path.match(/^\/api\/channels\/([^/]+)\/permissions$/);
-      if (channelPermsMatch && req.method === "GET") {
-        return json(getChannelPermissionsJSON(ctx, decodeURIComponent(channelPermsMatch[1])));
-      }
-      const channelQueueMatch = path.match(/^\/api\/channels\/([^/]+)\/queue$/);
-      if (channelQueueMatch && req.method === "GET") {
-        return json(getChannelQueueJSON(ctx, decodeURIComponent(channelQueueMatch[1])));
+      if (req.method === "GET") {
+        const channelPermsMatch = path.match(/^\/api\/channels\/([^/]+)\/permissions$/);
+        if (channelPermsMatch) {
+          return json(getChannelPermissionsJSON(ctx, decodeURIComponent(channelPermsMatch[1])));
+        }
+        const channelQueueMatch = path.match(/^\/api\/channels\/([^/]+)\/queue$/);
+        if (channelQueueMatch) {
+          return json(getChannelQueueJSON(ctx, decodeURIComponent(channelQueueMatch[1])));
+        }
       }
 
       // --- Notifications API ---
@@ -429,7 +441,8 @@ export function startDashboard(daemon: Daemon, port = 7480): ReturnType<typeof B
         return json(await handleTestNotification(ctx));
       }
       if (path === "/api/notifications/rules" && req.method === "PATCH") {
-        const body = await req.json();
+        const body = await req.json().catch(() => null);
+        if (!body) return json({ error: "Invalid JSON body" }, 400);
         return json(await handleNotificationRulesUpdate(ctx, body));
       }
 
@@ -438,7 +451,8 @@ export function startDashboard(daemon: Daemon, port = 7480): ReturnType<typeof B
         return json(getCurrentAgentJSON(ctx));
       }
       if (path === "/api/agents/current" && req.method === "PATCH") {
-        const body = await req.json();
+        const body = await req.json().catch(() => null);
+        if (!body) return json({ error: "Invalid JSON body" }, 400);
         return json(await handleAgentSwitch(ctx, body));
       }
       if (path === "/api/agents" && req.method === "GET") {

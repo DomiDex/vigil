@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { DashboardContext } from "../types.ts";
 import { FEATURES } from "../../core/features.ts";
+import { loadConfig } from "../../core/config.ts";
 
 const configUpdateSchema = z
   .object({
@@ -31,8 +32,8 @@ export function getConfigJSON(ctx: DashboardContext) {
     tickModel: config.tickModel,
     escalationModel: config.escalationModel,
     actionGates: (ctx.daemon as any).actionExecutor?.getGateConfig() ?? null,
-    notificationBackends: (config as any).notifyBackends ?? (config as any).notificationBackends ?? [],
-    actionAllowlist: (config as any).actionAllowlist ?? (config as any).actions?.allowedActions ?? [],
+    notificationBackends: config.notifyBackends ?? [],
+    actionAllowlist: config.actions?.allowedActions ?? [],
   };
 }
 
@@ -69,8 +70,9 @@ export async function handleConfigUpdate(
   const merged = { ...existing, ...result.data };
   writePersistedConfig(merged);
 
-  // Update in-memory config
-  Object.assign(ctx.daemon.config, result.data);
+  // Reload full config to pick up defaults + merge, then update daemon in-memory
+  const reloaded = loadConfig();
+  Object.assign(ctx.daemon.config, reloaded);
 
   return { success: true };
 }
