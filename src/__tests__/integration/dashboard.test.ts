@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { startDashboard } from "../../dashboard/server.ts";
-import { createMessage, MessageRouter, type VigilMessage } from "../../messaging/index.ts";
+import { createMessage, type VigilMessage } from "../../messaging/index.ts";
 import { createMockDaemon } from "../helpers/mock-daemon.ts";
 
 let server: ReturnType<typeof Bun.serve>;

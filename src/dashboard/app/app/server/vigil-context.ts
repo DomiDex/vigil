@@ -14,7 +14,3 @@ export function getVigilContext(): DashboardContext {
   if (!globalThis.__vigil_ctx__) throw new Error("Vigil context not initialized");
   return globalThis.__vigil_ctx__;
 }
-
-export function resetVigilContext(): void {
-  globalThis.__vigil_ctx__ = null;
-}

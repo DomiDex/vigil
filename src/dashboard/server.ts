@@ -55,8 +55,13 @@ async function loadStartHandler(): Promise<typeof startHandler> {
       startHandler = mod.default;
       console.log("[dashboard] TanStack Start handler loaded");
     }
-  } catch {
-    console.log("[dashboard] TanStack Start handler not found, serving legacy HTML");
+  } catch (e: unknown) {
+    const code = (e as NodeJS.ErrnoException)?.code;
+    if (code === "MODULE_NOT_FOUND" || code === "ERR_MODULE_NOT_FOUND") {
+      console.log("[dashboard] TanStack Start handler not found, serving legacy HTML");
+    } else {
+      console.error("[dashboard] Failed to load TanStack Start handler:", e);
+    }
   }
   return startHandler;
 }
@@ -349,7 +354,14 @@ export function startDashboard(daemon: Daemon, port = 7480): ReturnType<typeof B
       // --- TanStack Start v2 dashboard ---
       // Serve static assets from the client build
       if (path.startsWith("/assets/")) {
-        const assetPath = join(V2_DIST_DIR, "client", path);
+        const v2ClientDir = join(V2_DIST_DIR, "client");
+        const assetPath = join(v2ClientDir, path);
+
+        // Security: prevent directory traversal
+        if (!assetPath.startsWith(v2ClientDir)) {
+          return new Response("Forbidden", { status: 403 });
+        }
+
         const file = Bun.file(assetPath);
         if (await file.exists()) {
           return new Response(file, {

@@ -2,12 +2,12 @@ import { describe, test, expect, beforeEach } from "bun:test";
 import {
   setVigilContext,
   getVigilContext,
-  resetVigilContext,
 } from "../../dashboard/app/app/server/vigil-context";
 
 describe("vigil-context singleton", () => {
   beforeEach(() => {
-    resetVigilContext();
+    // Reset via globalThis directly — no test hook in production code
+    globalThis.__vigil_ctx__ = null;
   });
 
   test("throws when context not initialized", () => {
