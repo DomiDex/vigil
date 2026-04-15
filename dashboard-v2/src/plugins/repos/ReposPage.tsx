@@ -14,7 +14,7 @@ export default function ReposPage({ activeRepo }: Partial<WidgetProps> = {}) {
     activeRepo ?? null,
   );
 
-  const { data: reposData, isLoading } = useQuery({
+  const { data: reposData, isLoading, isError, error } = useQuery({
     queryKey: vigilKeys.repos.all,
     queryFn: () => getRepos(),
   });
@@ -35,6 +35,11 @@ export default function ReposPage({ activeRepo }: Partial<WidgetProps> = {}) {
         </h3>
         {isLoading && (
           <div className="text-sm text-muted-foreground">Loading...</div>
+        )}
+        {isError && (
+          <div className="text-sm text-destructive p-4">
+            Failed to load data: {error?.message}
+          </div>
         )}
         {repos.map((repo) => (
           <RepoCard

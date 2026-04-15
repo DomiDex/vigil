@@ -16,7 +16,7 @@ export default function DreamsPage({ activeRepo }: Partial<WidgetProps> = {}) {
   );
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: vigilKeys.dreams,
     queryFn: () => getDreams(),
   });
@@ -87,6 +87,11 @@ export default function DreamsPage({ activeRepo }: Partial<WidgetProps> = {}) {
 
       {isLoading && (
         <div className="text-sm text-muted-foreground">Loading...</div>
+      )}
+      {isError && (
+        <div className="text-sm text-destructive p-4">
+          Failed to load data: {error?.message}
+        </div>
       )}
 
       <div className="space-y-3">

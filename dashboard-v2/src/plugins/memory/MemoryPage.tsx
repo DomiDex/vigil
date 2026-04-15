@@ -31,7 +31,7 @@ const STAGE_ICONS: Record<string, typeof Brain> = {
 };
 
 export default function MemoryPage({ activeRepo }: Partial<WidgetProps> = {}) {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: vigilKeys.memory.stats,
     queryFn: () => getMemory(),
   });
@@ -46,6 +46,11 @@ export default function MemoryPage({ activeRepo }: Partial<WidgetProps> = {}) {
 
       {isLoading && (
         <div className="text-sm text-muted-foreground">Loading...</div>
+      )}
+      {isError && (
+        <div className="text-sm text-destructive p-4">
+          Failed to load data: {error?.message}
+        </div>
       )}
 
       {pipeline && (

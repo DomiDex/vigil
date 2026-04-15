@@ -65,7 +65,7 @@ export default function TasksPage({ activeRepo }: Partial<WidgetProps> = {}) {
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: vigilKeys.tasks,
     queryFn: () => getTasks({ data: {} }),
   });
@@ -155,6 +155,11 @@ export default function TasksPage({ activeRepo }: Partial<WidgetProps> = {}) {
 
       {isLoading && (
         <div className="text-sm text-muted-foreground">Loading...</div>
+      )}
+      {isError && (
+        <div className="text-sm text-destructive p-4">
+          Failed to load data: {error?.message}
+        </div>
       )}
 
       <div className="space-y-2">

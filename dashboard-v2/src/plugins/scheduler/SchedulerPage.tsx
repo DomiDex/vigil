@@ -30,7 +30,7 @@ export default function SchedulerPage({
 }: Partial<WidgetProps> = {}) {
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: vigilKeys.scheduler,
     queryFn: () => getScheduler(),
   });
@@ -62,6 +62,11 @@ export default function SchedulerPage({
 
       {isLoading && (
         <div className="text-sm text-muted-foreground">Loading...</div>
+      )}
+      {isError && (
+        <div className="text-sm text-destructive p-4">
+          Failed to load data: {error?.message}
+        </div>
       )}
 
       <div className="space-y-3">

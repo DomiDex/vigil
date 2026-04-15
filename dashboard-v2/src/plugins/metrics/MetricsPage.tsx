@@ -23,7 +23,7 @@ import type { WidgetProps } from "../../types/plugin";
 import type { MetricsData } from "../../types/api";
 
 export default function MetricsPage({ activeRepo }: Partial<WidgetProps> = {}) {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: vigilKeys.metrics,
     queryFn: () => getMetrics(),
     refetchInterval: 30_000,
@@ -33,6 +33,14 @@ export default function MetricsPage({ activeRepo }: Partial<WidgetProps> = {}) {
 
   if (isLoading) {
     return <div className="text-sm text-muted-foreground">Loading metrics...</div>;
+  }
+
+  if (isError) {
+    return (
+      <div className="text-sm text-destructive p-4">
+        Failed to load data: {error?.message}
+      </div>
+    );
   }
 
   if (!metrics) {

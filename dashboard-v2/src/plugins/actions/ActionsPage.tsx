@@ -10,7 +10,7 @@ import type { ActionsData } from "../../types/api";
 export default function ActionsPage({ activeRepo }: Partial<WidgetProps> = {}) {
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: vigilKeys.actions.all,
     queryFn: () => getActions({ data: {} }),
   });
@@ -59,6 +59,11 @@ export default function ActionsPage({ activeRepo }: Partial<WidgetProps> = {}) {
 
       {isLoading && (
         <div className="text-sm text-muted-foreground">Loading...</div>
+      )}
+      {isError && (
+        <div className="text-sm text-destructive p-4">
+          Failed to load data: {error?.message}
+        </div>
       )}
 
       {pending.length > 0 && (
