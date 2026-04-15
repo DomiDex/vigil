@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { QueryClient } from "../../../dashboard-v2/node_modules/@tanstack/react-query";
 import { FakeEventSource } from "../helpers/fake-event-source";
 
@@ -24,9 +24,7 @@ describe("useSSE hook", () => {
   });
 
   it("registers listeners for all SSE_EVENT_MAP entries", async () => {
-    const { SSE_EVENT_MAP } = await import(
-      "../../../dashboard-v2/src/hooks/use-sse"
-    );
+    const { SSE_EVENT_MAP } = await import("../../../dashboard-v2/src/hooks/use-sse");
 
     const source = new FakeEventSource("/api/sse");
 
@@ -48,9 +46,7 @@ describe("useSSE hook", () => {
   });
 
   it("each event type invalidates the correct number of query keys", async () => {
-    const { SSE_EVENT_MAP } = await import(
-      "../../../dashboard-v2/src/hooks/use-sse"
-    );
+    const { SSE_EVENT_MAP } = await import("../../../dashboard-v2/src/hooks/use-sse");
 
     const source = new FakeEventSource("/api/sse");
 
@@ -90,9 +86,7 @@ describe("useSSE hook", () => {
 
   describe("exponential backoff", () => {
     it("computes correct delay sequence: 1s, 2s, 4s, 8s, 16s, 30s, 30s", () => {
-      const delays = [0, 1, 2, 3, 4, 5, 6].map(
-        (retry) => Math.min(1000 * 2 ** retry, 30_000)
-      );
+      const delays = [0, 1, 2, 3, 4, 5, 6].map((retry) => Math.min(1000 * 2 ** retry, 30_000));
       expect(delays).toEqual([1000, 2000, 4000, 8000, 16000, 30000, 30000]);
     });
 

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { routeLabels } from "../../../dashboard-v2/src/components/layout/site-header";
 
 describe("routeLabels", () => {

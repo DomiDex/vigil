@@ -52,7 +52,9 @@ export class FakeEventSource {
   /** Simulate the server sending a named event */
   emit(type: string, data: string = "{}"): void {
     const event = new MessageEvent(type, { data });
-    this.listeners.get(type)?.forEach((fn) => fn(event));
+    this.listeners.get(type)?.forEach((fn) => {
+      fn(event);
+    });
   }
 
   /** Simulate a connection error */

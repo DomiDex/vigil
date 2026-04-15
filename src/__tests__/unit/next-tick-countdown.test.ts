@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 
 describe("NextTickCountdown logic", () => {
   describe("initial value computation", () => {
@@ -20,21 +20,18 @@ describe("NextTickCountdown logic", () => {
 
   describe("display logic", () => {
     it("shows seconds format when > 0", () => {
-      const display = (seconds: number) =>
-        seconds > 0 ? `${seconds}s` : "now";
+      const display = (seconds: number) => (seconds > 0 ? `${seconds}s` : "now");
       expect(display(30)).toBe("30s");
       expect(display(1)).toBe("1s");
     });
 
     it('shows "now" when seconds is 0', () => {
-      const display = (seconds: number) =>
-        seconds > 0 ? `${seconds}s` : "now";
+      const display = (seconds: number) => (seconds > 0 ? `${seconds}s` : "now");
       expect(display(0)).toBe("now");
     });
 
     it('shows "now" for negative values (should not happen but defensive)', () => {
-      const display = (seconds: number) =>
-        seconds > 0 ? `${seconds}s` : "now";
+      const display = (seconds: number) => (seconds > 0 ? `${seconds}s` : "now");
       expect(display(-1)).toBe("now");
     });
   });
