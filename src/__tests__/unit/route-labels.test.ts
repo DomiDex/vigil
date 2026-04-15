@@ -1,18 +1,5 @@
 import { describe, it, expect } from "bun:test";
-
-// Route labels map — matches the spec in site-header.tsx.
-// Once site-header exports routeLabels, update import.
-const routeLabels: Record<string, string> = {
-  "/": "Timeline",
-  "/repos": "Repos",
-  "/dreams": "Dreams",
-  "/tasks": "Tasks",
-  "/actions": "Actions",
-  "/memory": "Memory",
-  "/metrics": "Metrics",
-  "/scheduler": "Scheduler",
-  "/config": "Config",
-};
+import { routeLabels } from "../../../dashboard-v2/src/components/layout/site-header";
 
 describe("routeLabels", () => {
   it("maps / to Timeline", () => {

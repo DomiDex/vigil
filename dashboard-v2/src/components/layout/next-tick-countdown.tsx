@@ -12,21 +12,11 @@ export function NextTickCountdown({ nextTickIn }: NextTickCountdownProps) {
   }, [nextTickIn]);
 
   useEffect(() => {
-    if (seconds <= 0) return;
-
     const interval = setInterval(() => {
-      setSeconds((prev) => {
-        const next = prev - 1;
-        if (next <= 0) {
-          clearInterval(interval);
-          return 0;
-        }
-        return next;
-      });
+      setSeconds((prev) => Math.max(0, prev - 1));
     }, 1000);
-
     return () => clearInterval(interval);
-  }, [seconds]);
+  }, [nextTickIn]);
 
   return (
     <span className="font-mono tabular-nums text-sm text-text-muted">
