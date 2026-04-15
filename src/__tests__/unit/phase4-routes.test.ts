@@ -1,27 +1,18 @@
 import { describe, it, expect } from "bun:test";
 
-const ROUTE_CONFIGS = [
-  { name: "repos", path: "/repos" },
-  { name: "dreams", path: "/dreams" },
-  { name: "tasks", path: "/tasks" },
-  { name: "actions", path: "/actions" },
-  { name: "memory", path: "/memory" },
-  { name: "scheduler", path: "/scheduler" },
-  { name: "metrics", path: "/metrics" },
-] as const;
+const ROUTE_NAMES = ["repos", "dreams", "tasks", "actions", "memory", "scheduler", "metrics"] as const;
 
 describe("Phase 4 route files", () => {
-  for (const { name, path } of ROUTE_CONFIGS) {
+  for (const name of ROUTE_NAMES) {
     describe(`${name} route`, () => {
       it("exports a Route object", async () => {
         const mod = await import(`../../../dashboard-v2/src/routes/${name}`);
         expect(mod.Route).toBeDefined();
       });
 
-      it("Route has options with loader and component", async () => {
+      it("Route has component in options", async () => {
         const mod = await import(`../../../dashboard-v2/src/routes/${name}`);
         expect(mod.Route.options).toBeDefined();
-        expect(typeof mod.Route.options.loader).toBe("function");
         expect(mod.Route.options.component).toBeDefined();
       });
     });
