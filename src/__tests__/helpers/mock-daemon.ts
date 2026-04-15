@@ -32,6 +32,16 @@ export function createMockDaemon() {
         }
         return null;
       },
+      getAllRepoProfiles() {
+        return [
+          {
+            repo: "vigil",
+            summary: "Git monitoring daemon",
+            patterns: ["All LLM calls route through claude -p CLI"],
+            lastUpdated: Date.now(),
+          },
+        ];
+      },
     },
     eventLog: {
       query(_options: any) {
@@ -90,6 +100,53 @@ export function createMockDaemon() {
           knownCommitSHAs: new Set(["b19bbac"]),
         };
       },
+    },
+    taskManager: {
+      list(_opts?: any) {
+        return [];
+      },
+      create(_opts: any) {
+        return { id: "mock-task-1" };
+      },
+      update(_id: string, _opts: any) {},
+      activate(_id: string) {},
+      complete(_id: string, _result?: string) {},
+      fail(_id: string, _reason?: string) {},
+      cancel(_id: string) {},
+    },
+    actionExecutor: {
+      getRecent(_limit = 50) {
+        return [];
+      },
+      getPending() {
+        return [];
+      },
+      getById(_id: string) {
+        return null;
+      },
+      getGateConfig() {
+        return { enabled: false };
+      },
+      isOptedIn: false,
+      async approve(_id: string, _repoPath: string) {},
+      reject(_id: string) {},
+    },
+    scheduler: {
+      list() {
+        return [];
+      },
+      getMsToNext(_id: string) {
+        return null;
+      },
+      getNextRun(_id: string) {
+        return null;
+      },
+      getRunHistory(_limit = 50) {
+        return [];
+      },
+      add(_entry: any) {},
+      remove(_id: string) {},
+      async trigger(_id: string) {},
     },
     tickEngine: {
       currentTick: 42,

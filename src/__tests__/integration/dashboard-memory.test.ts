@@ -242,49 +242,6 @@ describe("GET /api/memory", () => {
   });
 });
 
-describe("GET /api/memory/fragment", () => {
-  test("returns HTML with pipeline visualization", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/memory/fragment`);
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toContain("text/html");
-
-    const html = await res.text();
-
-    // Pipeline boxes
-    expect(html).toContain("Memory Pipeline");
-    expect(html).toContain("EventLog");
-    expect(html).toContain("VectorStore");
-    expect(html).toContain("TopicTier");
-    expect(html).toContain("IndexTier");
-
-    // Search section
-    expect(html).toContain('name="memq"');
-    expect(html).toContain('name="memrepo"');
-
-    // Ask Vigil section
-    expect(html).toContain("Ask Vigil");
-    expect(html).toContain("mem-ask-input");
-    expect(html).toContain("mem-ask-btn");
-
-    // Profiles
-    expect(html).toContain("vigil");
-    expect(html).toContain("Git monitoring");
-  });
-
-  test("contains no emojis", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/memory/fragment`);
-    const html = await res.text();
-    expect(html).toContain("<svg");
-    expect(html).not.toMatch(/[\u{1F300}-\u{1F9FF}]/u);
-  });
-});
-
 describe("GET /api/memory/search", () => {
   test("returns ranked results for matching query", async () => {
     const daemon = createMockDaemon();
@@ -336,39 +293,6 @@ describe("GET /api/memory/search", () => {
   });
 });
 
-describe("GET /api/memory/search/fragment", () => {
-  test("returns HTML results for matching query", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/memory/search/fragment?memq=Decision`);
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toContain("text/html");
-
-    const html = await res.text();
-    expect(html).toContain("bg-surface-light border border-border rounded-lg p-3");
-    expect(html).toContain("Decision");
-  });
-
-  test("shows empty state for no query", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/memory/search/fragment?memq=`);
-    const html = await res.text();
-    expect(html).toContain("Enter a search query");
-  });
-
-  test("shows no results message for non-matching query", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/memory/search/fragment?memq=xyznonexistent`);
-    const html = await res.text();
-    expect(html).toContain("No results");
-  });
-});
-
 describe("GET /api/dreams", () => {
   test("returns dreams array and status", async () => {
     const daemon = createMockDaemon();
@@ -381,52 +305,6 @@ describe("GET /api/dreams", () => {
     expect(data.dreams).toBeArray();
     expect(data.status).toBeTruthy();
     expect(typeof data.status.running).toBe("boolean");
-  });
-});
-
-describe("GET /api/dreams/fragment", () => {
-  test("returns HTML with dream UI elements", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/dreams/fragment`);
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toContain("text/html");
-
-    const html = await res.text();
-
-    // Trigger button
-    expect(html).toContain('hx-post="/api/dreams/trigger"');
-    expect(html).toContain("Trigger Dream");
-
-    // Dream layout
-    expect(html).toContain("flex gap-5");
-    expect(html).toContain("Dream Log");
-    expect(html).toContain("Topic Evolution");
-
-    // Sidebar cards
-    expect(html).toContain("Patterns");
-    expect(html).toContain("Topic Evolution");
-  });
-
-  test("contains no emojis", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/dreams/fragment`);
-    const html = await res.text();
-    expect(html).toContain("<svg");
-    expect(html).not.toMatch(/[\u{1F300}-\u{1F9FF}]/u);
-  });
-
-  test("filters by repo when specified", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/dreams/fragment?dreamrepo=vigil`);
-    expect(res.status).toBe(200);
-    const html = await res.text();
-    expect(html).toContain("flex gap-5");
   });
 });
 
@@ -458,7 +336,7 @@ describe("GET /api/dreams/patterns/:repo", () => {
 });
 
 describe("POST /api/memory/ask", () => {
-  test("returns error for empty question", async () => {
+  test("returns error JSON for empty question", async () => {
     const daemon = createMockDaemon();
     server = await startDashboard(daemon, port);
 
@@ -470,14 +348,13 @@ describe("POST /api/memory/ask", () => {
       body: form,
     });
     expect(res.status).toBe(200);
-    const html = await res.text();
-    expect(html).toContain("bg-error/10 border-l-3 border-l-error");
-    expect(html).toContain("Please enter a question");
+    expect(res.headers.get("content-type")).toContain("application/json");
+    const data = await res.json();
+    expect(data.error).toContain("Please enter a question");
   });
 
-  test("returns error for unknown repo", async () => {
+  test("returns error JSON for unknown repo", async () => {
     const daemon = createMockDaemon();
-    // Remove all repo paths to force "not found"
     daemon.repoPaths = [];
     server = await startDashboard(daemon, port);
 
@@ -489,45 +366,8 @@ describe("POST /api/memory/ask", () => {
       method: "POST",
       body: form,
     });
-    const html = await res.text();
-    expect(html).toContain("bg-error/10 border-l-3 border-l-error");
-    expect(html).toContain("not found");
-  });
-});
-
-describe("Memory tab HTML structure", () => {
-  test("index.html has memory tab panel with HTMX trigger", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/dash`);
-    const html = await res.text();
-
-    expect(html).toContain('id="tab-memory"');
-    expect(html).toContain('id="memory-panel"');
-    expect(html).toContain('hx-get="/api/memory/fragment"');
-  });
-
-  test("index.html has dreams tab panel with HTMX trigger", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/dash`);
-    const html = await res.text();
-
-    expect(html).toContain('id="tab-dreams"');
-    expect(html).toContain('id="dreams-panel"');
-    expect(html).toContain('hx-get="/api/dreams/fragment"');
-  });
-
-  test("tab navigation includes Memory and Dreams tabs", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/dash`);
-    const html = await res.text();
-
-    expect(html).toContain('data-tab="memory"');
-    expect(html).toContain('data-tab="dreams"');
+    expect(res.headers.get("content-type")).toContain("application/json");
+    const data = await res.json();
+    expect(data.error).toContain("not found");
   });
 });

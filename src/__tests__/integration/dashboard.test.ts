@@ -16,69 +16,14 @@ afterEach(() => {
   if (server) server.stop(true);
 });
 
-describe("dashboard static files", () => {
-  test("GET /dash returns 200 with HTML", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/dash`);
-    expect(res.status).toBe(200);
-    const html = await res.text();
-    expect(html).toContain("<!DOCTYPE html>");
-    expect(html).toContain("VIGIL");
-    expect(html).toContain("htmx.min.js");
-  });
-
-  test("GET /dash/ also works", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/dash/`);
-    expect(res.status).toBe(200);
-  });
-
-  test("GET / returns 200 via TanStack Start or redirects to /dash", async () => {
+describe("dashboard root route", () => {
+  test("GET / returns 200 via TanStack Start or 404 if not built", async () => {
     const daemon = createMockDaemon();
     server = await startDashboard(daemon, port);
 
     const res = await fetch(`${baseUrl}/`, { redirect: "manual" });
-    // TanStack Start handler serves HTML at / (200), or fallback redirects to /dash (302)
-    expect([200, 302]).toContain(res.status);
-  });
-
-  test("GET /dash/styles.css returns CSS", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/dash/styles.css`);
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toContain("text/css");
-  });
-
-  test("GET /dash/vendor/htmx.min.js returns JS", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/dash/vendor/htmx.min.js`);
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toContain("javascript");
-  });
-
-  test("GET /dash/nonexistent returns 404", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/dash/nonexistent.html`);
-    expect(res.status).toBe(404);
-  });
-
-  test("directory traversal is blocked", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/dash/../../../etc/passwd`);
-    // Blocked by either 403 (path check) or 404 (resolved path outside static dir)
-    expect([403, 404]).toContain(res.status);
+    // TanStack Start handler serves HTML at / (200), or 404 if not built
+    expect([200, 404]).toContain(res.status);
   });
 });
 
@@ -130,36 +75,6 @@ describe("GET /api/overview", () => {
     const res = await fetch(`${baseUrl}/api/overview`);
     const data = await res.json();
     expect(data.state).toBe("sleeping");
-  });
-});
-
-describe("GET /api/overview/fragment", () => {
-  test("returns HTML partial with top bar", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/overview/fragment`);
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toContain("text/html");
-
-    const html = await res.text();
-    expect(html).toContain("VIGIL");
-    expect(html).toContain("#42");
-    expect(html).toContain("Repos:");
-    expect(html).toContain("Awake");
-    expect(html).toContain("haiku-4-5");
-    expect(html).toContain("e37c73e5");
-  });
-
-  test("contains no emojis", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/overview/fragment`);
-    const html = await res.text();
-    // Should use SVG icons, not emojis
-    expect(html).toContain("<svg");
-    expect(html).not.toMatch(/[\u{1F300}-\u{1F9FF}]/u);
   });
 });
 
@@ -313,96 +228,8 @@ describe("GET /api/timeline", () => {
   });
 });
 
-describe("GET /api/timeline/fragment", () => {
-  test("returns HTML with entry cards", async () => {
-    const daemon = createMockDaemon();
-    seedMessages(daemon, 3);
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/timeline/fragment`);
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toContain("text/html");
-
-    const html = await res.text();
-    expect(html).toContain('id="entry-');
-    expect(html).toContain("expand");
-  });
-
-  test("filter buttons return only matching decisions", async () => {
-    const daemon = createMockDaemon();
-    seedMessages(daemon, 8);
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/timeline/fragment?decision=NOTIFY`);
-    const html = await res.text();
-
-    expect(html).toContain("bg-warning/15 text-warning");
-    expect(html).not.toContain("OBSERVE");
-    expect(html).not.toContain("ACT");
-  });
-
-  test("empty results show empty state", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/timeline/fragment`);
-    const html = await res.text();
-    expect(html).toContain("No messages match your filters");
-  });
-
-  test("infinite scroll sentinel appears when hasMore", async () => {
-    const daemon = createMockDaemon();
-    seedMessages(daemon, 10);
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/timeline/fragment?limit=3`);
-    const html = await res.text();
-    expect(html).toContain('hx-trigger="revealed"');
-    expect(html).toContain("page=2");
-  });
-});
-
-describe("GET /api/timeline/:id/fragment", () => {
-  test("expanded view shows detail panel", async () => {
-    const daemon = createMockDaemon();
-    const messages = seedMessages(daemon, 1);
-    server = await startDashboard(daemon, port);
-
-    const id = messages[0].id;
-    const res = await fetch(`${baseUrl}/api/timeline/${id}/fragment`);
-    expect(res.status).toBe(200);
-
-    const html = await res.text();
-    expect(html).toContain("grid grid-cols-2");
-    expect(html).toContain("Severity");
-    expect(html).toContain("Reply to this observation");
-    expect(html).toContain("collapse");
-  });
-
-  test("collapsed=1 returns collapsed card", async () => {
-    const daemon = createMockDaemon();
-    const messages = seedMessages(daemon, 1);
-    server = await startDashboard(daemon, port);
-
-    const id = messages[0].id;
-    const res = await fetch(`${baseUrl}/api/timeline/${id}/fragment?collapsed=1`);
-    const html = await res.text();
-
-    expect(html).toContain("expand");
-    expect(html).not.toContain("grid grid-cols-2");
-  });
-
-  test("unknown ID returns 404", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/timeline/nonexistent-id/fragment`);
-    expect(res.status).toBe(404);
-  });
-});
-
 describe("POST /api/timeline/:id/reply", () => {
-  test("submits reply and shows confirmation", async () => {
+  test("submits reply and returns JSON", async () => {
     const daemon = createMockDaemon();
     const messages = seedMessages(daemon, 1);
     server = await startDashboard(daemon, port);
@@ -416,17 +243,16 @@ describe("POST /api/timeline/:id/reply", () => {
       body: form,
     });
     expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("application/json");
 
-    const html = await res.text();
-    expect(html).toContain("text-success");
-    expect(html).toContain("Reply sent");
+    const data = await res.json();
+    expect(data.ok).toBe(true);
 
-    // Verify it was added to userReply.pendingReplies
     expect(daemon.userReply.pendingReplies).toHaveLength(1);
     expect(daemon.userReply.pendingReplies[0].userReply).toBe("Looks good, keep watching.");
   });
 
-  test("empty reply shows error", async () => {
+  test("empty reply returns error JSON", async () => {
     const daemon = createMockDaemon();
     const messages = seedMessages(daemon, 1);
     server = await startDashboard(daemon, port);
@@ -440,11 +266,12 @@ describe("POST /api/timeline/:id/reply", () => {
       body: form,
     });
 
-    const html = await res.text();
-    expect(html).toContain("text-error");
+    const data = await res.json();
+    expect(data.ok).toBe(false);
+    expect(data.error).toBeDefined();
   });
 
-  test("reply to unknown message shows error", async () => {
+  test("reply to unknown message returns error JSON", async () => {
     const daemon = createMockDaemon();
     server = await startDashboard(daemon, port);
 
@@ -456,21 +283,9 @@ describe("POST /api/timeline/:id/reply", () => {
       body: form,
     });
 
-    const html = await res.text();
-    expect(html).toContain("text-error");
-  });
-});
-
-describe("timeline contains no emojis", () => {
-  test("entry cards use SVG icons not emojis", async () => {
-    const daemon = createMockDaemon();
-    seedMessages(daemon, 4);
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/timeline/fragment`);
-    const html = await res.text();
-    expect(html).toContain("<svg");
-    expect(html).not.toMatch(/[\u{1F300}-\u{1F9FF}]/u);
+    const data = await res.json();
+    expect(data.ok).toBe(false);
+    expect(data.error).toBeDefined();
   });
 });
 
@@ -493,23 +308,6 @@ describe("GET /api/repos", () => {
     expect(data[0].dirty).toBe(true);
     expect(data[1].name).toBe("other");
     expect(data[1].dirty).toBe(false);
-  });
-});
-
-describe("GET /api/repos/fragment", () => {
-  test("returns HTML nav buttons for repos", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/repos/fragment`);
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toContain("text/html");
-
-    const html = await res.text();
-    expect(html).toContain("data-repo=");
-    expect(html).toContain("vigil");
-    expect(html).toContain("other");
-    expect(html).toContain("main");
   });
 });
 
@@ -540,100 +338,6 @@ describe("GET /api/repos/:name", () => {
 
     const res = await fetch(`${baseUrl}/api/repos/nonexistent`);
     expect(res.status).toBe(404);
-  });
-});
-
-describe("GET /api/repos/:name/fragment", () => {
-  test("returns HTML sidebar panel", async () => {
-    const daemon = createMockDaemon();
-    seedMessages(daemon, 4);
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/repos/vigil/fragment`);
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toContain("text/html");
-
-    const html = await res.text();
-    expect(html).toContain('hx-get="/api/repos/');
-    expect(html).toContain("vigil");
-    expect(html).toContain("main");
-    expect(html).toContain("b19bbac");
-  });
-
-  test("decision bars render proportionally", async () => {
-    const daemon = createMockDaemon();
-    seedMessages(daemon, 4);
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/repos/vigil/fragment`);
-    const html = await res.text();
-
-    expect(html).toContain('style="width:');
-    expect(html).toContain("bg-surface-light");
-    expect(html).toContain("bg-info");
-    expect(html).toContain("bg-warning");
-    expect(html).toContain("bg-vigil");
-    // SILENT should have the highest percentage
-    expect(html).toContain("SILENT");
-  });
-
-  test("patterns and topics sections render", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/repos/vigil/fragment`);
-    const html = await res.text();
-
-    expect(html).toContain("text-xs font-medium");
-    expect(html).toContain("Patterns");
-    expect(html).toContain("Topics");
-    expect(html).toContain("claude -p CLI");
-    expect(html).toContain("Tiered memory pipeline");
-  });
-
-  test("sidebar has 30s auto-refresh via hx-trigger", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/repos/vigil/fragment`);
-    const html = await res.text();
-    expect(html).toContain('hx-trigger="every 30s"');
-  });
-
-  test("dirty repo shows uncommitted section", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/repos/vigil/fragment`);
-    const html = await res.text();
-    expect(html).toContain("Uncommitted Work");
-  });
-
-  test("clean repo hides uncommitted section", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/repos/other/fragment`);
-    const html = await res.text();
-    expect(html).not.toContain("Uncommitted Work");
-  });
-
-  test("returns 404 for unknown repo", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/repos/nonexistent/fragment`);
-    expect(res.status).toBe(404);
-  });
-
-  test("contains no emojis", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/repos/vigil/fragment`);
-    const html = await res.text();
-    expect(html).toContain("<svg");
-    expect(html).not.toMatch(/[\u{1F300}-\u{1F9FF}]/u);
   });
 });
 
@@ -719,58 +423,3 @@ describe("GET /api/metrics", () => {
   });
 });
 
-describe("GET /api/metrics/fragment", () => {
-  test("returns HTML with chart canvases and stats", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/metrics/fragment`);
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toContain("text/html");
-
-    const html = await res.text();
-
-    // Chart canvases present
-    expect(html).toContain('id="chart-decisions"');
-    expect(html).toContain('id="chart-latency"');
-    expect(html).toContain('id="chart-tick-interval"');
-    expect(html).toContain('id="chart-tokens"');
-
-    // Quick stats card
-    expect(html).toContain("Quick Stats");
-    expect(html).toContain("Total Ticks");
-    expect(html).toContain("142");
-    expect(html).toContain("LLM Calls");
-    expect(html).toContain("27");
-
-    // Decision totals
-    expect(html).toContain("Decision Totals");
-    expect(html).toContain("SILENT");
-    expect(html).toContain("80");
-    expect(html).toContain("OBSERVE");
-    expect(html).toContain("14");
-  });
-
-  test("contains no emojis", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/metrics/fragment`);
-    const html = await res.text();
-    expect(html).not.toMatch(/[\u{1F300}-\u{1F9FF}]/u);
-  });
-
-  test("latency stats are formatted correctly", async () => {
-    const daemon = createMockDaemon();
-    server = await startDashboard(daemon, port);
-
-    const res = await fetch(`${baseUrl}/api/metrics/fragment`);
-    const html = await res.text();
-    expect(html).toContain("Avg Latency");
-    expect(html).toContain("P95 Latency");
-    expect(html).toContain("Max Latency");
-    // Values should be formatted as seconds (1340ms = 1.34s)
-    expect(html).toContain("1.34s");
-    expect(html).toContain("3.20s");
-  });
-});

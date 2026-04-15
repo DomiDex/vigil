@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TaskManager } from "../../core/task-manager.ts";
-import { getTasksFragment, getTasksJSON, handleTaskCreate, handleTaskUpdate } from "../../dashboard/api/tasks.ts";
+import { getTasksJSON, handleTaskCreate, handleTaskUpdate } from "../../dashboard/api/tasks.ts";
 import type { DashboardContext } from "../../dashboard/server.ts";
 
 function makeMockCtx(taskManager: TaskManager): DashboardContext {
@@ -93,78 +93,6 @@ describe("Task Dashboard API", () => {
     });
   });
 
-  describe("getTasksFragment", () => {
-    it("returns HTML with empty state message", () => {
-      const html = getTasksFragment(ctx);
-      expect(html).toContain("No tasks yet");
-      expect(html).toContain('hx-post="/api/tasks"');
-      expect(html).toContain("What needs to be done");
-    });
-
-    it("renders task cards", () => {
-      tm.create({ repo: "vigil", title: "Wire webhook processor" });
-      const html = getTasksFragment(ctx);
-      expect(html).toContain("Wire webhook processor");
-      expect(html).toContain("vigil");
-      expect(html).toContain("task-card");
-      expect(html).toContain("Start"); // primary action for pending
-    });
-
-    it("renders wait condition badge", () => {
-      tm.create({
-        repo: "vigil",
-        title: "Wait for commit",
-        waitCondition: { type: "event", eventType: "new_commit" },
-      });
-      const html = getTasksFragment(ctx);
-      expect(html).toContain("Waiting for:");
-      expect(html).toContain("event");
-      expect(html).toContain("new_commit");
-    });
-
-    it("shows correct action buttons for active tasks", () => {
-      const t = tm.create({ repo: "vigil", title: "Active task" });
-      tm.activate(t.id);
-      const html = getTasksFragment(ctx);
-      expect(html).toContain('title="Mark as done"'); // Done button
-      expect(html).toContain('title="Mark as failed"'); // Failed button
-      expect(html).not.toContain("Start\n"); // No start button for active
-    });
-
-    it("shows no action buttons for completed tasks", () => {
-      const t = tm.create({ repo: "vigil", title: "Done task" });
-      tm.activate(t.id);
-      tm.complete(t.id, "ok");
-      const html = getTasksFragment(ctx);
-      expect(html).not.toContain(`/api/tasks/${t.id}/activate`);
-      expect(html).not.toContain(`/api/tasks/${t.id}/complete`);
-    });
-
-    it("renders progress bar with completion rate", () => {
-      const t = tm.create({ repo: "vigil", title: "Done" });
-      tm.activate(t.id);
-      tm.complete(t.id, "ok");
-      tm.create({ repo: "vigil", title: "Pending" });
-
-      const html = getTasksFragment(ctx);
-      expect(html).toContain("bg-success rounded-full");
-      expect(html).toContain("50%");
-    });
-
-    it("includes repo options in create form", () => {
-      const html = getTasksFragment(ctx);
-      expect(html).toContain("vigil");
-      expect(html).toContain("my-app");
-    });
-
-    it("includes inline edit form for non-terminal tasks", () => {
-      tm.create({ repo: "vigil", title: "Editable" });
-      const html = getTasksFragment(ctx);
-      expect(html).toContain("task-edit-form");
-      expect(html).toContain("hx-put");
-    });
-  });
-
   describe("handleTaskCreate", () => {
     it("creates a task from form data", () => {
       const form = new FormData();
@@ -205,14 +133,14 @@ describe("Task Dashboard API", () => {
       expect(tm.list()).toHaveLength(0);
     });
 
-    it("returns updated fragment after creation", () => {
+    it("returns ok after creation", () => {
       const form = new FormData();
       form.set("title", "Check result");
       form.set("repo", "vigil");
 
-      const html = handleTaskCreate(ctx, form);
-      expect(html).toContain("Check result");
-      expect(html).toContain('hx-post="/api/tasks"');
+      const result = handleTaskCreate(ctx, form);
+      expect(result.ok).toBe(true);
+      expect(result.id).toBeDefined();
     });
   });
 
@@ -242,13 +170,13 @@ describe("Task Dashboard API", () => {
       expect(updated?.repo).toBe("my-app");
     });
 
-    it("returns updated fragment", () => {
+    it("returns ok after update", () => {
       const task = tm.create({ repo: "vigil", title: "Before" });
       const form = new FormData();
       form.set("title", "After");
 
-      const html = handleTaskUpdate(ctx, task.id, form);
-      expect(html).toContain("After");
+      const result = handleTaskUpdate(ctx, task.id, form);
+      expect(result.ok).toBe(true);
     });
   });
 
@@ -289,16 +217,17 @@ describe("Task Dashboard API", () => {
     });
   });
 
-  describe("wait conditions display", () => {
+  describe("wait conditions in JSON", () => {
     it("event wait shows type and eventType", () => {
       tm.create({
         repo: "vigil",
         title: "Event wait",
         waitCondition: { type: "event", eventType: "branch_switch" },
       });
-      const html = getTasksFragment(ctx);
-      expect(html).toContain("event");
-      expect(html).toContain("branch_switch");
+      const result = getTasksJSON(ctx);
+      const task = result.tasks.find((t) => t.title === "Event wait");
+      expect(task?.waitCondition?.type).toBe("event");
+      expect(task?.waitCondition?.eventType).toBe("branch_switch");
     });
 
     it("task dependency wait shows type", () => {
@@ -308,9 +237,9 @@ describe("Task Dashboard API", () => {
         title: "Child",
         waitCondition: { type: "task", taskId: parent.id },
       });
-      const html = getTasksFragment(ctx);
-      expect(html).toContain("Waiting for:");
-      expect(html).toContain("Waiting for: task");
+      const result = getTasksJSON(ctx);
+      const child = result.tasks.find((t) => t.title === "Child");
+      expect(child?.waitCondition?.type).toBe("task");
     });
   });
 });

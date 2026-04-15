@@ -1,26 +1,21 @@
-import { join } from "node:path";
 import { setVigilContext } from "../../dashboard-v2/src/server/vigil-context.ts";
 import type { Daemon } from "../core/daemon.ts";
 import {
-  getActionsFragment,
   getActionsJSON,
   getActionsPendingJSON,
   handleApprove,
   handleReject,
 } from "./api/actions.ts";
-import { getDreamPatternsJSON, getDreamsFragment, getDreamsJSON, handleDreamTrigger } from "./api/dreams.ts";
+import { getDreamPatternsJSON, getDreamsJSON, handleDreamTrigger } from "./api/dreams.ts";
 import {
-  getMemoryFragment,
   getMemoryJSON,
-  getMemorySearchFragment,
   getMemorySearchJSON,
   handleAsk,
 } from "./api/memory.ts";
-import { getMetricsFragment, getMetricsJSON } from "./api/metrics.ts";
-import { getOverviewFragment, getOverviewJSON } from "./api/overview.ts";
-import { getRepoDetailJSON, getRepoFragment, getRepoNavFragment, getReposJSON } from "./api/repos.ts";
+import { getMetricsJSON } from "./api/metrics.ts";
+import { getOverviewJSON } from "./api/overview.ts";
+import { getRepoDetailJSON, getReposJSON } from "./api/repos.ts";
 import {
-  getSchedulerFragment,
   getSchedulerJSON,
   handleSchedulerCreate,
   handleSchedulerDelete,
@@ -28,7 +23,6 @@ import {
 } from "./api/scheduler.ts";
 import { SSEManager, wireSSE } from "./api/sse.ts";
 import {
-  getTasksFragment,
   getTasksJSON,
   handleTaskActivate,
   handleTaskCancel,
@@ -37,7 +31,7 @@ import {
   handleTaskFail,
   handleTaskUpdate,
 } from "./api/tasks.ts";
-import { getEntryFragment, getTimelineFragment, getTimelineJSON, handleReply } from "./api/timeline.ts";
+import { getTimelineJSON, handleReply } from "./api/timeline.ts";
 import { getConfigJSON, handleConfigUpdate, getFeatureGatesJSON, handleFeatureToggle } from "./api/config.ts";
 import {
   getWebhookEventsJSON,
@@ -65,9 +59,6 @@ import { loadUserPlugins, getPluginApiRoutes, type PluginApiRoute } from "./plug
 import { corePlugins } from "../../dashboard-v2/src/plugins/index.ts";
 import type { DashboardContext } from "./types.ts";
 
-const STATIC_DIR = join(import.meta.dir, "static");
-const V2_DIST_DIR = join(import.meta.dir, "../../dashboard-v2/dist");
-
 // TanStack Start handler (loaded lazily on first request)
 let startHandler: { fetch: (req: Request) => Response | Promise<Response> } | null = null;
 let startHandlerLoaded = false;
@@ -84,7 +75,7 @@ async function loadStartHandler(): Promise<typeof startHandler> {
   } catch (e: unknown) {
     const code = (e as NodeJS.ErrnoException)?.code;
     if (code === "MODULE_NOT_FOUND" || code === "ERR_MODULE_NOT_FOUND") {
-      console.log("[dashboard] TanStack Start handler not found, serving legacy HTML");
+      console.log("[dashboard] TanStack Start handler not found — build dashboard-v2 first");
     } else {
       console.error("[dashboard] Failed to load TanStack Start handler:", e);
     }
@@ -95,53 +86,10 @@ async function loadStartHandler(): Promise<typeof startHandler> {
 // Re-export from types.ts for backward compatibility
 export type { DashboardContext } from "./types.ts";
 
-const MIME_TYPES: Record<string, string> = {
-  ".html": "text/html; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".js": "application/javascript; charset=utf-8",
-  ".json": "application/json",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-  ".ico": "image/x-icon",
-};
-
-function getMime(path: string): string {
-  const ext = path.slice(path.lastIndexOf("."));
-  return MIME_TYPES[ext] ?? "application/octet-stream";
-}
-
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
     headers: { "Content-Type": "application/json" },
-  });
-}
-
-function html(body: string, status = 200): Response {
-  return new Response(body, {
-    status,
-    headers: { "Content-Type": "text/html; charset=utf-8" },
-  });
-}
-
-async function serveStatic(path: string): Promise<Response> {
-  const filePath = join(STATIC_DIR, path);
-
-  // Security: prevent directory traversal
-  if (!filePath.startsWith(STATIC_DIR)) {
-    return new Response("Forbidden", { status: 403 });
-  }
-
-  const file = Bun.file(filePath);
-  if (!(await file.exists())) {
-    return new Response("Not Found", { status: 404 });
-  }
-
-  return new Response(file, {
-    headers: {
-      "Content-Type": getMime(filePath),
-      "Cache-Control": "public, max-age=3600",
-    },
   });
 }
 
@@ -176,9 +124,6 @@ export async function startDashboard(daemon: Daemon, port = 7480): Promise<Retur
       if (path === "/api/overview") {
         return json(getOverviewJSON(ctx));
       }
-      if (path === "/api/overview/fragment") {
-        return html(getOverviewFragment(ctx));
-      }
       if (path === "/api/sse") {
         return sse.connect();
       }
@@ -187,25 +132,12 @@ export async function startDashboard(daemon: Daemon, port = 7480): Promise<Retur
       if (path === "/api/metrics" && req.method === "GET") {
         return json(getMetricsJSON(ctx));
       }
-      if (path === "/api/metrics/fragment" && req.method === "GET") {
-        return html(getMetricsFragment(ctx));
-      }
 
       // --- Repo API ---
       if (path === "/api/repos" && req.method === "GET") {
         return json(getReposJSON(ctx));
       }
-      if (path === "/api/repos/fragment" && req.method === "GET") {
-        return html(getRepoNavFragment(ctx));
-      }
-      // Match /api/repos/:name/fragment
-      const repoFragMatch = path.match(/^\/api\/repos\/([^/]+)\/fragment$/);
-      if (repoFragMatch && req.method === "GET") {
-        const fragment = await getRepoFragment(ctx, decodeURIComponent(repoFragMatch[1]));
-        if (!fragment) return json({ error: "Repo not found" }, 404);
-        return html(fragment);
-      }
-      // Match /api/repos/:name (must be after /fragment to avoid shadowing)
+      // Match /api/repos/:name (must be after exact matches)
       const repoDetailMatch = path.match(/^\/api\/repos\/([^/]+)$/);
       if (repoDetailMatch && req.method === "GET") {
         const detail = await getRepoDetailJSON(ctx, decodeURIComponent(repoDetailMatch[1]));
@@ -217,65 +149,41 @@ export async function startDashboard(daemon: Daemon, port = 7480): Promise<Retur
       if (path === "/api/timeline" && req.method === "GET") {
         return json(getTimelineJSON(ctx, url));
       }
-      if (path === "/api/timeline/fragment" && req.method === "GET") {
-        return html(getTimelineFragment(ctx, url));
-      }
-      // Match /api/timeline/:id/fragment
-      const entryMatch = path.match(/^\/api\/timeline\/([^/]+)\/fragment$/);
-      if (entryMatch && req.method === "GET") {
-        const id = entryMatch[1];
-        const collapsed = url.searchParams.get("collapsed") === "1";
-        const fragment = getEntryFragment(ctx, id, collapsed);
-        if (!fragment) return json({ error: "Not found" }, 404);
-        return html(fragment);
-      }
       // Match /api/timeline/:id/reply
       const replyMatch = path.match(/^\/api\/timeline\/([^/]+)\/reply$/);
       if (replyMatch && req.method === "POST") {
         const id = replyMatch[1];
         const body = await req.formData().catch(() => null);
         const replyText = body?.get("reply")?.toString() || "";
-        return html(handleReply(ctx, id, replyText));
+        return json(handleReply(ctx, id, replyText));
       }
 
       // --- Memory API ---
       if (path === "/api/memory" && req.method === "GET") {
         return json(getMemoryJSON(ctx));
       }
-      if (path === "/api/memory/fragment" && req.method === "GET") {
-        return html(getMemoryFragment(ctx));
-      }
       if (path === "/api/memory/search" && req.method === "GET") {
         const q = url.searchParams.get("memq") || "";
         const repo = url.searchParams.get("memrepo") || undefined;
         return json(getMemorySearchJSON(ctx, q, repo));
-      }
-      if (path === "/api/memory/search/fragment" && req.method === "GET") {
-        const q = url.searchParams.get("memq") || "";
-        const repo = url.searchParams.get("memrepo") || undefined;
-        return html(getMemorySearchFragment(ctx, q, repo));
       }
       if (path === "/api/memory/ask" && req.method === "POST") {
         const body = await req.formData().catch(() => null);
         const question = body?.get("askq")?.toString() || "";
         const repo = body?.get("askrepo")?.toString() || undefined;
         const result = await handleAsk(ctx, question, repo);
-        return html(result);
+        return json(result);
       }
 
       // --- Dreams API ---
       if (path === "/api/dreams" && req.method === "GET") {
         return json(getDreamsJSON(ctx));
       }
-      if (path === "/api/dreams/fragment" && req.method === "GET") {
-        const repo = url.searchParams.get("dreamrepo") || undefined;
-        return html(getDreamsFragment(ctx, repo));
-      }
       if (path === "/api/dreams/trigger" && req.method === "POST") {
         const body = await req.formData().catch(() => null);
         const repo = body?.get("dreamrepo")?.toString() || undefined;
         const result = await handleDreamTrigger(ctx, repo);
-        return html(result);
+        return json(result);
       }
       // Match /api/dreams/patterns/:repo
       const patternsMatch = path.match(/^\/api\/dreams\/patterns\/([^/]+)$/);
@@ -289,41 +197,36 @@ export async function startDashboard(daemon: Daemon, port = 7480): Promise<Retur
         const repo = url.searchParams.get("repo") || undefined;
         return json(getTasksJSON(ctx, { status, repo }));
       }
-      if (path === "/api/tasks/fragment" && req.method === "GET") {
-        const status = url.searchParams.get("status") || undefined;
-        const repo = url.searchParams.get("repo") || undefined;
-        return html(getTasksFragment(ctx, { status, repo }));
-      }
       if (path === "/api/tasks" && req.method === "POST") {
         const body = await req.formData().catch(() => null);
         if (!body) return json({ error: "Invalid form data" }, 400);
-        return html(handleTaskCreate(ctx, body));
+        return json(handleTaskCreate(ctx, body));
       }
       // Match POST /api/tasks/:id/activate
       const taskActivateMatch = path.match(/^\/api\/tasks\/([^/]+)\/activate$/);
       if (taskActivateMatch && req.method === "POST") {
-        return html(handleTaskActivate(ctx, taskActivateMatch[1]));
+        return json(handleTaskActivate(ctx, taskActivateMatch[1]));
       }
       // Match POST /api/tasks/:id/complete
       const taskCompleteMatch = path.match(/^\/api\/tasks\/([^/]+)\/complete$/);
       if (taskCompleteMatch && req.method === "POST") {
-        return html(handleTaskComplete(ctx, taskCompleteMatch[1]));
+        return json(handleTaskComplete(ctx, taskCompleteMatch[1]));
       }
       // Match POST /api/tasks/:id/fail
       const taskFailMatch = path.match(/^\/api\/tasks\/([^/]+)\/fail$/);
       if (taskFailMatch && req.method === "POST") {
-        return html(handleTaskFail(ctx, taskFailMatch[1]));
+        return json(handleTaskFail(ctx, taskFailMatch[1]));
       }
       // Match PUT /api/tasks/:id (edit)
       const taskUpdateMatch = path.match(/^\/api\/tasks\/([^/]+)$/);
       if (taskUpdateMatch && req.method === "PUT") {
         const body = await req.formData();
-        return html(handleTaskUpdate(ctx, taskUpdateMatch[1], body));
+        return json(handleTaskUpdate(ctx, taskUpdateMatch[1], body));
       }
       // Match DELETE /api/tasks/:id
       const taskDeleteMatch = path.match(/^\/api\/tasks\/([^/]+)$/);
       if (taskDeleteMatch && req.method === "DELETE") {
-        return html(handleTaskCancel(ctx, taskDeleteMatch[1]));
+        return json(handleTaskCancel(ctx, taskDeleteMatch[1]));
       }
 
       // --- Actions API ---
@@ -334,45 +237,38 @@ export async function startDashboard(daemon: Daemon, port = 7480): Promise<Retur
       if (path === "/api/actions/pending" && req.method === "GET") {
         return json(getActionsPendingJSON(ctx));
       }
-      if (path === "/api/actions/fragment" && req.method === "GET") {
-        const status = url.searchParams.get("status") || undefined;
-        return html(getActionsFragment(ctx, { status }));
-      }
       // Match POST /api/actions/:id/approve
       const actionApproveMatch = path.match(/^\/api\/actions\/([^/]+)\/approve$/);
       if (actionApproveMatch && req.method === "POST") {
         const result = await handleApprove(ctx, actionApproveMatch[1]);
-        return html(result);
+        return json(result);
       }
       // Match POST /api/actions/:id/reject
       const actionRejectMatch = path.match(/^\/api\/actions\/([^/]+)\/reject$/);
       if (actionRejectMatch && req.method === "POST") {
-        return html(handleReject(ctx, actionRejectMatch[1]));
+        return json(handleReject(ctx, actionRejectMatch[1]));
       }
 
       // --- Scheduler API ---
       if (path === "/api/scheduler" && req.method === "GET") {
         return json(getSchedulerJSON(ctx));
       }
-      if (path === "/api/scheduler/fragment" && req.method === "GET") {
-        return html(getSchedulerFragment(ctx));
-      }
       if (path === "/api/scheduler" && req.method === "POST") {
         const body = await req.formData().catch(() => null);
         if (!body) return json({ error: "Invalid form data" }, 400);
         const result = await handleSchedulerCreate(ctx, body);
-        return html(result);
+        return json(result);
       }
       // Match DELETE /api/scheduler/:id
       const schedDeleteMatch = path.match(/^\/api\/scheduler\/([^/]+)$/);
       if (schedDeleteMatch && req.method === "DELETE") {
-        return html(handleSchedulerDelete(ctx, schedDeleteMatch[1]));
+        return json(handleSchedulerDelete(ctx, schedDeleteMatch[1]));
       }
       // Match POST /api/scheduler/:id/trigger
       const schedTriggerMatch = path.match(/^\/api\/scheduler\/([^/]+)\/trigger$/);
       if (schedTriggerMatch && req.method === "POST") {
         const result = await handleSchedulerTrigger(ctx, schedTriggerMatch[1]);
-        return html(result);
+        return json(result);
       }
 
       // --- Config API ---
@@ -531,46 +427,10 @@ export async function startDashboard(daemon: Daemon, port = 7480): Promise<Retur
         return json({ error: "Not found" }, 404);
       }
 
-      // --- Static Files (legacy HTMX dashboard) ---
-      if (path === "/dash" || path === "/dash/") {
-        return serveStatic("index.html");
-      }
-      if (path.startsWith("/dash/")) {
-        const subPath = path.slice("/dash/".length);
-        return serveStatic(subPath);
-      }
-
-      // --- TanStack Start v2 dashboard ---
-      // Serve static assets from the client build
-      if (path.startsWith("/assets/")) {
-        const v2ClientDir = join(V2_DIST_DIR, "client");
-        const assetPath = join(v2ClientDir, path);
-
-        // Security: prevent directory traversal
-        if (!assetPath.startsWith(v2ClientDir)) {
-          return new Response("Forbidden", { status: 403 });
-        }
-
-        const file = Bun.file(assetPath);
-        if (await file.exists()) {
-          return new Response(file, {
-            headers: {
-              "Content-Type": getMime(assetPath),
-              "Cache-Control": "public, max-age=31536000, immutable",
-            },
-          });
-        }
-      }
-
-      // Try TanStack Start handler for all other routes
+      // --- TanStack Start handler for all non-API routes ---
       const handler = await loadStartHandler();
       if (handler) {
         return handler.fetch(req);
-      }
-
-      // Fallback: redirect root to legacy dashboard
-      if (path === "/") {
-        return Response.redirect("/dash", 302);
       }
 
       return new Response("Not Found", { status: 404 });
