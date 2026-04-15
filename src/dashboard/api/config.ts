@@ -79,7 +79,7 @@ export async function handleConfigUpdate(
 
 export function getFeatureGatesJSON(ctx: DashboardContext) {
   const gates = (ctx.daemon as any).featureGates;
-  if (!gates) return [];
+  if (!gates || typeof gates.isEnabled !== "function") return [];
 
   return Object.entries(FEATURES).map(([key, _value]) => ({
     key,
