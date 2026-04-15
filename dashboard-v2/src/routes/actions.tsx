@@ -1,4 +1,12 @@
-import { createFileRoute } from "@tanstack/react-router";
-export const Route = createFileRoute("/actions")({
-  component: () => <div>Actions -- Coming in Phase 4</div>,
+import { createFileRoute, lazyRouteComponent } from "@tanstack/react-router";
+import { getActions } from "../server/functions";
+
+const _Route = createFileRoute("/actions")({
+  loader: () => getActions({ data: {} }),
+  component: lazyRouteComponent(
+    () => import("../plugins/actions/ActionsPage"),
+    "default",
+  ),
 });
+(_Route as any)._path = "/actions";
+export const Route = _Route;

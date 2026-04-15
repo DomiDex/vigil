@@ -1,4 +1,12 @@
-import { createFileRoute } from "@tanstack/react-router";
-export const Route = createFileRoute("/memory")({
-  component: () => <div>Memory -- Coming in Phase 4</div>,
+import { createFileRoute, lazyRouteComponent } from "@tanstack/react-router";
+import { getMemory } from "../server/functions";
+
+const _Route = createFileRoute("/memory")({
+  loader: () => getMemory(),
+  component: lazyRouteComponent(
+    () => import("../plugins/memory/MemoryPage"),
+    "default",
+  ),
 });
+(_Route as any)._path = "/memory";
+export const Route = _Route;

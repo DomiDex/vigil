@@ -1,4 +1,12 @@
-import { createFileRoute } from "@tanstack/react-router";
-export const Route = createFileRoute("/scheduler")({
-  component: () => <div>Scheduler -- Coming in Phase 4</div>,
+import { createFileRoute, lazyRouteComponent } from "@tanstack/react-router";
+import { getScheduler } from "../server/functions";
+
+const _Route = createFileRoute("/scheduler")({
+  loader: () => getScheduler(),
+  component: lazyRouteComponent(
+    () => import("../plugins/scheduler/SchedulerPage"),
+    "default",
+  ),
 });
+(_Route as any)._path = "/scheduler";
+export const Route = _Route;
