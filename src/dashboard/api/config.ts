@@ -77,16 +77,30 @@ export async function handleConfigUpdate(
   return { success: true };
 }
 
-export function getFeatureGatesJSON(ctx: DashboardContext) {
+export async function getFeatureGatesJSON(ctx: DashboardContext) {
   const gates = (ctx.daemon as any).featureGates;
-  if (!gates || typeof gates.isEnabled !== "function") return [];
+  if (!gates) return [];
 
-  return Object.entries(FEATURES).map(([key, _value]) => ({
-    key,
-    name: key,
-    enabled: gates.isEnabled(key),
-    layers: gates.diagnose(key),
-  }));
+  const results = [];
+  for (const [key, _value] of Object.entries(FEATURES)) {
+    // Use sync isEnabledCached if available, otherwise await async isEnabled
+    const enabled = typeof gates.isEnabledCached === "function"
+      ? gates.isEnabledCached(key)
+      : typeof gates.isEnabled === "function"
+        ? await gates.isEnabled(key)
+        : false;
+
+    // diagnose is async in real FeatureGates
+    let layers = { build: true, config: true, runtime: true, session: true };
+    if (typeof gates.diagnose === "function") {
+      try {
+        layers = await gates.diagnose(key);
+      } catch {}
+    }
+
+    results.push({ key, name: key, enabled, layers });
+  }
+  return results;
 }
 
 export async function handleFeatureToggle(

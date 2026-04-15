@@ -107,14 +107,14 @@ describe("config API", () => {
   });
 
   describe("getFeatureGatesJSON", () => {
-    it("returns array of feature gates", () => {
-      const result = getFeatureGatesJSON(ctx);
+    it("returns array of feature gates", async () => {
+      const result = await getFeatureGatesJSON(ctx);
       expect(result).toBeArray();
       expect(result.length).toBeGreaterThan(0);
     });
 
-    it("each gate has key, enabled, and layers", () => {
-      const result = getFeatureGatesJSON(ctx);
+    it("each gate has key, enabled, and layers", async () => {
+      const result = await getFeatureGatesJSON(ctx);
       for (const gate of result) {
         expect(gate.key).toBeString();
         expect(typeof gate.enabled).toBe("boolean");

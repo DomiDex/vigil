@@ -373,7 +373,7 @@ export function startDashboard(daemon: Daemon, port = 7480): ReturnType<typeof B
         return json(await handleConfigUpdate(ctx, body));
       }
       if (path === "/api/config/features" && req.method === "GET") {
-        return json(getFeatureGatesJSON(ctx));
+        return json(await getFeatureGatesJSON(ctx));
       }
       if (req.method === "PATCH") {
         const featureToggleMatch = path.match(/^\/api\/config\/features\/([^/]+)$/);
