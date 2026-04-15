@@ -5,7 +5,7 @@ import { getHealth } from "../server/functions";
 export const Route = createFileRoute("/health")({
   loader: async ({ context }) => {
     const qc = (context as any).queryClient;
-    await qc.ensureQueryData({ queryKey: vigilKeys.health, queryFn: getHealth });
+    await qc.ensureQueryData({ queryKey: vigilKeys.health, queryFn: getHealth }).catch(() => {});
   },
   component: lazyRouteComponent(
     () => import("../plugins/health/HealthPage"),

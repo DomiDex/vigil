@@ -5,7 +5,7 @@ import { getChannels } from "../server/functions";
 export const Route = createFileRoute("/channels")({
   loader: async ({ context }) => {
     const qc = (context as any).queryClient;
-    await qc.ensureQueryData({ queryKey: vigilKeys.channels.all, queryFn: getChannels });
+    await qc.ensureQueryData({ queryKey: vigilKeys.channels.all, queryFn: getChannels }).catch(() => {});
   },
   component: lazyRouteComponent(
     () => import("../plugins/channels/ChannelsPage"),

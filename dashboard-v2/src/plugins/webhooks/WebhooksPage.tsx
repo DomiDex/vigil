@@ -1,11 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Webhook, Plus, Trash2, RefreshCw } from "lucide-react";
+import { Webhook, Trash2, RefreshCw } from "lucide-react";
 import { vigilKeys } from "../../lib/query-keys";
 import {
   getWebhookEvents,
   getWebhookSubscriptions,
   getWebhookStatus,
-  createWebhookSubscription,
   deleteWebhookSubscription,
 } from "../../server/functions";
 import { Card, CardContent } from "../../components/ui/card";
@@ -13,33 +12,28 @@ import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import type { WidgetProps } from "../../types/plugin";
 
-interface WebhookEvent {
-  id: string;
-  type: string;
-  repo: string;
-  payload: string;
-  receivedAt: string;
-  status: "ok" | "error";
+interface WebhookStatus {
+  running: boolean;
+  port: number;
+  eventsReceived: number;
+  errors: number;
+  signatureFailures?: number;
+  lastEventAt?: number;
 }
 
 interface WebhookSubscription {
   id: string;
   repo: string;
   eventTypes: string[];
-  url: string;
-  createdAt: string;
+  expiry?: number;
 }
 
-interface WebhookStatus {
-  running: boolean;
-  port: number;
-  totalEvents: number;
-  uptime: number;
-  healthStats: {
-    successRate: number;
-    avgLatency: number;
-    errorsLast24h: number;
-  };
+interface WebhookEvent {
+  id?: string;
+  type: string;
+  repo?: string;
+  status?: string;
+  receivedAt?: string;
 }
 
 export default function WebhooksPage({
@@ -69,20 +63,8 @@ export default function WebhooksPage({
   });
 
   const status = statusData as WebhookStatus | undefined;
-  const subscriptions = (subsData as WebhookSubscription[] | undefined) ?? [];
-  const events = (eventsData as WebhookEvent[] | undefined) ?? [];
-
-  const createMut = useMutation({
-    mutationFn: (payload: {
-      repo: string;
-      eventTypes: string[];
-      url: string;
-    }) => createWebhookSubscription({ data: payload }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: vigilKeys.webhooks.subscriptions,
-      }),
-  });
+  const subscriptions = Array.isArray(subsData) ? (subsData as WebhookSubscription[]) : [];
+  const events = Array.isArray(eventsData) ? (eventsData as WebhookEvent[]) : [];
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => deleteWebhookSubscription({ data: { id } }),
@@ -123,45 +105,23 @@ export default function WebhooksPage({
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <div className="space-y-1">
                 <div className="text-xs text-muted-foreground">Port</div>
-                <div className="text-sm font-mono">{status.port}</div>
+                <div className="text-sm font-mono">{status.port || "N/A"}</div>
               </div>
               <div className="space-y-1">
-                <div className="text-xs text-muted-foreground">
-                  Total Events
-                </div>
-                <div className="text-sm font-mono">{status.totalEvents}</div>
+                <div className="text-xs text-muted-foreground">Events Received</div>
+                <div className="text-sm font-mono">{status.eventsReceived ?? 0}</div>
               </div>
               <div className="space-y-1">
-                <div className="text-xs text-muted-foreground">
-                  Success Rate
-                </div>
-                <div className="text-sm font-mono">
-                  {(status.healthStats.successRate * 100).toFixed(1)}%
-                </div>
+                <div className="text-xs text-muted-foreground">Errors</div>
+                <div className="text-sm font-mono">{status.errors ?? 0}</div>
               </div>
-              <div className="space-y-1">
-                <div className="text-xs text-muted-foreground">
-                  Avg Latency
+              {status.signatureFailures !== undefined && (
+                <div className="space-y-1">
+                  <div className="text-xs text-muted-foreground">Sig Failures</div>
+                  <div className="text-sm font-mono">{status.signatureFailures}</div>
                 </div>
-                <div className="text-sm font-mono">
-                  {status.healthStats.avgLatency}ms
-                </div>
-              </div>
+              )}
             </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Health Stats */}
-      {status && status.healthStats.errorsLast24h > 0 && (
-        <Card>
-          <CardContent className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">
-              Errors (last 24h)
-            </span>
-            <Badge variant="outline" className="text-xs text-red-400">
-              {status.healthStats.errorsLast24h}
-            </Badge>
           </CardContent>
         </Card>
       )}
@@ -183,7 +143,7 @@ export default function WebhooksPage({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium">{sub.repo}</span>
-                    {sub.eventTypes.map((et) => (
+                    {sub.eventTypes?.map((et) => (
                       <Badge
                         key={et}
                         variant="secondary"
@@ -192,9 +152,6 @@ export default function WebhooksPage({
                         {et}
                       </Badge>
                     ))}
-                  </div>
-                  <div className="text-xs text-muted-foreground font-mono mt-0.5 truncate">
-                    {sub.url}
                   </div>
                 </div>
                 <Button
@@ -223,25 +180,24 @@ export default function WebhooksPage({
             Recent Events
           </h4>
           <div className="space-y-2">
-            {events.map((evt) => (
-              <Card key={evt.id}>
+            {events.map((evt, i) => (
+              <Card key={evt.id ?? i}>
                 <CardContent className="flex items-center justify-between text-sm">
                   <div className="flex items-center gap-2">
                     <RefreshCw className="size-3 text-muted-foreground" />
                     <span className="font-medium">{evt.type}</span>
-                    <span className="text-muted-foreground">{evt.repo}</span>
+                    {evt.repo && (
+                      <span className="text-muted-foreground">{evt.repo}</span>
+                    )}
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  {evt.status && (
                     <Badge
                       variant="outline"
                       className={`text-[10px] ${evt.status === "ok" ? "text-green-400" : "text-red-400"}`}
                     >
                       {evt.status}
                     </Badge>
-                    <span>
-                      {new Date(evt.receivedAt).toLocaleString()}
-                    </span>
-                  </div>
+                  )}
                 </CardContent>
               </Card>
             ))}
