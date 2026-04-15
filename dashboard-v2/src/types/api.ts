@@ -33,7 +33,7 @@ export interface TimelineMessage {
   message: string;
   confidence: number;
   metadata: Record<string, unknown>;
-  attachments: Record<string, unknown>;
+  attachments: Record<string, unknown> | unknown[];
 }
 
 export interface TimelineData {
