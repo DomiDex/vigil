@@ -1,16 +1,11 @@
-import { describe, it, expect } from "bun:test";
-import { renderToString } from "react-dom/server";
+import { describe, expect, it } from "bun:test";
 import { createElement } from "react";
-import {
-  decisionConfig,
-  DecisionBadge,
-} from "../../../dashboard-v2/src/components/vigil/decision-badge";
+import { renderToString } from "react-dom/server";
+import { DecisionBadge, decisionConfig } from "../../../dashboard-v2/src/components/vigil/decision-badge";
 
 describe("decisionConfig", () => {
   it("has entries for all 4 decision types", () => {
-    expect(Object.keys(decisionConfig).sort()).toEqual(
-      ["ACT", "NOTIFY", "OBSERVE", "SILENT"]
-    );
+    expect(Object.keys(decisionConfig).sort()).toEqual(["ACT", "NOTIFY", "OBSERVE", "SILENT"]);
   });
 
   it("SILENT has Moon icon and muted styling", () => {
@@ -55,8 +50,8 @@ describe("DecisionBadge", () => {
 
   it("falls back to SILENT for unknown decision type", () => {
     const html = renderToString(createElement(DecisionBadge, { decision: "UNKNOWN_TYPE" }));
-    expect(html).toBeDefined();
-    expect(html.length).toBeGreaterThan(0);
+    expect(html).toContain("SILENT");
+    expect(html).not.toContain("UNKNOWN_TYPE");
   });
 
   it("renders all four decision types without error", () => {

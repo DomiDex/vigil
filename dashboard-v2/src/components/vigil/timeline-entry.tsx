@@ -10,7 +10,7 @@ export function TimelineEntry({ message }: { message: TimelineMessage }) {
 
   const decision = message.decision || "SILENT";
   const confidence = message.confidence;
-  const repo = (message.source as Record<string, unknown>)?.repo as string | undefined;
+  const repo = typeof message.source.repo === "string" ? message.source.repo : undefined;
 
   return (
     <Card className="bg-surface border-border hover:border-border-light transition-colors">

@@ -15,7 +15,7 @@ export function PluginSlot({ plugin, widgetProps }: PluginSlotProps) {
 
   const LazyComponent = useMemo(
     () => (isClient ? lazy(plugin.component) : null),
-    [plugin.id, isClient]
+    [plugin.component, isClient]
   );
 
   return (

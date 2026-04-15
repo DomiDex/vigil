@@ -1,6 +1,6 @@
-import { describe, it, expect } from "bun:test";
-import { renderToString } from "react-dom/server";
+import { describe, expect, it } from "bun:test";
 import { createElement } from "react";
+import { renderToString } from "react-dom/server";
 import { TimelineEntry } from "../../../dashboard-v2/src/components/vigil/timeline-entry";
 import type { TimelineMessage } from "../../../dashboard-v2/src/types/api";
 
@@ -22,46 +22,34 @@ function createFakeMessage(overrides?: Partial<TimelineMessage>): TimelineMessag
 
 describe("TimelineEntry", () => {
   it("renders collapsed entry with line-clamp-2", () => {
-    const html = renderToString(
-      createElement(TimelineEntry, { message: createFakeMessage() })
-    );
+    const html = renderToString(createElement(TimelineEntry, { message: createFakeMessage() }));
     expect(html).toContain("line-clamp-2");
   });
 
   it("renders decision badge for message decision type", () => {
-    const html = renderToString(
-      createElement(TimelineEntry, { message: createFakeMessage({ decision: "ACT" }) })
-    );
+    const html = renderToString(createElement(TimelineEntry, { message: createFakeMessage({ decision: "ACT" }) }));
     expect(html).toContain("ACT");
   });
 
   it("renders repo name from message source", () => {
-    const html = renderToString(
-      createElement(TimelineEntry, { message: createFakeMessage() })
-    );
+    const html = renderToString(createElement(TimelineEntry, { message: createFakeMessage() }));
     expect(html).toContain("vigil");
   });
 
   it("renders confidence percentage", () => {
-    const html = renderToString(
-      createElement(TimelineEntry, { message: createFakeMessage({ confidence: 0.85 }) })
-    );
+    const html = renderToString(createElement(TimelineEntry, { message: createFakeMessage({ confidence: 0.85 }) }));
     // React SSR inserts comment nodes between adjacent text: "85<!-- -->%"
     expect(html).toContain("85");
   });
 
   it("renders timestamp", () => {
-    const html = renderToString(
-      createElement(TimelineEntry, { message: createFakeMessage() })
-    );
+    const html = renderToString(createElement(TimelineEntry, { message: createFakeMessage() }));
     // toLocaleString renders differently per environment; just verify timestamp region present
     expect(html).toContain("2026");
   });
 
   it("defaults to SILENT when no decision in metadata", () => {
-    const html = renderToString(
-      createElement(TimelineEntry, { message: createFakeMessage({ decision: "" }) })
-    );
+    const html = renderToString(createElement(TimelineEntry, { message: createFakeMessage({ decision: "" }) }));
     expect(html).toContain("SILENT");
   });
 });

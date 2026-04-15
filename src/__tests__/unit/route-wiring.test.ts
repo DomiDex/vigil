@@ -1,11 +1,8 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const routeSource = readFileSync(
-  join(import.meta.dir, "../../../dashboard-v2/src/routes/index.tsx"),
-  "utf-8"
-);
+const routeSource = readFileSync(join(import.meta.dir, "../../../dashboard-v2/src/routes/index.tsx"), "utf-8");
 
 describe("Index route wiring", () => {
   it("uses lazyRouteComponent", () => {

@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";
+import { Button } from "../../components/ui/button";
 import { vigilKeys } from "../../lib/query-keys";
 import { getTimeline, getRepos } from "../../server/functions";
 import { TimelineEntry } from "../../components/vigil/timeline-entry";
 import { DecisionFilter } from "./DecisionFilter";
 import type { WidgetProps } from "../../types/plugin";
+
+const PAGE_SIZE = 20;
 
 interface Filters {
   status?: string;
@@ -14,13 +17,17 @@ interface Filters {
   page?: number;
 }
 
-export default function TimelinePage({ activeRepo }: WidgetProps) {
+export default function TimelinePage({ activeRepo }: Partial<WidgetProps> = {}) {
   const [filters, setFilters] = useState<Filters>({
     repo: activeRepo ?? undefined,
     page: 1,
   });
   const [searchInput, setSearchInput] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setFilters((f) => ({ ...f, repo: activeRepo ?? undefined, page: 1 }));
+  }, [activeRepo]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -46,7 +53,7 @@ export default function TimelinePage({ activeRepo }: WidgetProps) {
   const page = filters.page ?? 1;
   const hasMore = data?.hasMore ?? false;
   const total = data?.total ?? 0;
-  const pageCount = Math.max(1, Math.ceil(total / 20));
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <div className="space-y-4">
@@ -110,25 +117,25 @@ export default function TimelinePage({ activeRepo }: WidgetProps) {
       </div>
 
       <div className="flex items-center justify-between">
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="xs"
           disabled={page <= 1}
           onClick={() => setFilters((f) => ({ ...f, page: page - 1 }))}
-          className="inline-flex items-center justify-center rounded-md bg-muted px-3 py-1.5 text-xs font-medium disabled:opacity-50"
         >
           Previous
-        </button>
+        </Button>
         <span className="text-xs text-muted-foreground">
           {page} / {pageCount}
         </span>
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="xs"
           disabled={!hasMore}
           onClick={() => setFilters((f) => ({ ...f, page: page + 1 }))}
-          className="inline-flex items-center justify-center rounded-md bg-muted px-3 py-1.5 text-xs font-medium disabled:opacity-50"
         >
           Next
-        </button>
+        </Button>
       </div>
     </div>
   );

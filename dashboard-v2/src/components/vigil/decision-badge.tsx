@@ -37,7 +37,7 @@ export function DecisionBadge({ decision }: { decision: string }) {
   return (
     <Badge variant={config.variant} className={config.className}>
       <Icon className="size-3" />
-      {decision || "SILENT"}
+      {decision in decisionConfig ? decision : "SILENT"}
     </Badge>
   );
 }

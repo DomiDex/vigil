@@ -1,9 +1,9 @@
-import { describe, it, expect } from "bun:test";
-import { renderToString } from "react-dom/server";
-import { createElement } from "react";
+import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { PluginSlot, PluginError } from "../../../dashboard-v2/src/components/vigil/plugin-slot";
+import { createElement } from "react";
+import { renderToString } from "react-dom/server";
+import { PluginError, PluginSlot } from "../../../dashboard-v2/src/components/vigil/plugin-slot";
 import type { PluginWidget } from "../../../dashboard-v2/src/types/plugin";
 
 function createFakePlugin(overrides?: Partial<PluginWidget>): PluginWidget {
@@ -30,7 +30,7 @@ describe("PluginSlot", () => {
       createElement(PluginSlot, {
         plugin,
         widgetProps: { activeRepo: null, queryClient: {} as any },
-      })
+      }),
     );
     // On server, should render skeleton fallback (not the plugin component)
     expect(html).toBeDefined();
@@ -40,7 +40,7 @@ describe("PluginSlot", () => {
   it("plugin-slot source contains SSR guard", () => {
     const source = readFileSync(
       join(import.meta.dir, "../../../dashboard-v2/src/components/vigil/plugin-slot.tsx"),
-      "utf-8"
+      "utf-8",
     );
     expect(source).toContain("typeof window");
   });
@@ -48,9 +48,7 @@ describe("PluginSlot", () => {
 
 describe("PluginError", () => {
   it("renders plugin id in error message", () => {
-    const html = renderToString(
-      createElement(PluginError, { pluginId: "broken-plugin" })
-    );
+    const html = renderToString(createElement(PluginError, { pluginId: "broken-plugin" }));
     expect(html).toContain("broken-plugin");
   });
 });

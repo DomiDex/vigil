@@ -1,6 +1,6 @@
-import { describe, it, expect } from "bun:test";
-import { renderToString } from "react-dom/server";
+import { describe, expect, it } from "bun:test";
 import { createElement } from "react";
+import { renderToString } from "react-dom/server";
 import { ErrorBoundary } from "../../../dashboard-v2/src/components/vigil/error-boundary";
 
 function GoodChild() {
@@ -13,8 +13,8 @@ describe("ErrorBoundary", () => {
       createElement(
         ErrorBoundary,
         { fallback: createElement("div", null, "Error fallback") },
-        createElement(GoodChild)
-      )
+        createElement(GoodChild),
+      ),
     );
     expect(html).toContain("Hello");
     expect(html).not.toContain("Error fallback");
