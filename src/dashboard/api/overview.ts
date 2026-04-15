@@ -1,4 +1,4 @@
-import type { DashboardContext } from "../server.ts";
+import type { DashboardContext } from "../types.ts";
 
 function formatUptime(ms: number): string {
   const totalSec = Math.floor(ms / 1000);

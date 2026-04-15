@@ -1,5 +1,5 @@
 import type { ActionRequest, ActionStatus, ActionTier } from "../../action/executor.ts";
-import type { DashboardContext } from "../server.ts";
+import type { DashboardContext } from "../types.ts";
 
 // ── Helpers ──
 

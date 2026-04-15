@@ -38,7 +38,7 @@ describe("server functions -- reads", () => {
         "../../../dashboard-v2/src/server/functions.ts"
       );
 
-      const result = await getOverview();
+      await getOverview();
 
       expect(handlerSpy).toHaveBeenCalledTimes(1);
       expect(handlerSpy.mock.calls[0][0]).toBe(fakeCtx);
@@ -60,7 +60,7 @@ describe("server functions -- reads", () => {
         "../../../dashboard-v2/src/server/functions.ts"
       );
 
-      const result = await getRepoDetail({ data: { name: "vigil" } });
+      await getRepoDetail({ data: { name: "vigil" } });
 
       expect(handlerSpy).toHaveBeenCalledTimes(1);
       expect(handlerSpy.mock.calls[0][0]).toBe(fakeCtx);

@@ -112,6 +112,14 @@ export interface DreamPatternsData {
 }
 
 // Tasks
+export interface WaitCondition {
+  type: "event" | "task" | "schedule";
+  eventType?: string;
+  filter?: string;
+  taskId?: string;
+  cron?: string;
+}
+
 export interface TaskItem {
   id: string;
   title: string;
@@ -120,6 +128,8 @@ export interface TaskItem {
   repo?: string;
   createdAt: string;
   updatedAt: string;
+  waitCondition: WaitCondition | null;
+  updatedRelative?: string;
 }
 
 export interface TasksData {
@@ -129,15 +139,23 @@ export interface TasksData {
 }
 
 // Actions
+export type ActionType = "shell" | "git" | "file" | "api";
+
 export interface ActionRequest {
   id: string;
-  type: string;
-  tier: ActionTier;
-  status: ActionStatus;
-  description: string;
   repo: string;
+  command: string;
+  args: string[];
+  tier: ActionTier;
+  actionType?: ActionType;
+  reason: string;
+  confidence: number;
+  status: ActionStatus;
+  result?: string;
+  error?: string;
+  gateResults?: Record<string, boolean>;
   createdAt: number;
-  command?: string;
+  updatedAt: number;
   timeFormatted?: string;
   timeRelative?: string;
 }

@@ -1,5 +1,5 @@
 import type { TaskStatus } from "../../core/task-manager.ts";
-import type { DashboardContext } from "../server.ts";
+import type { DashboardContext } from "../types.ts";
 
 // ── Helpers ──
 

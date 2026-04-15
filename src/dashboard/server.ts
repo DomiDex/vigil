@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { Daemon } from "../core/daemon.ts";
+import type { DashboardContext } from "./types.ts";
 import { getDreamPatternsJSON, getDreamsFragment, getDreamsJSON, handleDreamTrigger } from "./api/dreams.ts";
 import {
   getMemoryFragment,
@@ -66,11 +67,8 @@ async function loadStartHandler(): Promise<typeof startHandler> {
   return startHandler;
 }
 
-/** Shared context passed to all API handlers */
-export interface DashboardContext {
-  daemon: Daemon;
-  sse: SSEManager;
-}
+// Re-export from types.ts for backward compatibility
+export type { DashboardContext } from "./types.ts";
 
 const MIME_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",

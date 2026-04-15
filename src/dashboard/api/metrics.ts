@@ -1,4 +1,4 @@
-import type { DashboardContext } from "../server.ts";
+import type { DashboardContext } from "../types.ts";
 
 /** Model pricing per million tokens (input) */
 const MODEL_PRICING: Record<string, number> = {

@@ -1,10 +1,4 @@
-// Local type alias — mirrors the parent DashboardContext shape.
-// Using a local interface avoids tsc following imports into the parent Bun project.
-export interface DashboardContext {
-  daemon: any;
-  sse: any;
-  [key: string]: any;
-}
+import type { DashboardContext } from "../../../src/dashboard/types.ts";
 
 declare global {
   var __vigil_ctx__: DashboardContext | null;

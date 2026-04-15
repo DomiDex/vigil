@@ -1,5 +1,5 @@
 import type { VigilMessage } from "../../messaging/schema.ts";
-import type { DashboardContext } from "../server.ts";
+import type { DashboardContext } from "../types.ts";
 
 // ── Helpers ───────────────────────────────────────
 

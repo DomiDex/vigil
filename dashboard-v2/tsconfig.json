@@ -8,7 +8,6 @@
     "strictNullChecks": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
-    "noImplicitAny": false,
     "paths": {
       "@/*": ["./src/*"]
     },
