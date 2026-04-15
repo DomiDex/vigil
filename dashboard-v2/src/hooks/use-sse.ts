@@ -3,9 +3,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { vigilKeys } from "../lib/query-keys";
 
 export const SSE_EVENT_MAP = {
-  tick: [vigilKeys.overview, vigilKeys.repos.all, vigilKeys.timeline({})],
-  message: [vigilKeys.timeline({})],
-  decision: [vigilKeys.timeline({}), vigilKeys.metrics],
+  tick: [vigilKeys.overview, vigilKeys.repos.all, ["timeline"]],
+  message: [["timeline"]],
+  decision: [["timeline"], vigilKeys.metrics],
   action: [vigilKeys.actions.all],
   action_pending: [vigilKeys.actions.pending, vigilKeys.actions.all],
   action_resolved: [vigilKeys.actions.all, vigilKeys.actions.pending],

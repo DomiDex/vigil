@@ -2,6 +2,7 @@
 import type { ReactNode } from "react";
 import {
   Outlet,
+  Link,
   createRootRoute,
   HeadContent,
   Scripts,
@@ -21,9 +22,22 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Vigil Dashboard" },
     ],
+    title: "Vigil Dashboard",
   }),
+  notFoundComponent: () => (
+    <div className="flex items-center justify-center h-screen">
+      <div className="text-center">
+        <h1 className="text-2xl font-bold mb-2">Page Not Found</h1>
+        <p className="text-muted-foreground mb-4">
+          The page you are looking for does not exist.
+        </p>
+        <Link to="/" className="text-primary hover:underline">
+          Back to dashboard
+        </Link>
+      </div>
+    </div>
+  ),
   component: RootLayout,
 });
 

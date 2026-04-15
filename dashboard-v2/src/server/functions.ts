@@ -1,55 +1,34 @@
-import { getVigilContext } from "./vigil-context";
-import { getOverviewJSON } from "../../../src/dashboard/api/overview";
-import { getReposJSON, getRepoDetailJSON } from "../../../src/dashboard/api/repos";
-import { getTimelineJSON } from "../../../src/dashboard/api/timeline";
-import {
-  getDreamsJSON,
-  getDreamPatternsJSON,
-  handleDreamTrigger,
-} from "../../../src/dashboard/api/dreams";
-import {
-  getTasksJSON,
-  handleTaskCreate,
-  handleTaskActivate,
-  handleTaskComplete,
-  handleTaskFail,
-  handleTaskUpdate,
-  handleTaskCancel,
-} from "../../../src/dashboard/api/tasks";
-import {
-  getActionsJSON,
-  getActionsPendingJSON,
-  handleApprove,
-  handleReject,
-} from "../../../src/dashboard/api/actions";
-import {
-  getMemoryJSON,
-  getMemorySearchJSON,
-  handleAsk,
-} from "../../../src/dashboard/api/memory";
-import { getMetricsJSON } from "../../../src/dashboard/api/metrics";
-import {
-  getSchedulerJSON,
-  handleSchedulerCreate,
-  handleSchedulerDelete,
-  handleSchedulerTrigger,
-} from "../../../src/dashboard/api/scheduler";
+// Client-safe data functions that fetch from Vigil's /api/* JSON endpoints.
+// These run in the browser (via useQuery/useMutation) and do NOT depend on
+// server-only getVigilContext(). The Bun.serve() at port 7480 handles both
+// the dashboard and the API routes.
 
-// --- Reads (13 functions) ---
+const BASE = typeof window !== "undefined" ? "" : "http://localhost:7480";
+
+async function api(path: string, init?: RequestInit) {
+  const res = await fetch(`${BASE}${path}`, init);
+  if (!res.ok) throw new Error(`API ${path}: ${res.status}`);
+  return res.json();
+}
+
+async function apiMutate(path: string, init?: RequestInit) {
+  const res = await fetch(`${BASE}${path}`, init);
+  if (!res.ok) throw new Error(`API ${path}: ${res.status}`);
+  return { success: true };
+}
+
+// --- Reads ---
 
 export async function getOverview() {
-  const ctx = getVigilContext();
-  return getOverviewJSON(ctx);
+  return api("/api/overview");
 }
 
 export async function getRepos() {
-  const ctx = getVigilContext();
-  return getReposJSON(ctx);
+  return api("/api/repos");
 }
 
 export async function getRepoDetail({ data }: { data: { name: string } }) {
-  const ctx = getVigilContext();
-  return getRepoDetailJSON(ctx, data.name);
+  return api(`/api/repos/${encodeURIComponent(data.name)}`);
 }
 
 export async function getTimeline({
@@ -57,23 +36,21 @@ export async function getTimeline({
 }: {
   data: { status?: string; repo?: string; q?: string; page?: number };
 }) {
-  const ctx = getVigilContext();
-  const url = new URL("http://localhost/api/timeline");
-  if (data.status) url.searchParams.set("status", data.status);
-  if (data.repo) url.searchParams.set("repo", data.repo);
-  if (data.q) url.searchParams.set("q", data.q);
-  if (data.page) url.searchParams.set("page", String(data.page));
-  return getTimelineJSON(ctx, url);
+  const params = new URLSearchParams();
+  if (data.status) params.set("status", data.status);
+  if (data.repo) params.set("repo", data.repo);
+  if (data.q) params.set("q", data.q);
+  if (data.page) params.set("page", String(data.page));
+  const qs = params.toString();
+  return api(`/api/timeline${qs ? `?${qs}` : ""}`);
 }
 
 export async function getDreams() {
-  const ctx = getVigilContext();
-  return getDreamsJSON(ctx);
+  return api("/api/dreams");
 }
 
 export async function getDreamPatterns({ data }: { data: { repo: string } }) {
-  const ctx = getVigilContext();
-  return getDreamPatternsJSON(ctx, data.repo);
+  return api(`/api/dreams/patterns/${encodeURIComponent(data.repo)}`);
 }
 
 export async function getTasks({
@@ -81,8 +58,11 @@ export async function getTasks({
 }: {
   data: { status?: string; repo?: string };
 }) {
-  const ctx = getVigilContext();
-  return getTasksJSON(ctx, data);
+  const params = new URLSearchParams();
+  if (data.status) params.set("status", data.status);
+  if (data.repo) params.set("repo", data.repo);
+  const qs = params.toString();
+  return api(`/api/tasks${qs ? `?${qs}` : ""}`);
 }
 
 export async function getActions({
@@ -90,18 +70,18 @@ export async function getActions({
 }: {
   data: { status?: string };
 }) {
-  const ctx = getVigilContext();
-  return getActionsJSON(ctx, data);
+  const params = new URLSearchParams();
+  if (data.status) params.set("status", data.status);
+  const qs = params.toString();
+  return api(`/api/actions${qs ? `?${qs}` : ""}`);
 }
 
 export async function getActionsPending() {
-  const ctx = getVigilContext();
-  return getActionsPendingJSON(ctx);
+  return api("/api/actions/pending");
 }
 
 export async function getMemory() {
-  const ctx = getVigilContext();
-  return getMemoryJSON(ctx);
+  return api("/api/memory");
 }
 
 export async function searchMemory({
@@ -109,26 +89,26 @@ export async function searchMemory({
 }: {
   data: { query: string; repo?: string };
 }) {
-  const ctx = getVigilContext();
-  return getMemorySearchJSON(ctx, data.query, data.repo);
+  const params = new URLSearchParams();
+  params.set("memq", data.query);
+  if (data.repo) params.set("memrepo", data.repo);
+  return api(`/api/memory/search?${params.toString()}`);
 }
 
 export async function getMetrics() {
-  const ctx = getVigilContext();
-  return getMetricsJSON(ctx);
+  return api("/api/metrics");
 }
 
 export async function getScheduler() {
-  const ctx = getVigilContext();
-  return getSchedulerJSON(ctx);
+  return api("/api/scheduler");
 }
 
-// --- Mutations (13 functions) ---
+// --- Mutations ---
 
 export async function triggerDream({ data }: { data: { repo?: string } }) {
-  const ctx = getVigilContext();
-  await handleDreamTrigger(ctx, data.repo);
-  return { success: true };
+  const body = new FormData();
+  if (data.repo) body.set("dreamrepo", data.repo);
+  return apiMutate("/api/dreams/trigger", { method: "POST", body });
 }
 
 export async function createTask({
@@ -136,31 +116,29 @@ export async function createTask({
 }: {
   data: { title: string; description?: string; repo?: string };
 }) {
-  const ctx = getVigilContext();
-  const formData = new FormData();
-  formData.set("title", data.title);
-  if (data.description) formData.set("description", data.description);
-  if (data.repo) formData.set("repo", data.repo);
-  handleTaskCreate(ctx, formData);
-  return { success: true };
+  const body = new FormData();
+  body.set("title", data.title);
+  if (data.description) body.set("description", data.description);
+  if (data.repo) body.set("repo", data.repo);
+  return apiMutate("/api/tasks", { method: "POST", body });
 }
 
 export async function activateTask({ data }: { data: { id: string } }) {
-  const ctx = getVigilContext();
-  handleTaskActivate(ctx, data.id);
-  return { success: true };
+  return apiMutate(`/api/tasks/${encodeURIComponent(data.id)}/activate`, {
+    method: "POST",
+  });
 }
 
 export async function completeTask({ data }: { data: { id: string } }) {
-  const ctx = getVigilContext();
-  handleTaskComplete(ctx, data.id);
-  return { success: true };
+  return apiMutate(`/api/tasks/${encodeURIComponent(data.id)}/complete`, {
+    method: "POST",
+  });
 }
 
 export async function failTask({ data }: { data: { id: string } }) {
-  const ctx = getVigilContext();
-  handleTaskFail(ctx, data.id);
-  return { success: true };
+  return apiMutate(`/api/tasks/${encodeURIComponent(data.id)}/fail`, {
+    method: "POST",
+  });
 }
 
 export async function updateTask({
@@ -168,30 +146,31 @@ export async function updateTask({
 }: {
   data: { id: string; title?: string; description?: string };
 }) {
-  const ctx = getVigilContext();
-  const formData = new FormData();
-  if (data.title) formData.set("title", data.title);
-  if (data.description) formData.set("description", data.description);
-  handleTaskUpdate(ctx, data.id, formData);
-  return { success: true };
+  const body = new FormData();
+  if (data.title) body.set("title", data.title);
+  if (data.description) body.set("description", data.description);
+  return apiMutate(`/api/tasks/${encodeURIComponent(data.id)}`, {
+    method: "PUT",
+    body,
+  });
 }
 
 export async function cancelTask({ data }: { data: { id: string } }) {
-  const ctx = getVigilContext();
-  handleTaskCancel(ctx, data.id);
-  return { success: true };
+  return apiMutate(`/api/tasks/${encodeURIComponent(data.id)}`, {
+    method: "DELETE",
+  });
 }
 
 export async function approveAction({ data }: { data: { id: string } }) {
-  const ctx = getVigilContext();
-  await handleApprove(ctx, data.id);
-  return { success: true };
+  return apiMutate(`/api/actions/${encodeURIComponent(data.id)}/approve`, {
+    method: "POST",
+  });
 }
 
 export async function rejectAction({ data }: { data: { id: string } }) {
-  const ctx = getVigilContext();
-  handleReject(ctx, data.id);
-  return { success: true };
+  return apiMutate(`/api/actions/${encodeURIComponent(data.id)}/reject`, {
+    method: "POST",
+  });
 }
 
 export async function askVigil({
@@ -199,9 +178,10 @@ export async function askVigil({
 }: {
   data: { question: string; repo?: string };
 }) {
-  const ctx = getVigilContext();
-  await handleAsk(ctx, data.question, data.repo);
-  return { success: true };
+  const body = new FormData();
+  body.set("askq", data.question);
+  if (data.repo) body.set("askrepo", data.repo);
+  return apiMutate("/api/memory/ask", { method: "POST", body });
 }
 
 export async function createSchedule({
@@ -209,24 +189,22 @@ export async function createSchedule({
 }: {
   data: { name: string; cron: string; action: string; repo?: string };
 }) {
-  const ctx = getVigilContext();
-  const formData = new FormData();
-  formData.set("name", data.name);
-  formData.set("cron", data.cron);
-  formData.set("action", data.action);
-  if (data.repo) formData.set("repo", data.repo);
-  await handleSchedulerCreate(ctx, formData);
-  return { success: true };
+  const body = new FormData();
+  body.set("name", data.name);
+  body.set("cron", data.cron);
+  body.set("action", data.action);
+  if (data.repo) body.set("repo", data.repo);
+  return apiMutate("/api/scheduler", { method: "POST", body });
 }
 
 export async function deleteSchedule({ data }: { data: { id: string } }) {
-  const ctx = getVigilContext();
-  handleSchedulerDelete(ctx, data.id);
-  return { success: true };
+  return apiMutate(`/api/scheduler/${encodeURIComponent(data.id)}`, {
+    method: "DELETE",
+  });
 }
 
 export async function triggerSchedule({ data }: { data: { id: string } }) {
-  const ctx = getVigilContext();
-  await handleSchedulerTrigger(ctx, data.id);
-  return { success: true };
+  return apiMutate(`/api/scheduler/${encodeURIComponent(data.id)}/trigger`, {
+    method: "POST",
+  });
 }

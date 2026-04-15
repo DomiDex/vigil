@@ -39,7 +39,7 @@ export default function TimelinePage({ activeRepo }: Partial<WidgetProps> = {}) 
     };
   }, [searchInput]);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: vigilKeys.timeline(filters),
     queryFn: () => getTimeline({ data: filters }),
   });
@@ -105,6 +105,11 @@ export default function TimelinePage({ activeRepo }: Partial<WidgetProps> = {}) 
       <div className="space-y-2">
         {isLoading && (
           <div className="text-sm text-muted-foreground">Loading...</div>
+        )}
+        {isError && (
+          <div className="text-sm text-destructive p-4">
+            Failed to load data: {error?.message}
+          </div>
         )}
         {messages.map((msg) => (
           <TimelineEntry key={msg.id} message={msg} />

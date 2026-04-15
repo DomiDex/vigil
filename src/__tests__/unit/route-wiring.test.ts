@@ -17,8 +17,8 @@ describe("Index route wiring", () => {
     expect(routeSource).not.toMatch(reactLazyImport);
   });
 
-  it("imports getTimeline for loader", () => {
-    expect(routeSource).toContain("getTimeline");
+  it("does not use server-side loaders (no getVigilContext in client)", () => {
+    expect(routeSource).not.toContain("getVigilContext");
   });
 
   it("references TimelinePage plugin path", () => {

@@ -1,4 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, lazyRouteComponent } from "@tanstack/react-router";
+
 export const Route = createFileRoute("/dreams")({
-  component: () => <div>Dreams -- Coming in Phase 4</div>,
+  component: lazyRouteComponent(
+    () => import("../plugins/dreams/DreamsPage"),
+    "default",
+  ),
 });

@@ -1,273 +1,157 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
-import { createFakeDashboardContext } from "../helpers/dashboard-v2-helpers.ts";
+
+// Server functions now use fetch("/api/...") for mutations.
+// Mutation endpoints return HTML (HTMX legacy), so functions use apiMutate
+// which returns { success: true } without parsing the body.
+
+let fetchSpy: ReturnType<typeof spyOn>;
+
+beforeEach(() => {
+  fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response("<div>ok</div>", { status: 200 }),
+  );
+});
+
+afterEach(() => {
+  fetchSpy.mockRestore();
+});
 
 describe("server functions -- mutations", () => {
-  let ctxSpy: ReturnType<typeof spyOn>;
-  let fakeCtx: ReturnType<typeof createFakeDashboardContext>;
-
-  beforeEach(async () => {
-    fakeCtx = createFakeDashboardContext();
-    const vigilCtxMod = await import("../../../dashboard-v2/src/server/vigil-context.ts");
-    ctxSpy = spyOn(vigilCtxMod, "getVigilContext").mockReturnValue(fakeCtx as any);
-  });
-
-  afterEach(() => {
-    ctxSpy.mockRestore();
-  });
-
   describe("triggerDream", () => {
-    it("calls handleDreamTrigger with context and repo", async () => {
-      const dreamsMod = await import("../../dashboard/api/dreams.ts");
-      const handlerSpy = spyOn(dreamsMod, "handleDreamTrigger").mockResolvedValue("<div>ok</div>");
-
+    it("POSTs to /api/dreams/trigger with repo in FormData", async () => {
       const { triggerDream } = await import("../../../dashboard-v2/src/server/functions.ts");
-
       const result = await triggerDream({ data: { repo: "vigil" } });
-
-      expect(handlerSpy).toHaveBeenCalledTimes(1);
-      expect(handlerSpy.mock.calls[0][0]).toBe(fakeCtx);
-      expect(handlerSpy.mock.calls[0][1]).toBe("vigil");
       expect(result).toEqual({ success: true });
-
-      handlerSpy.mockRestore();
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain("/api/dreams/trigger");
+      expect(init.method).toBe("POST");
     });
   });
 
   describe("createTask", () => {
-    it("calls handleTaskCreate with context and FormData", async () => {
-      const tasksMod = await import("../../dashboard/api/tasks.ts");
-      const handlerSpy = spyOn(tasksMod, "handleTaskCreate").mockReturnValue("<div>created</div>");
-
+    it("POSTs to /api/tasks with FormData fields", async () => {
       const { createTask } = await import("../../../dashboard-v2/src/server/functions.ts");
-
       const result = await createTask({
         data: { title: "Test task", description: "A test", repo: "vigil" },
       });
-
-      expect(handlerSpy).toHaveBeenCalledTimes(1);
-      expect(handlerSpy.mock.calls[0][0]).toBe(fakeCtx);
-      const formData = handlerSpy.mock.calls[0][1];
-      expect(formData).toBeInstanceOf(FormData);
-      expect(formData.get("title")).toBe("Test task");
-      expect(formData.get("description")).toBe("A test");
-      expect(formData.get("repo")).toBe("vigil");
       expect(result).toEqual({ success: true });
-
-      handlerSpy.mockRestore();
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain("/api/tasks");
+      expect(init.method).toBe("POST");
+      const body = init.body as FormData;
+      expect(body.get("title")).toBe("Test task");
     });
   });
 
   describe("activateTask", () => {
-    it("calls handleTaskActivate with context and id", async () => {
-      const tasksMod = await import("../../dashboard/api/tasks.ts");
-      const handlerSpy = spyOn(tasksMod, "handleTaskActivate").mockReturnValue("<div>activated</div>");
-
+    it("POSTs to /api/tasks/:id/activate", async () => {
       const { activateTask } = await import("../../../dashboard-v2/src/server/functions.ts");
-
-      const result = await activateTask({ data: { id: "task-123" } });
-
-      expect(handlerSpy).toHaveBeenCalledTimes(1);
-      expect(handlerSpy.mock.calls[0][0]).toBe(fakeCtx);
-      expect(handlerSpy.mock.calls[0][1]).toBe("task-123");
+      const result = await activateTask({ data: { id: "t1" } });
       expect(result).toEqual({ success: true });
-
-      handlerSpy.mockRestore();
+      const url = fetchSpy.mock.calls[0][0] as string;
+      expect(url).toContain("/api/tasks/t1/activate");
     });
   });
 
   describe("completeTask", () => {
-    it("calls handleTaskComplete with context and id", async () => {
-      const tasksMod = await import("../../dashboard/api/tasks.ts");
-      const handlerSpy = spyOn(tasksMod, "handleTaskComplete").mockReturnValue("<div>completed</div>");
-
+    it("POSTs to /api/tasks/:id/complete", async () => {
       const { completeTask } = await import("../../../dashboard-v2/src/server/functions.ts");
-
-      const result = await completeTask({ data: { id: "task-123" } });
-
-      expect(handlerSpy).toHaveBeenCalledTimes(1);
-      expect(handlerSpy.mock.calls[0][0]).toBe(fakeCtx);
-      expect(handlerSpy.mock.calls[0][1]).toBe("task-123");
-      expect(result).toEqual({ success: true });
-
-      handlerSpy.mockRestore();
+      await completeTask({ data: { id: "t2" } });
+      const url = fetchSpy.mock.calls[0][0] as string;
+      expect(url).toContain("/api/tasks/t2/complete");
     });
   });
 
   describe("failTask", () => {
-    it("calls handleTaskFail with context and id", async () => {
-      const tasksMod = await import("../../dashboard/api/tasks.ts");
-      const handlerSpy = spyOn(tasksMod, "handleTaskFail").mockReturnValue("<div>failed</div>");
-
+    it("POSTs to /api/tasks/:id/fail", async () => {
       const { failTask } = await import("../../../dashboard-v2/src/server/functions.ts");
-
-      const result = await failTask({ data: { id: "task-123" } });
-
-      expect(handlerSpy).toHaveBeenCalledTimes(1);
-      expect(handlerSpy.mock.calls[0][0]).toBe(fakeCtx);
-      expect(handlerSpy.mock.calls[0][1]).toBe("task-123");
-      expect(result).toEqual({ success: true });
-
-      handlerSpy.mockRestore();
+      await failTask({ data: { id: "t3" } });
+      const url = fetchSpy.mock.calls[0][0] as string;
+      expect(url).toContain("/api/tasks/t3/fail");
     });
   });
 
   describe("updateTask", () => {
-    it("calls handleTaskUpdate with context, id, and FormData", async () => {
-      const tasksMod = await import("../../dashboard/api/tasks.ts");
-      const handlerSpy = spyOn(tasksMod, "handleTaskUpdate").mockReturnValue("<div>updated</div>");
-
+    it("PUTs to /api/tasks/:id with FormData", async () => {
       const { updateTask } = await import("../../../dashboard-v2/src/server/functions.ts");
-
-      const result = await updateTask({
-        data: { id: "task-123", title: "Updated", description: "New desc" },
-      });
-
-      expect(handlerSpy).toHaveBeenCalledTimes(1);
-      expect(handlerSpy.mock.calls[0][0]).toBe(fakeCtx);
-      expect(handlerSpy.mock.calls[0][1]).toBe("task-123");
-      const formData = handlerSpy.mock.calls[0][2];
-      expect(formData).toBeInstanceOf(FormData);
-      expect(formData.get("title")).toBe("Updated");
-      expect(formData.get("description")).toBe("New desc");
-      expect(result).toEqual({ success: true });
-
-      handlerSpy.mockRestore();
+      await updateTask({ data: { id: "t1", title: "Updated" } });
+      const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain("/api/tasks/t1");
+      expect(init.method).toBe("PUT");
     });
   });
 
   describe("cancelTask", () => {
-    it("calls handleTaskCancel with context and id", async () => {
-      const tasksMod = await import("../../dashboard/api/tasks.ts");
-      const handlerSpy = spyOn(tasksMod, "handleTaskCancel").mockReturnValue("<div>cancelled</div>");
-
+    it("DELETEs /api/tasks/:id", async () => {
       const { cancelTask } = await import("../../../dashboard-v2/src/server/functions.ts");
-
-      const result = await cancelTask({ data: { id: "task-123" } });
-
-      expect(handlerSpy).toHaveBeenCalledTimes(1);
-      expect(handlerSpy.mock.calls[0][0]).toBe(fakeCtx);
-      expect(handlerSpy.mock.calls[0][1]).toBe("task-123");
-      expect(result).toEqual({ success: true });
-
-      handlerSpy.mockRestore();
+      await cancelTask({ data: { id: "t1" } });
+      const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain("/api/tasks/t1");
+      expect(init.method).toBe("DELETE");
     });
   });
 
   describe("approveAction", () => {
-    it("calls handleApprove with context and id", async () => {
-      const actionsMod = await import("../../dashboard/api/actions.ts");
-      const handlerSpy = spyOn(actionsMod, "handleApprove").mockResolvedValue("<div>approved</div>");
-
+    it("POSTs to /api/actions/:id/approve", async () => {
       const { approveAction } = await import("../../../dashboard-v2/src/server/functions.ts");
-
-      const result = await approveAction({ data: { id: "action-123" } });
-
-      expect(handlerSpy).toHaveBeenCalledTimes(1);
-      expect(handlerSpy.mock.calls[0][0]).toBe(fakeCtx);
-      expect(handlerSpy.mock.calls[0][1]).toBe("action-123");
-      expect(result).toEqual({ success: true });
-
-      handlerSpy.mockRestore();
+      await approveAction({ data: { id: "a1" } });
+      const url = fetchSpy.mock.calls[0][0] as string;
+      expect(url).toContain("/api/actions/a1/approve");
     });
   });
 
   describe("rejectAction", () => {
-    it("calls handleReject with context and id", async () => {
-      const actionsMod = await import("../../dashboard/api/actions.ts");
-      const handlerSpy = spyOn(actionsMod, "handleReject").mockReturnValue("<div>rejected</div>");
-
+    it("POSTs to /api/actions/:id/reject", async () => {
       const { rejectAction } = await import("../../../dashboard-v2/src/server/functions.ts");
-
-      const result = await rejectAction({ data: { id: "action-123" } });
-
-      expect(handlerSpy).toHaveBeenCalledTimes(1);
-      expect(handlerSpy.mock.calls[0][0]).toBe(fakeCtx);
-      expect(handlerSpy.mock.calls[0][1]).toBe("action-123");
-      expect(result).toEqual({ success: true });
-
-      handlerSpy.mockRestore();
+      await rejectAction({ data: { id: "a2" } });
+      const url = fetchSpy.mock.calls[0][0] as string;
+      expect(url).toContain("/api/actions/a2/reject");
     });
   });
 
   describe("askVigil", () => {
-    it("calls handleAsk with context, question, and optional repo", async () => {
-      const memoryMod = await import("../../dashboard/api/memory.ts");
-      const handlerSpy = spyOn(memoryMod, "handleAsk").mockResolvedValue("<div>The answer is 42</div>");
-
+    it("POSTs to /api/memory/ask with question in FormData", async () => {
       const { askVigil } = await import("../../../dashboard-v2/src/server/functions.ts");
-
-      const result = await askVigil({
-        data: { question: "What happened?", repo: "vigil" },
-      });
-
-      expect(handlerSpy).toHaveBeenCalledTimes(1);
-      expect(handlerSpy.mock.calls[0][0]).toBe(fakeCtx);
-      expect(handlerSpy.mock.calls[0][1]).toBe("What happened?");
-      expect(handlerSpy.mock.calls[0][2]).toBe("vigil");
-      expect(result).toEqual({ success: true });
-
-      handlerSpy.mockRestore();
+      await askVigil({ data: { question: "What is vigil?", repo: "vigil" } });
+      const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain("/api/memory/ask");
+      expect(init.method).toBe("POST");
+      const body = init.body as FormData;
+      expect(body.get("askq")).toBe("What is vigil?");
+      expect(body.get("askrepo")).toBe("vigil");
     });
   });
 
   describe("createSchedule", () => {
-    it("calls handleSchedulerCreate with context and FormData", async () => {
-      const schedulerMod = await import("../../dashboard/api/scheduler.ts");
-      const handlerSpy = spyOn(schedulerMod, "handleSchedulerCreate").mockResolvedValue("<div>created</div>");
-
+    it("POSTs to /api/scheduler with FormData", async () => {
       const { createSchedule } = await import("../../../dashboard-v2/src/server/functions.ts");
-
-      const result = await createSchedule({
-        data: { name: "nightly", cron: "0 0 * * *", action: "dream", repo: "vigil" },
+      await createSchedule({
+        data: { name: "Hourly", cron: "0 * * * *", action: "dream", repo: "vigil" },
       });
-
-      expect(handlerSpy).toHaveBeenCalledTimes(1);
-      expect(handlerSpy.mock.calls[0][0]).toBe(fakeCtx);
-      const formData = handlerSpy.mock.calls[0][1];
-      expect(formData).toBeInstanceOf(FormData);
-      expect(formData.get("name")).toBe("nightly");
-      expect(formData.get("cron")).toBe("0 0 * * *");
-      expect(formData.get("action")).toBe("dream");
-      expect(formData.get("repo")).toBe("vigil");
-      expect(result).toEqual({ success: true });
-
-      handlerSpy.mockRestore();
+      const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain("/api/scheduler");
+      expect(init.method).toBe("POST");
     });
   });
 
   describe("deleteSchedule", () => {
-    it("calls handleSchedulerDelete with context and id", async () => {
-      const schedulerMod = await import("../../dashboard/api/scheduler.ts");
-      const handlerSpy = spyOn(schedulerMod, "handleSchedulerDelete").mockReturnValue("<div>deleted</div>");
-
+    it("DELETEs /api/scheduler/:id", async () => {
       const { deleteSchedule } = await import("../../../dashboard-v2/src/server/functions.ts");
-
-      const result = await deleteSchedule({ data: { id: "sched-123" } });
-
-      expect(handlerSpy).toHaveBeenCalledTimes(1);
-      expect(handlerSpy.mock.calls[0][0]).toBe(fakeCtx);
-      expect(handlerSpy.mock.calls[0][1]).toBe("sched-123");
-      expect(result).toEqual({ success: true });
-
-      handlerSpy.mockRestore();
+      await deleteSchedule({ data: { id: "s1" } });
+      const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain("/api/scheduler/s1");
+      expect(init.method).toBe("DELETE");
     });
   });
 
   describe("triggerSchedule", () => {
-    it("calls handleSchedulerTrigger with context and id", async () => {
-      const schedulerMod = await import("../../dashboard/api/scheduler.ts");
-      const handlerSpy = spyOn(schedulerMod, "handleSchedulerTrigger").mockResolvedValue("<div>triggered</div>");
-
+    it("POSTs to /api/scheduler/:id/trigger", async () => {
       const { triggerSchedule } = await import("../../../dashboard-v2/src/server/functions.ts");
-
-      const result = await triggerSchedule({ data: { id: "sched-123" } });
-
-      expect(handlerSpy).toHaveBeenCalledTimes(1);
-      expect(handlerSpy.mock.calls[0][0]).toBe(fakeCtx);
-      expect(handlerSpy.mock.calls[0][1]).toBe("sched-123");
-      expect(result).toEqual({ success: true });
-
-      handlerSpy.mockRestore();
+      await triggerSchedule({ data: { id: "s1" } });
+      const url = fetchSpy.mock.calls[0][0] as string;
+      expect(url).toContain("/api/scheduler/s1/trigger");
     });
   });
 });
