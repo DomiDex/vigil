@@ -1,15 +1,36 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Webhook, Trash2, RefreshCw } from "lucide-react";
+import { Webhook, Trash2, RefreshCw, Plus } from "lucide-react";
 import { vigilKeys } from "../../lib/query-keys";
 import {
   getWebhookEvents,
   getWebhookSubscriptions,
   getWebhookStatus,
   deleteWebhookSubscription,
+  createWebhookSubscription,
+  getOverview,
 } from "../../server/functions";
 import { Card, CardContent } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "../../components/ui/dialog";
+import { toast } from "sonner";
+import { Label } from "../../components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
+import { isWebhookFormValid } from "../../lib/form-validation";
 import type { WidgetProps } from "../../types/plugin";
 
 interface WebhookStatus {
@@ -36,10 +57,56 @@ interface WebhookEvent {
   receivedAt?: string;
 }
 
+const WEBHOOK_EVENT_TYPES = [
+  "push",
+  "commit",
+  "dream",
+  "action",
+  "tick",
+  "decision",
+] as const;
+
 export default function WebhooksPage({
   activeRepo,
 }: Partial<WidgetProps> = {}) {
+  const [createOpen, setCreateOpen] = useState(false);
+  const [selectedRepo, setSelectedRepo] = useState("");
+  const [selectedEventTypes, setSelectedEventTypes] = useState<string[]>([]);
   const queryClient = useQueryClient();
+
+  const { data: overviewData } = useQuery({
+    queryKey: vigilKeys.overview,
+    queryFn: getOverview,
+  });
+
+  const repos = (overviewData as any)?.repos ?? [];
+
+  const createSubMut = useMutation({
+    mutationFn: () =>
+      createWebhookSubscription({
+        data: { repo: selectedRepo, eventTypes: selectedEventTypes },
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: vigilKeys.webhooks.subscriptions,
+      });
+      setCreateOpen(false);
+      setSelectedRepo("");
+      setSelectedEventTypes([]);
+    },
+    onError: (err: Error) => toast.error(`Failed to create subscription: ${err.message}`),
+  });
+
+  const resetCreateForm = () => {
+    setSelectedRepo("");
+    setSelectedEventTypes([]);
+  };
+
+  const toggleEventType = (et: string) => {
+    setSelectedEventTypes((prev) =>
+      prev.includes(et) ? prev.filter((e) => e !== et) : [...prev, et],
+    );
+  };
 
   const {
     data: statusData,
@@ -129,13 +196,71 @@ export default function WebhooksPage({
       {/* Subscriptions */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h4 className="text-xs font-medium text-muted-foreground uppercase">
-            Subscriptions
-          </h4>
-          <Badge variant="secondary" className="text-xs">
-            {subscriptions.length}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <h4 className="text-xs font-medium text-muted-foreground uppercase">
+              Subscriptions
+            </h4>
+            <Badge variant="secondary" className="text-xs">
+              {subscriptions.length}
+            </Badge>
+          </div>
+          <Button size="xs" onClick={() => setCreateOpen(true)}>
+            <Plus className="size-3" />
+            Add Subscription
+          </Button>
         </div>
+
+        <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) resetCreateForm(); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add Subscription</DialogTitle>
+              <DialogDescription>Subscribe a repository to webhook events.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Repository</Label>
+                <Select value={selectedRepo} onValueChange={setSelectedRepo}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select repository" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {repos.map((r: any) => (
+                      <SelectItem key={r.name} value={r.name}>
+                        {r.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Event Types</Label>
+                <div className="flex flex-wrap gap-2">
+                  {WEBHOOK_EVENT_TYPES.map((et) => (
+                    <Button
+                      key={et}
+                      size="xs"
+                      variant={selectedEventTypes.includes(et) ? "default" : "outline"}
+                      onClick={() => toggleEventType(et)}
+                    >
+                      {et}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                onClick={() => createSubMut.mutate()}
+                disabled={
+                  !isWebhookFormValid(selectedRepo, selectedEventTypes) ||
+                  createSubMut.isPending
+                }
+              >
+                {createSubMut.isPending ? "Creating..." : "Add Subscription"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         <div className="space-y-2">
           {subscriptions.map((sub) => (
             <Card key={sub.id}>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { CheckSquare } from "lucide-react";
+import { CheckSquare, Plus } from "lucide-react";
 import { vigilKeys } from "../../lib/query-keys";
 import {
   getTasks,
@@ -8,11 +8,33 @@ import {
   completeTask,
   failTask,
   cancelTask,
+  createTask,
+  getOverview,
 } from "../../server/functions";
 import { Card, CardContent } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "../../components/ui/dialog";
+import { toast } from "sonner";
+import { Input } from "../../components/ui/input";
+import { Textarea } from "../../components/ui/textarea";
+import { Label } from "../../components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
 import { cn } from "../../lib/cn";
+import { isTaskFormValid } from "../../lib/form-validation";
 import type { WidgetProps } from "../../types/plugin";
 import type { TasksData } from "../../types/api";
 
@@ -63,12 +85,48 @@ const STATUS_STYLES: Record<string, string> = {
 
 export default function TasksPage({ activeRepo }: Partial<WidgetProps> = {}) {
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+  const [newRepo, setNewRepo] = useState("");
   const queryClient = useQueryClient();
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: vigilKeys.tasks,
     queryFn: () => getTasks({ data: {} }),
   });
+
+  const { data: overviewData } = useQuery({
+    queryKey: vigilKeys.overview,
+    queryFn: getOverview,
+  });
+
+  const repos = (overviewData as any)?.repos ?? [];
+
+  const createMut = useMutation({
+    mutationFn: () =>
+      createTask({
+        data: {
+          title: newTitle,
+          ...(newDescription && { description: newDescription }),
+          ...(newRepo && { repo: newRepo }),
+        },
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: vigilKeys.tasks });
+      setCreateOpen(false);
+      setNewTitle("");
+      setNewDescription("");
+      setNewRepo("");
+    },
+    onError: (err: Error) => toast.error(`Failed to create task: ${err.message}`),
+  });
+
+  const resetCreateForm = () => {
+    setNewTitle("");
+    setNewDescription("");
+    setNewRepo("");
+  };
 
   const tasksData = data as TasksData | undefined;
   const tasks = tasksData?.tasks ?? [];
@@ -131,7 +189,63 @@ export default function TasksPage({ activeRepo }: Partial<WidgetProps> = {}) {
             {completionRate}% complete
           </span>
         </div>
+        <Button size="xs" onClick={() => setCreateOpen(true)}>
+          <Plus className="size-3" />
+          New Task
+        </Button>
       </div>
+
+      <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) resetCreateForm(); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>New Task</DialogTitle>
+            <DialogDescription>Create a new task to track work.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="task-title">Title</Label>
+              <Input
+                id="task-title"
+                placeholder="Task title"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="task-description">Description</Label>
+              <Textarea
+                id="task-description"
+                placeholder="Optional description"
+                value={newDescription}
+                onChange={(e) => setNewDescription(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Repository</Label>
+              <Select value={newRepo} onValueChange={setNewRepo}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select repo (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {repos.map((r: any) => (
+                    <SelectItem key={r.name} value={r.name}>
+                      {r.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={() => createMut.mutate()}
+              disabled={!isTaskFormValid(newTitle) || createMut.isPending}
+            >
+              {createMut.isPending ? "Creating..." : "Create Task"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="flex gap-2 flex-wrap">
         <Button
