@@ -4,7 +4,7 @@ describe("QueryClient configuration", () => {
   it("exports queryClient with correct staleTime", async () => {
     const { queryClient } = await import("../../../dashboard-v2/src/router.tsx");
     const defaults = queryClient.getDefaultOptions();
-    expect(defaults.queries?.staleTime).toBe(10_000);
+    expect(defaults.queries?.staleTime).toBe(30_000);
   });
 
   it("exports queryClient with correct gcTime", async () => {

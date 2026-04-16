@@ -54,6 +54,7 @@ async function loadStartHandler(): Promise<typeof startHandler> {
   if (startHandlerLoaded) return startHandler;
   startHandlerLoaded = true;
   try {
+    // @ts-expect-error — runtime dynamic import of build artifact, no .d.ts exists
     const mod = await import("../../dashboard-v2/dist/server/server.js");
     if (mod.default?.fetch) {
       startHandler = mod.default;
