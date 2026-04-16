@@ -32,7 +32,7 @@ export default function DreamsPage({ activeRepo }: Partial<WidgetProps> = {}) {
   const repos = [...new Set(dreams.map((d) => d.repo))];
 
   const { data: patternsData, isLoading: patternsLoading } = useQuery({
-    queryKey: vigilKeys.dreamPatterns(repoFilter!),
+    queryKey: vigilKeys.dreamPatterns(repoFilter ?? ""),
     queryFn: () => getDreamPatterns({ data: { repo: repoFilter! } }),
     enabled: !!repoFilter,
   });
@@ -117,8 +117,8 @@ export default function DreamsPage({ activeRepo }: Partial<WidgetProps> = {}) {
           {!patternsLoading && patterns.length === 0 && (
             <div className="text-sm text-muted-foreground text-center py-4">No patterns found for {repoFilter}.</div>
           )}
-          {patterns.map((pattern, i) => (
-            <Card key={i}>
+          {patterns.map((pattern) => (
+            <Card key={pattern}>
               <CardContent className="flex items-center gap-3">
                 <Sparkles className="size-4 text-vigil shrink-0" />
                 <span className="text-sm">{pattern}</span>

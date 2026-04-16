@@ -161,14 +161,8 @@ export default function TasksPage({ activeRepo }: Partial<WidgetProps> = {}) {
   });
 
   const update = useMutation({
-    mutationFn: () =>
-      updateTask({
-        data: {
-          id: editTarget!.id,
-          title: editTarget!.title,
-          description: editTarget!.description,
-        },
-      }),
+    mutationFn: (data: { id: string; title: string; description: string }) =>
+      updateTask({ data }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: vigilKeys.tasks });
       setEditTarget(null);
@@ -327,6 +321,7 @@ export default function TasksPage({ activeRepo }: Partial<WidgetProps> = {}) {
                     <Button
                       size="xs"
                       variant="secondary"
+                      aria-label={`Edit ${task.title}`}
                       onClick={() => setEditTarget({ id: task.id, title: task.title, description: task.description ?? "" })}
                     >
                       <Pencil className="size-3" />
@@ -380,7 +375,7 @@ export default function TasksPage({ activeRepo }: Partial<WidgetProps> = {}) {
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={() => update.mutate()} disabled={update.isPending || !editTarget?.title}>
+            <Button onClick={() => update.mutate({ id: editTarget!.id, title: editTarget!.title, description: editTarget!.description })} disabled={update.isPending || !editTarget?.title}>
               {update.isPending ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>
