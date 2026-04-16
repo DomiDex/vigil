@@ -1,26 +1,26 @@
-import { useQuery } from "@tanstack/react-query";
-import { HeartPulse, Server, Database, AlertTriangle } from "lucide-react";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { HeartPulse, Server, Database, AlertTriangle, HardDrive, Trash2, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { vigilKeys } from "../../lib/query-keys";
-import { getHealth } from "../../server/functions";
+import { getHealth, vacuumDatabase, pruneEvents } from "../../server/functions";
 import { Card, CardContent } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
+import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "../../components/ui/alert-dialog";
+import { formatBytes } from "../metrics/MetricsPage";
 import type { WidgetProps } from "../../types/plugin";
-
-interface DbSize {
-  name: string;
-  size: number;
-}
-
-interface ErrorCount {
-  type: string;
-  count: number;
-}
-
-interface UptimeSegment {
-  start: number;
-  end: number;
-  status: "up" | "down" | "degraded";
-}
 
 interface HealthData {
   process: {
@@ -49,21 +49,18 @@ function formatUptime(ms: number): string {
   return `${m}m`;
 }
 
-function formatBytes(bytes: number): string {
+function formatBytesLocal(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1048576).toFixed(1)} MB`;
 }
 
-const SEGMENT_COLORS: Record<string, string> = {
-  up: "bg-green-500",
-  down: "bg-red-500",
-  degraded: "bg-amber-500",
-};
-
 export default function HealthPage({
   activeRepo,
 }: Partial<WidgetProps> = {}) {
+  const queryClient = useQueryClient();
+  const [pruneDays, setPruneDays] = useState(90);
+
   const { data, isLoading, isError, error } = useQuery({
     queryKey: vigilKeys.health,
     queryFn: () => getHealth(),
@@ -71,6 +68,28 @@ export default function HealthPage({
   });
 
   const health = data as HealthData | undefined;
+
+  const vacuumMutation = useMutation({
+    mutationFn: vacuumDatabase,
+    onSuccess: (data: any) => {
+      toast(`Freed ${formatBytes(data.freedBytes ?? 0)}`);
+      queryClient.invalidateQueries({ queryKey: vigilKeys.health });
+    },
+    onError: (err: Error) => {
+      toast.error(`Vacuum failed: ${err.message}`);
+    },
+  });
+
+  const pruneMutation = useMutation({
+    mutationFn: pruneEvents,
+    onSuccess: (data: any) => {
+      toast(`Deleted ${data.deletedCount ?? 0} events`);
+      queryClient.invalidateQueries({ queryKey: vigilKeys.health });
+    },
+    onError: (err: Error) => {
+      toast.error(`Prune failed: ${err.message}`);
+    },
+  });
 
   return (
     <div className="space-y-6">
@@ -136,7 +155,7 @@ export default function HealthPage({
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-muted-foreground">Heap</span>
                       <span className="font-mono">
-                        {formatBytes(health.process.heap)}
+                        {formatBytesLocal(health.process.heap)}
                       </span>
                     </div>
                     <div className="h-2 rounded-full bg-surface overflow-hidden">
@@ -152,7 +171,7 @@ export default function HealthPage({
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-muted-foreground">RSS</span>
                       <span className="font-mono">
-                        {formatBytes(health.process.rss)}
+                        {formatBytesLocal(health.process.rss)}
                       </span>
                     </div>
                     <div className="h-2 rounded-full bg-surface overflow-hidden">
@@ -186,7 +205,7 @@ export default function HealthPage({
                           <span className="text-sm">{name}</span>
                         </div>
                         <span className="text-xs font-mono text-muted-foreground">
-                          {formatBytes(size)}
+                          {formatBytesLocal(size)}
                         </span>
                       </div>
                     ))}
@@ -195,6 +214,113 @@ export default function HealthPage({
               </Card>
             </div>
           )}
+
+          {/* Database Maintenance */}
+          <div className="space-y-3">
+            <h4 className="text-xs font-medium text-muted-foreground uppercase">
+              Database Maintenance
+            </h4>
+            <Card>
+              <CardContent>
+                <div className="space-y-4">
+                  {/* Vacuum */}
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium">Vacuum Database</div>
+                      <div className="text-xs text-muted-foreground">
+                        Compact the database to reclaim disk space
+                      </div>
+                    </div>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={vacuumMutation.isPending}
+                        >
+                          {vacuumMutation.isPending ? (
+                            <Loader2 className="size-3.5 mr-1.5 animate-spin" />
+                          ) : (
+                            <HardDrive className="size-3.5 mr-1.5" />
+                          )}
+                          Vacuum
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Vacuum Database</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This will compact the database. It may take a moment.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => vacuumMutation.mutate()}>
+                            Vacuum
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+
+                  <div className="border-t border-border" />
+
+                  {/* Prune */}
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium">Prune Events</div>
+                      <div className="text-xs text-muted-foreground">
+                        Delete events older than a specified number of days
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Input
+                        type="number"
+                        min={1}
+                        max={365}
+                        value={pruneDays}
+                        onChange={(e) => setPruneDays(Number(e.target.value))}
+                        className="w-20"
+                      />
+                      <span className="text-xs text-muted-foreground">days</span>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={pruneMutation.isPending || pruneDays < 1 || pruneDays > 365}
+                          >
+                            {pruneMutation.isPending ? (
+                              <Loader2 className="size-3.5 mr-1.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="size-3.5 mr-1.5" />
+                            )}
+                            Prune Events
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Prune Events</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will permanently delete events older than {pruneDays} days. This cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => pruneMutation.mutate({ data: { olderThanDays: pruneDays } })}
+                            >
+                              Delete Events
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
           {/* Error Counts */}
           {health.errors && (

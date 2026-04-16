@@ -15,14 +15,14 @@ function formatDuration(ms: number): string {
   return `${minutes}m`;
 }
 
-export function getMetricsJSON(ctx: DashboardContext) {
+export function getMetricsJSON(ctx: DashboardContext, opts?: { from?: number; to?: number }) {
   const { daemon } = ctx;
   const tick = daemon.tickEngine as any;
   const session = daemon.session as any;
   const config = daemon.config;
   const metrics = daemon.metrics;
 
-  const since = Date.now() - 86_400_000; // last 24h
+  const since = opts?.from ?? Date.now() - 86_400_000; // default last 24h
 
   // --- Decision counts ---
   const summary = metrics.getSummary(since);

@@ -13,8 +13,15 @@ import {
 } from "./api/channels.ts";
 import { getConfigJSON, getFeatureGatesJSON, handleConfigUpdate, handleFeatureToggle } from "./api/config.ts";
 import { getDreamPatternsJSON, getDreamsJSON, handleDreamTrigger } from "./api/dreams.ts";
-import { getHealthJSON } from "./api/health.ts";
-import { getMemoryJSON, getMemorySearchJSON, handleAsk } from "./api/memory.ts";
+import { getHealthJSON, handleVacuum, handlePrune } from "./api/health.ts";
+import {
+  getMemoryJSON,
+  getMemorySearchJSON,
+  handleAsk,
+  handleMemoryCreate,
+  handleMemoryDelete,
+  handleMemoryRelevance,
+} from "./api/memory.ts";
 import { getMetricsJSON } from "./api/metrics.ts";
 import { getNotificationsJSON, handleNotificationRulesUpdate, handleTestNotification } from "./api/notifications.ts";
 import { getOverviewJSON } from "./api/overview.ts";
@@ -119,7 +126,12 @@ export async function startDashboard(daemon: Daemon, port = 7480): Promise<Retur
 
       // --- Metrics API ---
       if (path === "/api/metrics" && req.method === "GET") {
-        return json(getMetricsJSON(ctx));
+        const fromParam = url.searchParams.get("from");
+        const toParam = url.searchParams.get("to");
+        const opts: { from?: number; to?: number } = {};
+        if (fromParam) { const n = Number(fromParam); if (!Number.isNaN(n)) opts.from = n; }
+        if (toParam) { const n = Number(toParam); if (!Number.isNaN(n)) opts.to = n; }
+        return json(getMetricsJSON(ctx, Object.keys(opts).length > 0 ? opts : undefined));
       }
 
       // --- Repo API ---
@@ -176,12 +188,36 @@ export async function startDashboard(daemon: Daemon, port = 7480): Promise<Retur
         const repo = url.searchParams.get("memrepo") || undefined;
         return json(getMemorySearchJSON(ctx, q, repo));
       }
+      if (path === "/api/memory" && req.method === "POST") {
+        const body = await req.formData().catch(() => null);
+        if (!body) return json({ error: "Invalid form data" }, 400);
+        const content = body.get("content")?.toString() || "";
+        const repo = body.get("repo")?.toString() || undefined;
+        const tagsRaw = body.get("tags")?.toString();
+        const tags = tagsRaw ? tagsRaw.split(",").map((t) => t.trim()).filter(Boolean) : undefined;
+        const result = handleMemoryCreate(ctx, { content, repo, tags });
+        return json(result, result.error ? 400 : 201);
+      }
       if (path === "/api/memory/ask" && req.method === "POST") {
         const body = await req.formData().catch(() => null);
         const question = body?.get("askq")?.toString() || "";
         const repo = body?.get("askrepo")?.toString() || undefined;
         const result = await handleAsk(ctx, question, repo);
         return json(result);
+      }
+      // Match DELETE /api/memory/:id
+      const memoryDeleteMatch = path.match(/^\/api\/memory\/([^/]+)$/);
+      if (memoryDeleteMatch && req.method === "DELETE") {
+        const result = handleMemoryDelete(ctx, decodeURIComponent(memoryDeleteMatch[1]));
+        return json(result, result.success ? 200 : 404);
+      }
+      // Match PATCH /api/memory/:id
+      const memoryPatchMatch = path.match(/^\/api\/memory\/([^/]+)$/);
+      if (memoryPatchMatch && req.method === "PATCH") {
+        const body = await req.json().catch(() => null);
+        if (!body) return json({ error: "Invalid JSON body" }, 400);
+        const result = handleMemoryRelevance(ctx, decodeURIComponent(memoryPatchMatch[1]), body);
+        return json(result, result.success ? 200 : 400);
       }
 
       // --- Dreams API ---
@@ -379,6 +415,15 @@ export async function startDashboard(daemon: Daemon, port = 7480): Promise<Retur
       // --- Health API ---
       if (path === "/api/health" && req.method === "GET") {
         return json(getHealthJSON(ctx));
+      }
+      if (path === "/api/health/vacuum" && req.method === "POST") {
+        return json(handleVacuum(ctx));
+      }
+      if (path === "/api/health/prune" && req.method === "POST") {
+        const body = await req.json().catch(() => null);
+        if (!body) return json({ success: false, error: "Invalid JSON body", deletedCount: 0 }, 400);
+        const result = handlePrune(ctx, body);
+        return json(result, result.success ? 200 : 400);
       }
 
       // --- A2A API ---

@@ -302,6 +302,35 @@ export class VectorStore {
     }));
   }
 
+  /**
+   * Delete a memory entry by its id.
+   * Returns true if the entry was found and deleted, false otherwise.
+   */
+  delete(id: string): boolean {
+    const existing = this.db.query("SELECT id FROM memories WHERE id = ?").get(id);
+    if (!existing) return false;
+    this.db.run("DELETE FROM memories WHERE id = ?", [id]);
+    return true;
+  }
+
+  /**
+   * Update relevance of a memory entry.
+   * If relevant is true, boost confidence by 0.1 (capped at 1.0).
+   * If relevant is false, delete the entry (outdated content is noise).
+   */
+  updateRelevance(id: string, relevant: boolean): boolean {
+    if (relevant) {
+      const existing = this.db.query("SELECT id FROM memories WHERE id = ?").get(id);
+      if (!existing) return false;
+      this.db.run(
+        "UPDATE memories SET confidence = MIN(confidence + 0.1, 1.0), updated_at = ? WHERE id = ?",
+        [Date.now(), id],
+      );
+      return true;
+    }
+    return this.delete(id);
+  }
+
   close(): void {
     this.db.close();
   }

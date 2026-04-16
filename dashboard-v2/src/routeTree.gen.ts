@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WebhooksRouteImport } from './routes/webhooks'
+import { Route as TimelineRouteImport } from './routes/timeline'
 import { Route as TasksRouteImport } from './routes/tasks'
 import { Route as SchedulerRouteImport } from './routes/scheduler'
 import { Route as ReposRouteImport } from './routes/repos'
@@ -28,6 +29,11 @@ import { Route as IndexRouteImport } from './routes/index'
 const WebhooksRoute = WebhooksRouteImport.update({
   id: '/webhooks',
   path: '/webhooks',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TimelineRoute = TimelineRouteImport.update({
+  id: '/timeline',
+  path: '/timeline',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TasksRoute = TasksRouteImport.update({
@@ -116,6 +122,7 @@ export interface FileRoutesByFullPath {
   '/repos': typeof ReposRoute
   '/scheduler': typeof SchedulerRoute
   '/tasks': typeof TasksRoute
+  '/timeline': typeof TimelineRoute
   '/webhooks': typeof WebhooksRoute
 }
 export interface FileRoutesByTo {
@@ -133,6 +140,7 @@ export interface FileRoutesByTo {
   '/repos': typeof ReposRoute
   '/scheduler': typeof SchedulerRoute
   '/tasks': typeof TasksRoute
+  '/timeline': typeof TimelineRoute
   '/webhooks': typeof WebhooksRoute
 }
 export interface FileRoutesById {
@@ -151,6 +159,7 @@ export interface FileRoutesById {
   '/repos': typeof ReposRoute
   '/scheduler': typeof SchedulerRoute
   '/tasks': typeof TasksRoute
+  '/timeline': typeof TimelineRoute
   '/webhooks': typeof WebhooksRoute
 }
 export interface FileRouteTypes {
@@ -170,6 +179,7 @@ export interface FileRouteTypes {
     | '/repos'
     | '/scheduler'
     | '/tasks'
+    | '/timeline'
     | '/webhooks'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -187,6 +197,7 @@ export interface FileRouteTypes {
     | '/repos'
     | '/scheduler'
     | '/tasks'
+    | '/timeline'
     | '/webhooks'
   id:
     | '__root__'
@@ -204,6 +215,7 @@ export interface FileRouteTypes {
     | '/repos'
     | '/scheduler'
     | '/tasks'
+    | '/timeline'
     | '/webhooks'
   fileRoutesById: FileRoutesById
 }
@@ -222,6 +234,7 @@ export interface RootRouteChildren {
   ReposRoute: typeof ReposRoute
   SchedulerRoute: typeof SchedulerRoute
   TasksRoute: typeof TasksRoute
+  TimelineRoute: typeof TimelineRoute
   WebhooksRoute: typeof WebhooksRoute
 }
 
@@ -232,6 +245,13 @@ declare module '@tanstack/react-router' {
       path: '/webhooks'
       fullPath: '/webhooks'
       preLoaderRoute: typeof WebhooksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/timeline': {
+      id: '/timeline'
+      path: '/timeline'
+      fullPath: '/timeline'
+      preLoaderRoute: typeof TimelineRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/tasks': {
@@ -350,6 +370,7 @@ const rootRouteChildren: RootRouteChildren = {
   ReposRoute: ReposRoute,
   SchedulerRoute: SchedulerRoute,
   TasksRoute: TasksRoute,
+  TimelineRoute: TimelineRoute,
   WebhooksRoute: WebhooksRoute,
 }
 export const routeTree = rootRouteImport

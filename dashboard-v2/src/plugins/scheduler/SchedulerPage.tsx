@@ -12,6 +12,7 @@ import {
 import { Card, CardContent } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import { Calendar } from "../../components/ui/calendar";
 import {
   Dialog,
   DialogContent,
@@ -47,13 +48,91 @@ export function formatCountdown(ms: number | null): string {
   return `${m}m ${s}s`;
 }
 
-const CRON_PRESETS = [
-  { label: "Every 5m", value: "*/5 * * * *" },
-  { label: "Every hour", value: "0 * * * *" },
-  { label: "Every 6h", value: "0 */6 * * *" },
-  { label: "Daily midnight", value: "0 0 * * *" },
-  { label: "Weekly Mon", value: "0 0 * * 1" },
-] as const;
+type FrequencyType = "minutes" | "hourly" | "daily" | "weekly" | "monthly" | "yearly";
+
+const FREQUENCY_OPTIONS: { value: FrequencyType; label: string }[] = [
+  { value: "minutes", label: "Minutes" },
+  { value: "hourly", label: "Hourly" },
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+  { value: "yearly", label: "Yearly" },
+];
+
+const DAYS_OF_WEEK = [
+  { value: "1", label: "Mon" },
+  { value: "2", label: "Tue" },
+  { value: "3", label: "Wed" },
+  { value: "4", label: "Thu" },
+  { value: "5", label: "Fri" },
+  { value: "6", label: "Sat" },
+  { value: "0", label: "Sun" },
+];
+
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function buildCron(
+  frequency: FrequencyType,
+  interval: number,
+  hour: number,
+  minute: number,
+  dayOfWeek: string,
+  dayOfMonth: number,
+  month: string,
+): string {
+  switch (frequency) {
+    case "minutes":
+      return `*/${interval} * * * *`;
+    case "hourly":
+      return `0 */${interval} * * *`;
+    case "daily":
+      return `${minute} ${hour} * * *`;
+    case "weekly":
+      return `${minute} ${hour} * * ${dayOfWeek}`;
+    case "monthly":
+      return `${minute} ${hour} ${dayOfMonth} * *`;
+    case "yearly":
+      return `${minute} ${hour} ${dayOfMonth} ${month} *`;
+  }
+}
+
+function describeCron(
+  frequency: FrequencyType,
+  interval: number,
+  hour: number,
+  minute: number,
+  dayOfWeek: string,
+  dayOfMonth: number,
+  month: string,
+): string {
+  const time = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  const dayLabel = DAYS_OF_WEEK.find((d) => d.value === dayOfWeek)?.label ?? dayOfWeek;
+  const monthLabel = MONTH_NAMES[Number(month) - 1] ?? month;
+  switch (frequency) {
+    case "minutes":
+      return `Every ${interval} minute${interval > 1 ? "s" : ""}`;
+    case "hourly":
+      return `Every ${interval} hour${interval > 1 ? "s" : ""}`;
+    case "daily":
+      return `Daily at ${time}`;
+    case "weekly":
+      return `Every ${dayLabel} at ${time}`;
+    case "monthly":
+      return `Monthly on the ${dayOfMonth}${ordinalSuffix(dayOfMonth)} at ${time}`;
+    case "yearly":
+      return `Every ${monthLabel} ${dayOfMonth}${ordinalSuffix(dayOfMonth)} at ${time}`;
+  }
+}
+
+function ordinalSuffix(n: number): string {
+  if (n >= 11 && n <= 13) return "th";
+  switch (n % 10) {
+    case 1: return "st";
+    case 2: return "nd";
+    case 3: return "rd";
+    default: return "th";
+  }
+}
 
 const SCHEDULER_ACTIONS = ["dream", "tick", "consolidate", "backup"] as const;
 
@@ -62,7 +141,12 @@ export default function SchedulerPage({
 }: Partial<WidgetProps> = {}) {
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newCron, setNewCron] = useState("");
+  const [newFrequency, setNewFrequency] = useState<FrequencyType>("daily");
+  const [newInterval, setNewInterval] = useState(5);
+  const [newHour, setNewHour] = useState(0);
+  const [newMinute, setNewMinute] = useState(0);
+  const [newDayOfWeek, setNewDayOfWeek] = useState("1");
+  const [newCalendarDate, setNewCalendarDate] = useState<Date>(new Date());
   const [newAction, setNewAction] = useState("");
   const [newRepo, setNewRepo] = useState("");
   const queryClient = useQueryClient();
@@ -74,12 +158,18 @@ export default function SchedulerPage({
 
   const repos = (overviewData as any)?.repos ?? [];
 
+  const calendarDay = newCalendarDate.getDate();
+  const calendarMonth = String(newCalendarDate.getMonth() + 1);
+
+  const generatedCron = buildCron(newFrequency, newInterval, newHour, newMinute, newDayOfWeek, calendarDay, calendarMonth);
+  const cronDescription = describeCron(newFrequency, newInterval, newHour, newMinute, newDayOfWeek, calendarDay, calendarMonth);
+
   const createMut = useMutation({
     mutationFn: () =>
       createSchedule({
         data: {
           name: newName,
-          cron: newCron,
+          cron: generatedCron,
           action: newAction,
           ...(newRepo && { repo: newRepo }),
         },
@@ -87,17 +177,19 @@ export default function SchedulerPage({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: vigilKeys.scheduler });
       setCreateOpen(false);
-      setNewName("");
-      setNewCron("");
-      setNewAction("");
-      setNewRepo("");
+      resetCreateForm();
     },
     onError: (err: Error) => toast.error(`Failed to create schedule: ${err.message}`),
   });
 
   const resetCreateForm = () => {
     setNewName("");
-    setNewCron("");
+    setNewFrequency("daily");
+    setNewInterval(5);
+    setNewHour(0);
+    setNewMinute(0);
+    setNewDayOfWeek("1");
+    setNewCalendarDate(new Date());
     setNewAction("");
     setNewRepo("");
   };
@@ -155,25 +247,110 @@ export default function SchedulerPage({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="schedule-cron">Cron Expression</Label>
-              <Input
-                id="schedule-cron"
-                placeholder="*/5 * * * *"
-                value={newCron}
-                onChange={(e) => setNewCron(e.target.value)}
-              />
+              <Label>Frequency</Label>
               <div className="flex flex-wrap gap-1">
-                {CRON_PRESETS.map((preset) => (
+                {FREQUENCY_OPTIONS.map((opt) => (
                   <Button
-                    key={preset.value}
+                    key={opt.value}
                     size="xs"
-                    variant={newCron === preset.value ? "default" : "outline"}
-                    onClick={() => setNewCron(preset.value)}
+                    variant={newFrequency === opt.value ? "default" : "outline"}
+                    onClick={() => setNewFrequency(opt.value)}
                   >
-                    {preset.label}
+                    {opt.label}
                   </Button>
                 ))}
               </div>
+            </div>
+
+            {(newFrequency === "minutes" || newFrequency === "hourly") && (
+              <div className="space-y-2">
+                <Label htmlFor="schedule-interval">
+                  Every {newInterval} {newFrequency === "minutes" ? "minute" : "hour"}{newInterval > 1 ? "s" : ""}
+                </Label>
+                <div className="flex items-center gap-3">
+                  <input
+                    id="schedule-interval"
+                    type="range"
+                    min={newFrequency === "minutes" ? 1 : 1}
+                    max={newFrequency === "minutes" ? 60 : 24}
+                    value={newInterval}
+                    onChange={(e) => setNewInterval(Number(e.target.value))}
+                    className="flex-1 accent-vigil"
+                  />
+                  <span className="text-sm font-mono w-8 text-right">{newInterval}</span>
+                </div>
+              </div>
+            )}
+
+            {(newFrequency === "daily" || newFrequency === "weekly" || newFrequency === "monthly" || newFrequency === "yearly") && (
+              <div className="space-y-2">
+                <Label>Time</Label>
+                <div className="flex items-center gap-2">
+                  <Select value={String(newHour)} onValueChange={(v) => setNewHour(Number(v))}>
+                    <SelectTrigger className="w-20">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 24 }, (_, i) => (
+                        <SelectItem key={i} value={String(i)}>
+                          {String(i).padStart(2, "0")}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span className="text-muted-foreground">:</span>
+                  <Select value={String(newMinute)} onValueChange={(v) => setNewMinute(Number(v))}>
+                    <SelectTrigger className="w-20">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map((m) => (
+                        <SelectItem key={m} value={String(m)}>
+                          {String(m).padStart(2, "0")}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
+            {(newFrequency === "monthly" || newFrequency === "yearly") && (
+              <div className="space-y-2">
+                <Label>
+                  {newFrequency === "monthly" ? "Day of month" : "Date"}
+                </Label>
+                <div className="flex justify-center">
+                  <Calendar
+                    mode="single"
+                    selected={newCalendarDate}
+                    onSelect={(date) => date && setNewCalendarDate(date)}
+                    className="rounded-lg border"
+                  />
+                </div>
+              </div>
+            )}
+
+            {newFrequency === "weekly" && (
+              <div className="space-y-2">
+                <Label>Day</Label>
+                <div className="flex flex-wrap gap-1">
+                  {DAYS_OF_WEEK.map((day) => (
+                    <Button
+                      key={day.value}
+                      size="xs"
+                      variant={newDayOfWeek === day.value ? "default" : "outline"}
+                      onClick={() => setNewDayOfWeek(day.value)}
+                    >
+                      {day.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+              {cronDescription} <span className="font-mono ml-1">({generatedCron})</span>
             </div>
             <div className="space-y-2">
               <Label>Action</Label>
@@ -210,7 +387,7 @@ export default function SchedulerPage({
             <Button
               onClick={() => createMut.mutate()}
               disabled={
-                !isSchedulerFormValid(newName, newCron, newAction) ||
+                !isSchedulerFormValid(newName, generatedCron, newAction) ||
                 createMut.isPending
               }
             >
