@@ -1,10 +1,13 @@
 import { describe, test, expect } from "bun:test";
 
 /**
- * Tests for Overview page StatCard logic.
+ * Tests for Overview page StatCard value-extraction logic.
  *
  * StatCards map API data to display values and navigation targets.
  * Each card has: icon name, title, value, optional trend, href.
+ *
+ * These mirror the extraction logic in OverviewPage.tsx so that
+ * changes to the mapping are caught by tests.
  */
 
 interface StatCardConfig {
@@ -31,7 +34,7 @@ const statCards: StatCardConfig[] = [
     icon: "Sparkles",
     title: "Total Dreams",
     href: "/dreams",
-    getValue: (data) => data.dreamCount ?? 0,
+    getValue: (data) => data.dreams?.length ?? 0,
   },
   {
     icon: "HeartPulse",
@@ -103,9 +106,14 @@ describe("StatCard value extraction", () => {
     expect(card.getValue({ pendingCount: 3 })).toBe(3);
   });
 
-  test("extracts dream count", () => {
+  test("extracts dream count from dreams array length", () => {
     const card = statCards[2];
-    expect(card.getValue({ dreamCount: 12 })).toBe(12);
+    expect(card.getValue({ dreams: [{}, {}, {}] })).toBe(3);
+  });
+
+  test("defaults dream count to 0 when dreams missing", () => {
+    const card = statCards[2];
+    expect(card.getValue({})).toBe(0);
   });
 
   test("extracts health status string", () => {
@@ -121,6 +129,6 @@ describe("StatCard value extraction", () => {
   test("handles zero values correctly", () => {
     expect(statCards[0].getValue({ repoCount: 0 })).toBe(0);
     expect(statCards[1].getValue({ pendingCount: 0 })).toBe(0);
-    expect(statCards[2].getValue({ dreamCount: 0 })).toBe(0);
+    expect(statCards[2].getValue({ dreams: [] })).toBe(0);
   });
 });

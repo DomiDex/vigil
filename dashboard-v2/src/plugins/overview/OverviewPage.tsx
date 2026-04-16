@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import {
   GitBranch,
   Zap,
@@ -18,6 +18,7 @@ import { vigilKeys } from "../../lib/query-keys";
 import {
   getOverview,
   getTimeline,
+  getDreams,
   getActionsPending,
   getHealth,
   getMetrics,
@@ -29,6 +30,7 @@ import type { WidgetProps } from "../../types/plugin";
 import type {
   OverviewData,
   ActionsPendingData,
+  DreamsData,
   MetricsData,
   TimelineData,
 } from "../../types/api";
@@ -98,42 +100,45 @@ function SectionError({ message }: { message: string }) {
 }
 
 export default function OverviewPage(_props: Partial<WidgetProps> = {}) {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const overview = useQuery({
+  const overview = useQuery<OverviewData>({
     queryKey: vigilKeys.overview,
     queryFn: getOverview,
+    staleTime: 30_000,
   });
-  const timeline = useQuery({
+  const timeline = useQuery<TimelineData>({
     queryKey: vigilKeys.timeline({ page: 1 }),
     queryFn: () => getTimeline({ data: { page: 1 } }),
+    staleTime: 30_000,
   });
-  const pending = useQuery({
+  const dreams = useQuery<DreamsData>({
+    queryKey: vigilKeys.dreams,
+    queryFn: getDreams,
+    staleTime: 30_000,
+  });
+  const pending = useQuery<ActionsPendingData>({
     queryKey: vigilKeys.actions.pending,
     queryFn: getActionsPending,
+    staleTime: 30_000,
   });
-  const health = useQuery({
+  const health = useQuery<{ status?: string; uptime?: string }>({
     queryKey: vigilKeys.health,
     queryFn: getHealth,
+    staleTime: 30_000,
   });
-  const metrics = useQuery({
+  const metrics = useQuery<MetricsData>({
     queryKey: vigilKeys.metrics,
     queryFn: getMetrics,
+    staleTime: 30_000,
   });
 
-  const overviewData = overview.data as OverviewData | undefined;
-  const pendingData = pending.data as ActionsPendingData | undefined;
-  const metricsData = metrics.data as MetricsData | undefined;
-  const healthData = health.data as { status?: string; uptime?: string } | undefined;
-  const timelineData = timeline.data as TimelineData | undefined;
-
-  const pendingActions = pendingData?.pending ?? [];
-  const repos = overviewData?.repos ?? [];
-  const repoCount = overviewData?.repoCount ?? 0;
-  const dreamCount = metricsData?.ticks?.total ?? 0;
-  const healthStatus = healthData?.status ?? "unknown";
-  const lastEvents = timelineData?.messages?.slice(0, 5) ?? [];
+  const pendingActions = pending.data?.pending ?? [];
+  const repos = overview.data?.repos ?? [];
+  const repoCount = overview.data?.repoCount ?? 0;
+  const dreamCount = dreams.data?.dreams?.length ?? 0;
+  const healthStatus = health.data?.status ?? "unknown";
+  const lastEvents = timeline.data?.messages?.slice(0, 5) ?? [];
 
   const approve = useMutation({
     mutationFn: (id: string) => approveAction({ data: { id } }),
@@ -211,14 +216,15 @@ export default function OverviewPage(_props: Partial<WidgetProps> = {}) {
                       <span className="text-text-muted line-clamp-1">{event.message}</span>
                     </div>
                   ))}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-full text-xs"
-                    onClick={() => navigate({ to: "/timeline" })}
-                  >
-                    View all <ArrowRight className="ml-1 size-3" />
-                  </Button>
+                  <Link to="/timeline" className="block">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full text-xs"
+                    >
+                      View all <ArrowRight className="ml-1 size-3" />
+                    </Button>
+                  </Link>
                 </div>
               ) : (
                 <div className="py-4 text-center text-sm text-text-muted">
@@ -256,14 +262,15 @@ export default function OverviewPage(_props: Partial<WidgetProps> = {}) {
                     />
                   ))}
                   {pendingActions.length > 3 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="w-full text-xs"
-                      onClick={() => navigate({ to: "/actions" })}
-                    >
-                      View all ({pendingActions.length}) <ArrowRight className="ml-1 size-3" />
-                    </Button>
+                    <Link to="/actions" className="block">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full text-xs"
+                      >
+                        View all ({pendingActions.length}) <ArrowRight className="ml-1 size-3" />
+                      </Button>
+                    </Link>
                   )}
                 </div>
               ) : (
@@ -303,14 +310,15 @@ export default function OverviewPage(_props: Partial<WidgetProps> = {}) {
                       </Badge>
                     </div>
                   ))}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-full text-xs"
-                    onClick={() => navigate({ to: "/repos" })}
-                  >
-                    View all <ArrowRight className="ml-1 size-3" />
-                  </Button>
+                  <Link to="/repos" className="block">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full text-xs"
+                    >
+                      View all <ArrowRight className="ml-1 size-3" />
+                    </Button>
+                  </Link>
                 </div>
               ) : (
                 <div className="py-4 text-center text-sm text-text-muted">
@@ -335,20 +343,20 @@ export default function OverviewPage(_props: Partial<WidgetProps> = {}) {
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-text-muted">State</span>
                     <Badge variant="secondary" className="text-xs">
-                      {metricsData?.state?.isSleeping ? "sleeping" : "awake"}
+                      {metrics.data?.state?.isSleeping ? "sleeping" : "awake"}
                     </Badge>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-text-muted">Uptime</span>
-                    <span>{metricsData?.state?.uptime ?? "\u2014"}</span>
+                    <span>{metrics.data?.state?.uptime ?? "\u2014"}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-text-muted">Total Ticks</span>
-                    <span>{metricsData?.ticks?.total ?? 0}</span>
+                    <span>{metrics.data?.ticks?.total ?? 0}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-text-muted">Avg Latency</span>
-                    <span>{metricsData?.latency?.avg ? `${Math.round(metricsData.latency.avg)}ms` : "\u2014"}</span>
+                    <span>{metrics.data?.latency?.avg ? `${Math.round(metrics.data.latency.avg)}ms` : "\u2014"}</span>
                   </div>
                   <Button
                     variant="secondary"
@@ -360,14 +368,15 @@ export default function OverviewPage(_props: Partial<WidgetProps> = {}) {
                     <Play className="mr-1 size-3" />
                     {dream.isPending ? "Triggering..." : "Trigger Dream"}
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-full text-xs"
-                    onClick={() => navigate({ to: "/dreams" })}
-                  >
-                    View dreams <ArrowRight className="ml-1 size-3" />
-                  </Button>
+                  <Link to="/dreams" className="block">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full text-xs"
+                    >
+                      View dreams <ArrowRight className="ml-1 size-3" />
+                    </Button>
+                  </Link>
                 </div>
               )}
             </CardContent>
