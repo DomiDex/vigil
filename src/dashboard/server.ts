@@ -2,7 +2,7 @@ import { corePlugins } from "../../dashboard-v2/src/plugins/index.ts";
 import { setVigilContext } from "../../dashboard-v2/src/server/vigil-context.ts";
 import type { Daemon } from "../core/daemon.ts";
 import { getA2AHistoryJSON, getA2ASkillsJSON, getA2AStatusJSON } from "./api/a2a-status.ts";
-import { getActionsJSON, getActionsPendingJSON, handleApprove, handleReject } from "./api/actions.ts";
+import { getActionsJSON, getActionsPendingJSON, getActionPreviewJSON, handleApprove, handleReject } from "./api/actions.ts";
 import { getAgentsJSON, getCurrentAgentJSON, handleAgentSwitch } from "./api/agents.ts";
 import {
   getChannelPermissionsJSON,
@@ -281,6 +281,13 @@ export async function startDashboard(daemon: Daemon, port = 7480): Promise<Retur
       }
       if (path === "/api/actions/pending" && req.method === "GET") {
         return json(getActionsPendingJSON(ctx));
+      }
+      // Match GET /api/actions/:id/preview
+      const actionPreviewMatch = path.match(/^\/api\/actions\/([^/]+)\/preview$/);
+      if (actionPreviewMatch && req.method === "GET") {
+        const preview = getActionPreviewJSON(ctx, decodeURIComponent(actionPreviewMatch[1]));
+        if (!preview) return json({ error: "Action not found" }, 404);
+        return json(preview);
       }
       // Match POST /api/actions/:id/approve
       const actionApproveMatch = path.match(/^\/api\/actions\/([^/]+)\/approve$/);

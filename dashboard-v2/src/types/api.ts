@@ -160,6 +160,15 @@ export interface ActionRequest {
   timeRelative?: string;
 }
 
+export interface ActionPreview {
+  id: string;
+  command: string;
+  args: string[];
+  description: string;
+  dryRun: string | null;
+  estimatedEffect: string | null;
+}
+
 export interface ActionsData {
   actions: ActionRequest[];
   pending: ActionRequest[];
