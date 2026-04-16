@@ -139,18 +139,19 @@ export async function startDashboard(daemon: Daemon, port = 7480): Promise<Retur
         if (!diff) return json({ error: "Repo not found" }, 404);
         return json(diff);
       }
-      // Match DELETE /api/repos/:name
-      const repoDeleteMatch = path.match(/^\/api\/repos\/([^/]+)$/);
-      if (repoDeleteMatch && req.method === "DELETE") {
-        const result = removeRepoJSON(ctx, decodeURIComponent(repoDeleteMatch[1]));
-        return json(result, result.success ? 200 : 404);
-      }
-      // Match /api/repos/:name (must be after exact matches)
-      const repoDetailMatch = path.match(/^\/api\/repos\/([^/]+)$/);
-      if (repoDetailMatch && req.method === "GET") {
-        const detail = await getRepoDetailJSON(ctx, decodeURIComponent(repoDetailMatch[1]));
-        if (!detail) return json({ error: "Repo not found" }, 404);
-        return json(detail);
+      // Match /api/repos/:name — GET (detail) or DELETE (remove)
+      const repoNameMatch = path.match(/^\/api\/repos\/([^/]+)$/);
+      if (repoNameMatch) {
+        const name = decodeURIComponent(repoNameMatch[1]);
+        if (req.method === "DELETE") {
+          const result = removeRepoJSON(ctx, name);
+          return json(result, result.success ? 200 : 404);
+        }
+        if (req.method === "GET") {
+          const detail = await getRepoDetailJSON(ctx, name);
+          if (!detail) return json({ error: "Repo not found" }, 404);
+          return json(detail);
+        }
       }
 
       // --- Timeline API ---

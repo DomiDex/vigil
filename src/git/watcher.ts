@@ -65,7 +65,7 @@ export class EventDeduplicator {
 
 export class GitWatcher {
   private repos: Map<string, RepoState> = new Map();
-  private watchers: FSWatcher[] = [];
+  private repoWatchers: Map<string, FSWatcher[]> = new Map();
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private handlers: GitEventHandler[] = [];
   private dedup = new EventDeduplicator(5_000);
@@ -107,6 +107,8 @@ export class GitWatcher {
 
     this.repos.set(absPath, state);
 
+    const repoFSWatchers: FSWatcher[] = [];
+
     // File system watcher for working tree changes
     // Note: recursive fs.watch can crash on broken symlinks (e.g. .claude/worktrees,
     // node_modules/.pnpm). We attach an error handler to prevent process exit.
@@ -125,7 +127,7 @@ export class GitWatcher {
       watcher.on("error", () => {
         // Swallow fs.watch errors (broken symlinks, permission issues)
       });
-      this.watchers.push(watcher);
+      repoFSWatchers.push(watcher);
     } catch {
       // fs.watch may not work on all platforms
     }
@@ -139,10 +141,12 @@ export class GitWatcher {
           s.lastCommitHash = ""; // Force re-read on next poll
         }
       });
-      this.watchers.push(headWatcher);
+      repoFSWatchers.push(headWatcher);
     } catch {
       // .git/HEAD watch may fail on some setups
     }
+
+    this.repoWatchers.set(absPath, repoFSWatchers);
   }
 
   startPolling(intervalSec?: number): void {
@@ -155,8 +159,10 @@ export class GitWatcher {
       clearInterval(this.pollTimer);
       this.pollTimer = null;
     }
-    for (const w of this.watchers) w.close();
-    this.watchers = [];
+    for (const watchers of this.repoWatchers.values()) {
+      for (const w of watchers) w.close();
+    }
+    this.repoWatchers.clear();
   }
 
   private async poll(): Promise<void> {
@@ -285,10 +291,13 @@ export class GitWatcher {
   removeRepo(repoName: string): void {
     for (const [path, state] of this.repos) {
       if (state.name === repoName) {
+        // Close FSWatchers for this repo
+        const watchers = this.repoWatchers.get(path);
+        if (watchers) {
+          for (const w of watchers) w.close();
+          this.repoWatchers.delete(path);
+        }
         this.repos.delete(path);
-        // Note: FSWatcher instances don't expose their watched path,
-        // so we can't selectively close them here. Events from the old
-        // watcher are harmlessly ignored since the repo is no longer in the map.
         return;
       }
     }

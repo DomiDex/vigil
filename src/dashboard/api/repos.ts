@@ -236,6 +236,8 @@ export async function addRepoJSON(
   try {
     await ctx.daemon.gitWatcher.addRepo(absPath);
     ctx.daemon.repoPaths.push(absPath);
+    // Note: repo list is in-memory only (CLI args). Changes are lost on daemon restart.
+    // TODO: persist to ~/.vigil/config.json when a `repos` config field is added.
     return { success: true };
   } catch (err) {
     return { success: false, error: `Failed to add repo: ${(err as Error).message}` };
