@@ -38,8 +38,8 @@ describe("routeLabels", () => {
     expect(routeLabels["/config"]).toBe("Config");
   });
 
-  it("contains exactly 9 route entries", () => {
-    expect(Object.keys(routeLabels).length).toBe(9);
+  it("contains exactly 15 route entries", () => {
+    expect(Object.keys(routeLabels).length).toBe(15);
   });
 
   it('falls back to "Dashboard" for unknown routes', () => {

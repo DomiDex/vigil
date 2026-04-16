@@ -7,11 +7,11 @@ describe("server routing — Phase 5 routes", () => {
   let port: number;
   let base: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     port = 40000 + Math.floor(Math.random() * 10000);
     base = `http://localhost:${port}`;
     const ctx = createFakeDashboardContext();
-    server = startDashboard(ctx.daemon, port);
+    server = await startDashboard(ctx.daemon, port);
   });
 
   afterEach(() => {

@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ActionExecutor } from "../../action/executor.ts";
 import {
-  getActionsFragment,
   getActionsJSON,
   getActionsPendingJSON,
   handleReject,
@@ -120,145 +119,22 @@ describe("Action Dashboard API", () => {
     });
   });
 
-  describe("getActionsFragment", () => {
-    it("returns HTML with empty state", () => {
-      const html = getActionsFragment(ctx);
-      expect(html).toContain("Action History");
-      expect(html).toContain("act-filter");
-      expect(html).toContain("Action History");
-      expect(html).toContain("No actions recorded");
-    });
-
-    it("renders action rows after submission", async () => {
-      executor.optIn();
-      await executor.submit("git log --oneline", "Check commits", "vigil", tmpDir);
-
-      const html = getActionsFragment(ctx);
-      expect(html).toContain("git log --oneline");
-      expect(html).toContain("vigil");
-      expect(html).toContain("bg-success/15 text-success");
-    });
-
-    it("renders pending card with gate checklist", async () => {
-      executor.optIn();
-      await executor.submit("git stash", "Save changes", "vigil", tmpDir, {
-        actionType: "git_stash",
-        confidence: 0.85,
-      });
-
-      const html = getActionsFragment(ctx);
-      expect(html).toContain("border-2");
-      expect(html).toContain("git stash");
-      expect(html).toContain("Save changes");
-      expect(html).toContain("85%");
-      expect(html).toContain("list-none");
-      expect(html).toContain("Gate 1: Config enabled");
-      expect(html).toContain("Gate 6: User approval");
-      expect(html).toContain("Approve");
-      expect(html).toContain("Reject");
-    });
-
-    it("renders tier badges with correct classes", async () => {
-      executor.optIn();
-      await executor.submit("git stash", "Save", "vigil", tmpDir);
-
-      const html = getActionsFragment(ctx);
-      expect(html).toContain("bg-warning/15 text-warning");
-    });
-
-    it("shows stats section", async () => {
-      executor.optIn();
-      await executor.submit("git log", "Check", "vigil", tmpDir);
-
-      const html = getActionsFragment(ctx);
-      expect(html).toContain("Stats");
-      expect(html).toContain("Executed");
-      expect(html).toContain("Rejected");
-    });
-
-    it("renders filter buttons with counts", async () => {
-      executor.optIn();
-      await executor.submit("git stash", "Save", "vigil", tmpDir);
-
-      const html = getActionsFragment(ctx);
-      expect(html).toContain("rounded-full text-xs font-mono");
-      expect(html).toContain("Pending");
-    });
-  });
-
   describe("handleReject", () => {
-    it("rejects a pending action and returns updated fragment", async () => {
+    it("rejects a pending action and returns ok", async () => {
       executor.optIn();
       const action = await executor.submit("git stash", "Save work", "vigil", tmpDir);
       expect(action.status).toBe("pending");
 
-      const html = handleReject(ctx, action.id);
-      expect(html).toContain("Action History");
+      const result = handleReject(ctx, action.id);
+      expect(result.ok).toBe(true);
 
-      // Action should now be rejected
       const updated = executor.getById(action.id);
       expect(updated?.status).toBe("rejected");
     });
 
     it("handles non-existent action gracefully", () => {
-      const html = handleReject(ctx, "non-existent-id");
-      expect(html).toContain("Action History");
-    });
-  });
-
-  describe("gate display", () => {
-    it("shows passed gates with checkmarks", async () => {
-      executor.optIn();
-      await executor.submit("git stash", "Save", "vigil", tmpDir, {
-        actionType: "git_stash",
-        confidence: 0.9,
-      });
-
-      const html = getActionsFragment(ctx);
-      expect(html).toContain("text-success");
-      expect(html).toContain("Gate 2: Session opted in");
-      expect(html).toContain("Gate 5: Confidence threshold");
-    });
-
-    it("shows failed gates when action is blocked", async () => {
-      // Don't opt in — Gate 2 will fail
-      const action = await executor.submit("git stash", "Save", "vigil", tmpDir, {
-        actionType: "git_stash",
-        confidence: 0.9,
-      });
-
-      // Action should be rejected by gates
-      expect(action.status).toBe("rejected");
-
-      const html = getActionsFragment(ctx);
-      // Rejected action shows in history, not pending
-      expect(html).toContain("git stash");
-    });
-  });
-
-  describe("tier color-coding", () => {
-    it("safe actions get green badge", async () => {
-      executor.optIn();
-      await executor.submit("git log", "Check", "vigil", tmpDir);
-
-      const html = getActionsFragment(ctx);
-      expect(html).toContain("bg-success/15 text-success");
-    });
-
-    it("moderate actions get amber badge", async () => {
-      executor.optIn();
-      await executor.submit("git stash", "Save", "vigil", tmpDir);
-
-      const html = getActionsFragment(ctx);
-      expect(html).toContain("bg-warning/15 text-warning");
-    });
-
-    it("dangerous actions get red badge", async () => {
-      executor.optIn();
-      await executor.submit("git push origin main", "Deploy", "vigil", tmpDir);
-
-      const html = getActionsFragment(ctx);
-      expect(html).toContain("bg-error/15 text-error");
+      const result = handleReject(ctx, "non-existent-id");
+      expect(result.ok).toBe(true);
     });
   });
 });

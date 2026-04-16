@@ -4,10 +4,10 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "bun run css:build && bun run build.config.ts",
+    "build": "bun run dashboard:build && bun run build.config.ts",
     "build:lite": "bun run build.config.ts --lite",
-    "css:build": "bunx @tailwindcss/cli -i src/dashboard/static/tailwind.css -o src/dashboard/static/dist/styles.css --minify",
-    "css:watch": "bunx @tailwindcss/cli -i src/dashboard/static/tailwind.css -o src/dashboard/static/dist/styles.css --watch",
+    "dashboard:build": "cd dashboard-v2 && bun --bun vite build",
+    "dashboard:dev": "cd dashboard-v2 && bun --bun vite dev",
     "lint": "biome check src/",
     "lint:fix": "biome check --write src/",
     "typecheck": "tsc --noEmit",

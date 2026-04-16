@@ -47,7 +47,7 @@ const TICK_FIELDS: { key: keyof ConfigData; label: string }[] = [
 ];
 
 const LAYER_VARIANTS: Record<string, string> = {
-  build: "bg-blue-500/20 text-blue-400",
+  build: "bg-vigil/20 text-vigil-light",
   config: "bg-purple-500/20 text-purple-400",
   runtime: "bg-amber-500/20 text-amber-400",
   session: "bg-cyan-500/20 text-cyan-400",
