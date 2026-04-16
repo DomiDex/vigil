@@ -367,7 +367,7 @@ export default function WebhooksPage({
                             Payload unavailable
                           </span>
                         )}
-                        {detailData && !detailQuery.isLoading && (
+                        {detailData && !detailQuery.isLoading && detailData.id === evtId && (
                           <pre className="bg-muted p-3 rounded text-xs overflow-x-auto max-h-96 overflow-y-auto">
                             {formatPayload(detailData.payload)}
                           </pre>

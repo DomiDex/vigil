@@ -4,7 +4,6 @@ import { Radio, Trash2, Shield, Send } from "lucide-react";
 import { vigilKeys } from "../../lib/query-keys";
 import {
   getChannels,
-  registerChannel,
   deleteChannel,
   testChannel,
 } from "../../server/functions";
@@ -39,6 +38,7 @@ export default function ChannelsPage({
     id: string;
     name: string;
   } | null>(null);
+  const [testingId, setTestingId] = useState<string | null>(null);
 
   const {
     data: channelsData,
@@ -52,13 +52,6 @@ export default function ChannelsPage({
 
   const channels = (channelsData as Channel[] | undefined) ?? [];
 
-  const registerMut = useMutation({
-    mutationFn: (payload: { name: string; type: string }) =>
-      registerChannel({ data: payload }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: vigilKeys.channels.all }),
-  });
-
   const deleteMut = useMutation({
     mutationFn: (id: string) => deleteChannel({ data: { id } }),
     onSuccess: () =>
@@ -67,6 +60,8 @@ export default function ChannelsPage({
 
   const testMut = useMutation({
     mutationFn: (id: string) => testChannel({ data: { id } }),
+    onMutate: (id) => setTestingId(id),
+    onSettled: () => setTestingId(null),
     onSuccess: () => toast.success("Test message sent"),
     onError: (err: Error) => toast.error(`Test failed: ${err.message}`),
   });
@@ -131,7 +126,7 @@ export default function ChannelsPage({
                     size="xs"
                     variant="secondary"
                     onClick={() => testMut.mutate(ch.id)}
-                    disabled={testMut.isPending || ch.status === "inactive"}
+                    disabled={testingId === ch.id || ch.status === "inactive"}
                   >
                     <Send className="size-3" />
                   </Button>
