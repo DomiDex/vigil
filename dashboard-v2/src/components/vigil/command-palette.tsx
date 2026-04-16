@@ -24,6 +24,8 @@ import {
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
   const queryClient = useQueryClient();
   const chordRef = useRef<ChordState>({ key: "", time: 0 });
 
@@ -67,12 +69,12 @@ export function CommandPalette() {
 
       if (result.navigateTo) {
         e.preventDefault();
-        navigate({ to: result.navigateTo });
+        navigateRef.current({ to: result.navigateTo });
       }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [open, navigate]);
+  }, [open]);
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>

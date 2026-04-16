@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import type { FileRoutesByFullPath } from "../../routeTree.gen";
 import {
   Activity,
   GitBranch,
@@ -19,7 +20,7 @@ import {
 
 export interface NavItem {
   label: string;
-  path: string;
+  path: keyof FileRoutesByFullPath;
   icon: LucideIcon;
   chord: string;
 }

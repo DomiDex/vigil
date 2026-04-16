@@ -71,16 +71,18 @@ function AppShell() {
   useSSE();
 
   return (
-    <SidebarProvider>
-      <AppSidebar plugins={corePlugins} />
-      <SidebarInset>
-        <SiteHeader />
-        <main className="flex-1 overflow-y-auto p-6">
-          <Outlet />
-        </main>
-      </SidebarInset>
+    <>
+      <SidebarProvider>
+        <AppSidebar plugins={corePlugins} />
+        <SidebarInset>
+          <SiteHeader />
+          <main className="flex-1 overflow-y-auto p-6">
+            <Outlet />
+          </main>
+        </SidebarInset>
+      </SidebarProvider>
       <CommandPalette />
-    </SidebarProvider>
+    </>
   );
 }
 
