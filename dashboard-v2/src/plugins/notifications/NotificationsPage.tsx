@@ -84,13 +84,18 @@ export default function NotificationsPage({
   const [quietEnd, setQuietEnd] = useState("07:00");
 
   // Sync from server data
+  const quietHoursStart = config?.quietHours?.start;
+  const quietHoursEnd = config?.quietHours?.end;
+
   useEffect(() => {
-    if (config?.quietHours) {
+    if (quietHoursStart && quietHoursEnd) {
       setQuietEnabled(true);
-      setQuietStart(config.quietHours.start);
-      setQuietEnd(config.quietHours.end);
+      setQuietStart(quietHoursStart);
+      setQuietEnd(quietHoursEnd);
+    } else {
+      setQuietEnabled(false);
     }
-  }, [config?.quietHours?.start, config?.quietHours?.end]);
+  }, [quietHoursStart, quietHoursEnd]);
 
   const testMut = useMutation({
     mutationFn: () => testNotification(),
@@ -99,7 +104,7 @@ export default function NotificationsPage({
   });
 
   const updateRulesMut = useMutation({
-    mutationFn: (rules: Record<string, any>) =>
+    mutationFn: (rules: Partial<NotificationConfig>) =>
       updateNotificationRules({ data: rules }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: vigilKeys.notifications });
@@ -114,7 +119,8 @@ export default function NotificationsPage({
     if (quietEnabled) {
       updateRulesMut.mutate({ quietHours: { start: quietStart, end: quietEnd } });
     } else {
-      updateRulesMut.mutate({ quietHours: { start: "00:00", end: "00:00" } });
+      toast.success("Quiet hours disabled");
+      return;
     }
   };
 
