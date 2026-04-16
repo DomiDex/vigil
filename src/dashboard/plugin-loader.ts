@@ -69,6 +69,7 @@ export async function loadUserPlugins(): Promise<PluginWidget[]> {
         id: manifest.id,
         label: manifest.label,
         icon: manifest.icon,
+        path: `/${manifest.id}`,
         slot: manifest.slot,
         order: manifest.order,
         component: manifest.component as PluginWidget["component"],

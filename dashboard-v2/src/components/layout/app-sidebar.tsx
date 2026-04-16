@@ -96,7 +96,7 @@ export function AppSidebar({ plugins }: AppSidebarProps) {
           <SidebarMenu>
             {tabs.map((tab) => {
               const Icon = (LucideIcons as Record<string, any>)[tab.icon];
-              const path = tab.id === "timeline" ? "/" : `/${tab.id}`;
+              const path = tab.path;
               const isActive = pathname === path;
               return (
                 <SidebarMenuItem key={tab.id}>

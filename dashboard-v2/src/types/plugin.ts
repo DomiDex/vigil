@@ -15,6 +15,7 @@ export interface PluginWidget {
   slot: WidgetSlot;
   order: number;
   component: () => Promise<{ default: ComponentType<WidgetProps> }>;
+  path: string;
   sseEvents?: string[];
   queryKeys?: readonly string[][];
   featureGate?: string;
