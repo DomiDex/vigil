@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sparkles, Play } from "lucide-react";
 import { vigilKeys } from "../../lib/query-keys";
-import { getDreams, triggerDream } from "../../server/functions";
+import { getDreams, getDreamPatterns, triggerDream } from "../../server/functions";
 import { DreamEntry } from "../../components/vigil/dream-entry";
 import { Card, CardContent } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
@@ -30,6 +30,13 @@ export default function DreamsPage({ activeRepo }: Partial<WidgetProps> = {}) {
     : dreams;
 
   const repos = [...new Set(dreams.map((d) => d.repo))];
+
+  const { data: patternsData, isLoading: patternsLoading } = useQuery({
+    queryKey: vigilKeys.dreamPatterns(repoFilter ?? ""),
+    queryFn: () => getDreamPatterns({ data: { repo: repoFilter! } }),
+    enabled: !!repoFilter,
+  });
+  const patterns = (patternsData as { patterns: string[] })?.patterns ?? [];
 
   const trigger = useMutation({
     mutationFn: (repo?: string) => triggerDream({ data: { repo } }),
@@ -99,6 +106,27 @@ export default function DreamsPage({ activeRepo }: Partial<WidgetProps> = {}) {
           <DreamEntry key={`${dream.timestamp}-${i}`} dream={dream} />
         ))}
       </div>
+
+      {repoFilter && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <h4 className="text-xs font-medium text-muted-foreground uppercase">Patterns</h4>
+            <Badge variant="secondary" className="text-xs">{patterns.length}</Badge>
+          </div>
+          {patternsLoading && <div className="text-sm text-muted-foreground">Loading patterns...</div>}
+          {!patternsLoading && patterns.length === 0 && (
+            <div className="text-sm text-muted-foreground text-center py-4">No patterns found for {repoFilter}.</div>
+          )}
+          {patterns.map((pattern) => (
+            <Card key={pattern}>
+              <CardContent className="flex items-center gap-3">
+                <Sparkles className="size-4 text-vigil shrink-0" />
+                <span className="text-sm">{pattern}</span>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {!isLoading && filtered.length === 0 && (
         <div className="text-sm text-muted-foreground text-center py-8">
