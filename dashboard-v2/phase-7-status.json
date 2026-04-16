@@ -1,6 +1,7 @@
 {
   "phase": 7,
-  "status": "green",
+  "status": "pr_open",
   "iterations": 1,
-  "timestamp": "2026-04-16T07:53:34.773773+00:00"
+  "pr_url": "https://github.com/DomiDex/vigil/pull/16",
+  "timestamp": "2026-04-16T08:01:59.141089+00:00"
 }

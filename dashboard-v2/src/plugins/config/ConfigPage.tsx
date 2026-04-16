@@ -90,19 +90,35 @@ export default function ConfigPage({
   const [config, setConfig] = useState<ConfigData | null>(null);
   const originalRef = useRef<ConfigData | null>(null);
 
+  // Raw string state for comma-separated fields — parsed to arrays only on blur/save
+  const [reposText, setReposText] = useState("");
+  const [actionsText, setActionsText] = useState("");
+
   // Sync local state when server data arrives or refreshes
   useEffect(() => {
     if (serverConfig) {
       const snapshot = JSON.parse(JSON.stringify(serverConfig));
       setConfig(snapshot);
       originalRef.current = JSON.parse(JSON.stringify(serverConfig));
+      setReposText(joinCommaSeparated(serverConfig.actionGates.allowedRepos));
+      setActionsText(joinCommaSeparated(serverConfig.actionGates.allowedActions));
     }
   }, [serverConfig]);
 
+  // Dirty = config object changed OR raw comma text diverged from stored arrays
   const isDirty = useMemo(() => {
     if (!config || !originalRef.current) return false;
-    return JSON.stringify(config) !== JSON.stringify(originalRef.current);
-  }, [config]);
+    // Build a snapshot that includes parsed comma fields for accurate comparison
+    const withParsedText = {
+      ...config,
+      actionGates: {
+        ...config.actionGates,
+        allowedRepos: parseCommaSeparated(reposText),
+        allowedActions: parseCommaSeparated(actionsText),
+      },
+    };
+    return JSON.stringify(withParsedText) !== JSON.stringify(originalRef.current);
+  }, [config, reposText, actionsText]);
 
   const updateMut = useMutation({
     mutationFn: (data: Record<string, any>) => updateConfig({ data }),
@@ -122,13 +138,24 @@ export default function ConfigPage({
 
   const handleSave = () => {
     if (config) {
-      updateMut.mutate(config);
+      // Merge parsed comma-text into config before sending
+      const payload = {
+        ...config,
+        actionGates: {
+          ...config.actionGates,
+          allowedRepos: parseCommaSeparated(reposText),
+          allowedActions: parseCommaSeparated(actionsText),
+        },
+      };
+      updateMut.mutate(payload);
     }
   };
 
   const handleDiscard = () => {
     if (originalRef.current) {
       setConfig(JSON.parse(JSON.stringify(originalRef.current)));
+      setReposText(joinCommaSeparated(originalRef.current.actionGates.allowedRepos));
+      setActionsText(joinCommaSeparated(originalRef.current.actionGates.allowedActions));
     }
   };
 
@@ -342,15 +369,8 @@ export default function ConfigPage({
                     </Label>
                     <Input
                       type="text"
-                      value={joinCommaSeparated(
-                        config.actionGates.allowedRepos,
-                      )}
-                      onChange={(e) =>
-                        updateActionGate(
-                          "allowedRepos",
-                          parseCommaSeparated(e.target.value),
-                        )
-                      }
+                      value={reposText}
+                      onChange={(e) => setReposText(e.target.value)}
                       placeholder="repo1, repo2"
                       className="h-8 font-mono text-sm"
                     />
@@ -361,15 +381,8 @@ export default function ConfigPage({
                     </Label>
                     <Input
                       type="text"
-                      value={joinCommaSeparated(
-                        config.actionGates.allowedActions,
-                      )}
-                      onChange={(e) =>
-                        updateActionGate(
-                          "allowedActions",
-                          parseCommaSeparated(e.target.value),
-                        )
-                      }
+                      value={actionsText}
+                      onChange={(e) => setActionsText(e.target.value)}
                       placeholder="commit, push, tag"
                       className="h-8 font-mono text-sm"
                     />
@@ -383,8 +396,8 @@ export default function ConfigPage({
 
       {/* Sticky Dirty Bar */}
       {isDirty && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 px-6 py-3">
-          <div className="flex items-center justify-end gap-2 max-w-screen-xl mx-auto">
+        <div className="sticky bottom-0 z-40 -mx-6 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 px-6 py-3">
+          <div className="flex items-center justify-end gap-2">
             <span className="text-sm text-muted-foreground mr-auto">
               Unsaved changes
             </span>

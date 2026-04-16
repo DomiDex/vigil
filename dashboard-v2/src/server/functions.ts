@@ -116,8 +116,34 @@ export async function searchMemory({
   return api(`/api/memory/search?${params.toString()}`);
 }
 
-export async function getMetrics() {
-  return api("/api/metrics");
+export async function createMemory({ data }: { data: FormData }) {
+  return apiMutate("/api/memory", { method: "POST", body: data });
+}
+
+export async function deleteMemory({ id }: { id: number | string }) {
+  return apiMutate(`/api/memory/${id}`, { method: "DELETE" });
+}
+
+export async function updateMemoryRelevance({
+  id,
+  data,
+}: {
+  id: number | string;
+  data: { relevant: boolean };
+}) {
+  return api(`/api/memory/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getMetrics({ from, to }: { from?: number; to?: number } = {}) {
+  const params = new URLSearchParams();
+  if (from) params.set("from", String(from));
+  if (to) params.set("to", String(to));
+  const qs = params.toString();
+  return api(`/api/metrics${qs ? `?${qs}` : ""}`);
 }
 
 export async function getScheduler() {
@@ -383,6 +409,18 @@ export async function switchAgent({
 
 export async function getHealth() {
   return api("/api/health");
+}
+
+export async function vacuumDatabase() {
+  return api("/api/health/vacuum", { method: "POST" });
+}
+
+export async function pruneEvents({ data }: { data: { olderThanDays: number } }) {
+  return api("/api/health/prune", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
 }
 
 // --- A2A ---
