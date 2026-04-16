@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Bot, RefreshCw } from "lucide-react";
+import { Bot, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { vigilKeys } from "../../lib/query-keys";
 import {
   getAgents,
@@ -9,6 +11,14 @@ import {
 import { Card, CardContent } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+} from "../../components/ui/sheet";
 import type { WidgetProps } from "../../types/plugin";
 
 interface Agent {
@@ -28,6 +38,7 @@ export default function AgentsPage({
   activeRepo,
 }: Partial<WidgetProps> = {}) {
   const queryClient = useQueryClient();
+  const [previewAgent, setPreviewAgent] = useState<Agent | null>(null);
 
   const {
     data: agentsData,
@@ -52,7 +63,11 @@ export default function AgentsPage({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: vigilKeys.agents.all });
       queryClient.invalidateQueries({ queryKey: vigilKeys.agents.current });
+      setPreviewAgent(null);
+      toast.success("Agent switched");
     },
+    onError: (err: Error) =>
+      toast.error(`Failed to switch agent: ${err.message}`),
   });
 
   return (
@@ -116,7 +131,11 @@ export default function AgentsPage({
             {agents.map((agent) => {
               const isActive = current?.name === agent.name;
               return (
-                <Card key={agent.name}>
+                <Card
+                  key={agent.name}
+                  className="cursor-pointer transition-colors hover:border-vigil/20"
+                  onClick={() => setPreviewAgent(agent)}
+                >
                   <CardContent className="flex items-center justify-between">
                     <div className="flex items-start gap-3 flex-1 min-w-0">
                       <Bot className="size-4 text-muted-foreground mt-0.5" />
@@ -133,6 +152,14 @@ export default function AgentsPage({
                               {agent.model}
                             </Badge>
                           )}
+                          {isActive && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] text-green-400"
+                            >
+                              active
+                            </Badge>
+                          )}
                         </div>
                         <p className="text-xs text-muted-foreground truncate mt-0.5">
                           {agent.description ?? agent.systemPrompt}
@@ -142,16 +169,19 @@ export default function AgentsPage({
                     <Button
                       size="xs"
                       variant={isActive ? "default" : "secondary"}
-                      onClick={() => switchMut.mutate(agent.name)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!isActive) switchMut.mutate(agent.name);
+                      }}
                       disabled={isActive || switchMut.isPending}
                     >
-                      {isActive ? (
+                      {switchMut.isPending &&
+                      switchMut.variables === agent.name ? (
+                        <Loader2 className="size-3 animate-spin" />
+                      ) : isActive ? (
                         "Active"
                       ) : (
-                        <>
-                          <RefreshCw className="size-3 mr-1" />
-                          Switch
-                        </>
+                        "Activate"
                       )}
                     </Button>
                   </CardContent>
@@ -167,6 +197,75 @@ export default function AgentsPage({
           No agents configured.
         </div>
       )}
+
+      {/* Agent Preview Sheet */}
+      <Sheet
+        open={previewAgent !== null}
+        onOpenChange={(open) => {
+          if (!open) setPreviewAgent(null);
+        }}
+      >
+        <SheetContent side="right">
+          {previewAgent && (
+            <>
+              <SheetHeader>
+                <SheetTitle className="flex items-center gap-2">
+                  {previewAgent.name}
+                  {previewAgent.model && (
+                    <Badge variant="secondary" className="text-xs font-mono">
+                      {previewAgent.model}
+                    </Badge>
+                  )}
+                  {current?.name === previewAgent.name && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] text-green-400"
+                    >
+                      active
+                    </Badge>
+                  )}
+                </SheetTitle>
+                {previewAgent.description && (
+                  <SheetDescription>
+                    {previewAgent.description}
+                  </SheetDescription>
+                )}
+              </SheetHeader>
+
+              <div className="flex-1 overflow-y-auto px-4">
+                <h4 className="text-xs font-medium text-muted-foreground uppercase mb-2">
+                  System Prompt
+                </h4>
+                <pre className="whitespace-pre-wrap font-mono text-xs text-foreground/80 bg-muted/50 rounded-md p-3">
+                  {previewAgent.systemPrompt}
+                </pre>
+              </div>
+
+              <SheetFooter>
+                <Button
+                  className="w-full"
+                  onClick={() => switchMut.mutate(previewAgent.name)}
+                  disabled={
+                    current?.name === previewAgent.name ||
+                    switchMut.isPending
+                  }
+                >
+                  {switchMut.isPending ? (
+                    <>
+                      <Loader2 className="size-3 mr-1 animate-spin" />
+                      Switching...
+                    </>
+                  ) : current?.name === previewAgent.name ? (
+                    "Already Active"
+                  ) : (
+                    "Activate"
+                  )}
+                </Button>
+              </SheetFooter>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

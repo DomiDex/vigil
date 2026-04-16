@@ -1,5 +1,7 @@
+import { useState, useRef, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Settings, RotateCcw, Save } from "lucide-react";
+import { Settings, RotateCcw, Save, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { vigilKeys } from "../../lib/query-keys";
 import {
   getConfig,
@@ -10,6 +12,9 @@ import {
 import { Card, CardContent } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import { Switch } from "../../components/ui/switch";
+import { Label } from "../../components/ui/label";
 import type { WidgetProps } from "../../types/plugin";
 
 interface FeatureGate {
@@ -35,6 +40,17 @@ interface ConfigData {
     allowedRepos: string[];
     allowedActions: string[];
   };
+}
+
+function parseCommaSeparated(input: string): string[] {
+  return input
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function joinCommaSeparated(arr: string[]): string {
+  return arr.join(", ");
 }
 
 const TICK_FIELDS: { key: keyof ConfigData; label: string }[] = [
@@ -68,13 +84,33 @@ export default function ConfigPage({
     queryFn: () => getFeatureGates(),
   });
 
-  const config = configData as ConfigData | undefined;
+  const serverConfig = configData as ConfigData | undefined;
   const features = (featuresData as FeatureGate[] | undefined) ?? [];
+
+  const [config, setConfig] = useState<ConfigData | null>(null);
+  const originalRef = useRef<ConfigData | null>(null);
+
+  // Sync local state when server data arrives or refreshes
+  useEffect(() => {
+    if (serverConfig) {
+      const snapshot = JSON.parse(JSON.stringify(serverConfig));
+      setConfig(snapshot);
+      originalRef.current = JSON.parse(JSON.stringify(serverConfig));
+    }
+  }, [serverConfig]);
+
+  const isDirty = useMemo(() => {
+    if (!config || !originalRef.current) return false;
+    return JSON.stringify(config) !== JSON.stringify(originalRef.current);
+  }, [config]);
 
   const updateMut = useMutation({
     mutationFn: (data: Record<string, any>) => updateConfig({ data }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: vigilKeys.config.all }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: vigilKeys.config.all });
+      toast.success("Config saved");
+    },
+    onError: (err: Error) => toast.error(`Failed to save config: ${err.message}`),
   });
 
   const toggleMut = useMutation({
@@ -90,13 +126,29 @@ export default function ConfigPage({
     }
   };
 
-  const handleReset = () => {
-    queryClient.invalidateQueries({ queryKey: vigilKeys.config.all });
-    queryClient.invalidateQueries({ queryKey: vigilKeys.config.features });
+  const handleDiscard = () => {
+    if (originalRef.current) {
+      setConfig(JSON.parse(JSON.stringify(originalRef.current)));
+    }
+  };
+
+  const updateField = (key: keyof ConfigData, value: number | string) => {
+    setConfig((prev) => (prev ? { ...prev, [key]: value } : prev));
+  };
+
+  const updateActionGate = (
+    key: keyof ConfigData["actionGates"],
+    value: boolean | number | string[],
+  ) => {
+    setConfig((prev) =>
+      prev
+        ? { ...prev, actionGates: { ...prev.actionGates, [key]: value } }
+        : prev,
+    );
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-16">
       <div className="flex items-center gap-3">
         <Settings className="size-4 text-vigil" />
         <h3 className="text-sm font-medium">Configuration</h3>
@@ -122,13 +174,18 @@ export default function ConfigPage({
               <CardContent>
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                   {TICK_FIELDS.map(({ key, label }) => (
-                    <div key={key} className="space-y-1">
-                      <div className="text-xs text-muted-foreground">
+                    <div key={key} className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">
                         {label}
-                      </div>
-                      <div className="text-sm font-mono">
-                        {String(config[key])}
-                      </div>
+                      </Label>
+                      <Input
+                        type="number"
+                        value={config[key] as number}
+                        onChange={(e) =>
+                          updateField(key, Number(e.target.value))
+                        }
+                        className="h-8 font-mono text-sm"
+                      />
                     </div>
                   ))}
                 </div>
@@ -144,21 +201,29 @@ export default function ConfigPage({
             <Card>
               <CardContent>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <div className="text-xs text-muted-foreground">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">
                       Tick Model
-                    </div>
-                    <div className="text-sm font-mono">
-                      {config.tickModel}
-                    </div>
+                    </Label>
+                    <Input
+                      type="text"
+                      value={config.tickModel}
+                      onChange={(e) => updateField("tickModel", e.target.value)}
+                      className="h-8 font-mono text-sm"
+                    />
                   </div>
-                  <div className="space-y-1">
-                    <div className="text-xs text-muted-foreground">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">
                       Escalation Model
-                    </div>
-                    <div className="text-sm font-mono">
-                      {config.escalationModel}
-                    </div>
+                    </Label>
+                    <Input
+                      type="text"
+                      value={config.escalationModel}
+                      onChange={(e) =>
+                        updateField("escalationModel", e.target.value)
+                      }
+                      className="h-8 font-mono text-sm"
+                    />
                   </div>
                 </div>
               </CardContent>
@@ -229,114 +294,122 @@ export default function ConfigPage({
             </h4>
             <Card>
               <CardContent>
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                  <div className="space-y-1">
-                    <div className="text-xs text-muted-foreground">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs text-muted-foreground">
                       Enabled
-                    </div>
-                    <Badge
-                      variant="outline"
-                      className={
-                        config.actionGates.enabled
-                          ? "text-green-400"
-                          : "text-red-400"
+                    </Label>
+                    <Switch
+                      checked={config.actionGates.enabled}
+                      onCheckedChange={(checked: boolean) =>
+                        updateActionGate("enabled", checked)
                       }
-                    >
-                      {config.actionGates.enabled ? "Yes" : "No"}
-                    </Badge>
+                    />
                   </div>
-                  <div className="space-y-1">
-                    <div className="text-xs text-muted-foreground">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs text-muted-foreground">
                       Auto-Approve
-                    </div>
-                    <Badge
-                      variant="outline"
-                      className={
-                        config.actionGates.autoApprove
-                          ? "text-green-400"
-                          : "text-red-400"
+                    </Label>
+                    <Switch
+                      checked={config.actionGates.autoApprove}
+                      onCheckedChange={(checked: boolean) =>
+                        updateActionGate("autoApprove", checked)
                       }
-                    >
-                      {config.actionGates.autoApprove ? "Yes" : "No"}
-                    </Badge>
+                    />
                   </div>
-                  <div className="space-y-1">
-                    <div className="text-xs text-muted-foreground">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">
                       Confidence Threshold
-                    </div>
-                    <div className="text-sm font-mono">
-                      {config.actionGates.confidenceThreshold}
-                    </div>
+                    </Label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="1"
+                      value={config.actionGates.confidenceThreshold}
+                      onChange={(e) =>
+                        updateActionGate(
+                          "confidenceThreshold",
+                          Number(e.target.value),
+                        )
+                      }
+                      className="h-8 font-mono text-sm"
+                    />
                   </div>
-                  <div className="space-y-1">
-                    <div className="text-xs text-muted-foreground">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">
                       Allowed Repos
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {config.actionGates.allowedRepos.length > 0 ? (
-                        config.actionGates.allowedRepos.map((r) => (
-                          <Badge
-                            key={r}
-                            variant="secondary"
-                            className="text-[10px]"
-                          >
-                            {r}
-                          </Badge>
-                        ))
-                      ) : (
-                        <span className="text-xs text-muted-foreground">
-                          All
-                        </span>
+                    </Label>
+                    <Input
+                      type="text"
+                      value={joinCommaSeparated(
+                        config.actionGates.allowedRepos,
                       )}
-                    </div>
+                      onChange={(e) =>
+                        updateActionGate(
+                          "allowedRepos",
+                          parseCommaSeparated(e.target.value),
+                        )
+                      }
+                      placeholder="repo1, repo2"
+                      className="h-8 font-mono text-sm"
+                    />
                   </div>
-                  <div className="space-y-1">
-                    <div className="text-xs text-muted-foreground">
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label className="text-xs text-muted-foreground">
                       Allowed Actions
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {config.actionGates.allowedActions.length > 0 ? (
-                        config.actionGates.allowedActions.map((a) => (
-                          <Badge
-                            key={a}
-                            variant="secondary"
-                            className="text-[10px]"
-                          >
-                            {a}
-                          </Badge>
-                        ))
-                      ) : (
-                        <span className="text-xs text-muted-foreground">
-                          All
-                        </span>
+                    </Label>
+                    <Input
+                      type="text"
+                      value={joinCommaSeparated(
+                        config.actionGates.allowedActions,
                       )}
-                    </div>
+                      onChange={(e) =>
+                        updateActionGate(
+                          "allowedActions",
+                          parseCommaSeparated(e.target.value),
+                        )
+                      }
+                      placeholder="commit, push, tag"
+                      className="h-8 font-mono text-sm"
+                    />
                   </div>
                 </div>
               </CardContent>
             </Card>
           </div>
+        </>
+      )}
 
-          {/* Footer */}
-          <div className="flex items-center justify-end gap-2 pt-2">
+      {/* Sticky Dirty Bar */}
+      {isDirty && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 px-6 py-3">
+          <div className="flex items-center justify-end gap-2 max-w-screen-xl mx-auto">
+            <span className="text-sm text-muted-foreground mr-auto">
+              Unsaved changes
+            </span>
             <Button
               size="sm"
               variant="secondary"
-              onClick={handleReset}
+              onClick={handleDiscard}
             >
               <RotateCcw className="size-3 mr-1" />
-              Reset
+              Discard Changes
             </Button>
             <Button
               size="sm"
               onClick={handleSave}
               disabled={updateMut.isPending}
             >
-              <Save className="size-3 mr-1" />
-              Save
+              {updateMut.isPending ? (
+                <Loader2 className="size-3 mr-1 animate-spin" />
+              ) : (
+                <Save className="size-3 mr-1" />
+              )}
+              Save Changes
             </Button>
           </div>
-        </>
+        </div>
       )}
     </div>
   );
