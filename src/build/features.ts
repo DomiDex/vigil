@@ -21,6 +21,7 @@ declare const FEATURE_VIGIL_PUSH: boolean;
 declare const FEATURE_VIGIL_PROACTIVE: boolean;
 declare const FEATURE_VIGIL_SESSIONS: boolean;
 declare const FEATURE_VIGIL_AGENT: boolean;
+declare const FEATURE_VIGIL_SPECIALISTS: boolean;
 
 /**
  * Build-time feature check. Bundler replaces the global with a constant,
@@ -49,6 +50,8 @@ export function feature(name: string): boolean {
       return typeof FEATURE_VIGIL_SESSIONS !== "undefined" ? FEATURE_VIGIL_SESSIONS : true;
     case "VIGIL_AGENT":
       return typeof FEATURE_VIGIL_AGENT !== "undefined" ? FEATURE_VIGIL_AGENT : true;
+    case "VIGIL_SPECIALISTS":
+      return typeof FEATURE_VIGIL_SPECIALISTS !== "undefined" ? FEATURE_VIGIL_SPECIALISTS : true;
     default:
       return true;
   }
@@ -62,6 +65,7 @@ export const BUILD_FEATURES = [
   "VIGIL_PROACTIVE",
   "VIGIL_SESSIONS",
   "VIGIL_AGENT",
+  "VIGIL_SPECIALISTS",
 ] as const;
 
 export type BuildFeatureName = (typeof BUILD_FEATURES)[number];

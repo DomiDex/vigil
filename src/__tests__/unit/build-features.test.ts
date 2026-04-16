@@ -19,7 +19,8 @@ describe("build-time feature()", () => {
     expect(BUILD_FEATURES).toContain("VIGIL_PROACTIVE");
     expect(BUILD_FEATURES).toContain("VIGIL_SESSIONS");
     expect(BUILD_FEATURES).toContain("VIGIL_AGENT");
-    expect(BUILD_FEATURES.length).toBe(6);
+    expect(BUILD_FEATURES).toContain("VIGIL_SPECIALISTS");
+    expect(BUILD_FEATURES.length).toBe(7);
   });
 });
 
