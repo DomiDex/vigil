@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowUpDown } from "lucide-react";
 import { vigilKeys } from "../../lib/query-keys";
@@ -55,6 +55,30 @@ function formatDate(ts: number): string {
   return `${month}/${day} ${hour}:${m} ${ampm}`;
 }
 
+type SortColumn = "date" | "status" | "tier" | "command";
+
+function SortHeader({
+  col,
+  children,
+  onSort,
+}: {
+  col: SortColumn;
+  children: React.ReactNode;
+  onSort: (col: SortColumn) => void;
+}) {
+  return (
+    <TableHead
+      className="cursor-pointer select-none"
+      onClick={() => onSort(col)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {children}
+        <ArrowUpDown className="size-3" />
+      </span>
+    </TableHead>
+  );
+}
+
 export default function ActionsPage({ activeRepo }: Partial<WidgetProps> = {}) {
   const queryClient = useQueryClient();
 
@@ -92,64 +116,56 @@ export default function ActionsPage({ activeRepo }: Partial<WidgetProps> = {}) {
   });
 
   // History: all resolved actions
-  const allHistory = actions.filter(
-    (a) => a.status === "approved" || a.status === "rejected" || a.status === "executed" || a.status === "failed"
+  const allHistory = useMemo(
+    () => actions.filter(
+      (a) => a.status === "approved" || a.status === "rejected" || a.status === "executed" || a.status === "failed"
+    ),
+    [actions],
   );
 
-  // Filter
-  const filteredHistory =
-    statusFilter === "all"
-      ? allHistory
-      : allHistory.filter((a) => a.status === statusFilter);
+  // Filter + Sort (memoized)
+  const sortedHistory = useMemo(() => {
+    const filtered =
+      statusFilter === "all"
+        ? allHistory
+        : allHistory.filter((a) => a.status === statusFilter);
 
-  // Sort
-  const sortedHistory = [...filteredHistory].sort((a, b) => {
-    let cmp = 0;
-    switch (sortBy) {
-      case "date":
-        cmp = a.createdAt - b.createdAt;
-        break;
-      case "status":
-        cmp = a.status.localeCompare(b.status);
-        break;
-      case "tier":
-        cmp = (TIER_ORDER[a.tier] ?? 0) - (TIER_ORDER[b.tier] ?? 0);
-        break;
-      case "command":
-        cmp = a.command.localeCompare(b.command);
-        break;
-    }
-    return sortDir === "asc" ? cmp : -cmp;
-  });
+    return [...filtered].sort((a, b) => {
+      let cmp = 0;
+      switch (sortBy) {
+        case "date":
+          cmp = a.createdAt - b.createdAt;
+          break;
+        case "status":
+          cmp = a.status.localeCompare(b.status);
+          break;
+        case "tier":
+          cmp = (TIER_ORDER[a.tier] ?? 0) - (TIER_ORDER[b.tier] ?? 0);
+          break;
+        case "command":
+          cmp = a.command.localeCompare(b.command);
+          break;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [allHistory, statusFilter, sortBy, sortDir]);
 
   // Paginate
   const startIndex = page * PER_PAGE;
   const endIndex = Math.min(startIndex + PER_PAGE, sortedHistory.length);
   const pageData = sortedHistory.slice(startIndex, endIndex);
 
-  function handleSort(col: "date" | "status" | "tier" | "command") {
-    if (sortBy === col) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortBy(col);
+  const handleSort = useCallback((col: SortColumn) => {
+    setSortBy((prev) => {
+      if (prev === col) {
+        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+        return prev;
+      }
       setSortDir("desc");
-    }
+      return col;
+    });
     setPage(0);
-  }
-
-  function SortHeader({ col, children }: { col: "date" | "status" | "tier" | "command"; children: React.ReactNode }) {
-    return (
-      <TableHead
-        className="cursor-pointer select-none"
-        onClick={() => handleSort(col)}
-      >
-        <span className="inline-flex items-center gap-1">
-          {children}
-          <ArrowUpDown className="size-3" />
-        </span>
-      </TableHead>
-    );
-  }
+  }, []);
 
   return (
     <div className="space-y-4">
@@ -178,7 +194,7 @@ export default function ActionsPage({ activeRepo }: Partial<WidgetProps> = {}) {
       )}
 
       {!isLoading && !isError && (
-        <Tabs defaultValue="pending">
+        <Tabs defaultValue="pending" onValueChange={() => setPage(0)}>
           <TabsList>
             <TabsTrigger value="pending">
               Pending {pending.length > 0 && `(${pending.length})`}
@@ -227,10 +243,10 @@ export default function ActionsPage({ activeRepo }: Partial<WidgetProps> = {}) {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <SortHeader col="date">Date</SortHeader>
-                        <SortHeader col="command">Command</SortHeader>
-                        <SortHeader col="tier">Tier</SortHeader>
-                        <SortHeader col="status">Status</SortHeader>
+                        <SortHeader col="date" onSort={handleSort}>Date</SortHeader>
+                        <SortHeader col="command" onSort={handleSort}>Command</SortHeader>
+                        <SortHeader col="tier" onSort={handleSort}>Tier</SortHeader>
+                        <SortHeader col="status" onSort={handleSort}>Status</SortHeader>
                         <TableHead>Confidence</TableHead>
                         <TableHead>Reason</TableHead>
                       </TableRow>

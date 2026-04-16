@@ -8,7 +8,7 @@ import { Skeleton } from "../ui/skeleton";
 import { cn } from "../../lib/cn";
 import { getActionPreview } from "../../server/functions";
 import { vigilKeys } from "../../lib/query-keys";
-import type { ActionRequest, ActionPreview } from "../../types/api";
+import type { ActionRequest } from "../../types/api";
 
 export function getTierBadgeClasses(tier: string): { bg: string; text: string } {
   switch (tier) {
@@ -65,7 +65,7 @@ export function ActionApproval({ action, onApprove, onReject }: ActionApprovalPr
     enabled: showPreview,
     staleTime: 60_000,
   });
-  const previewData = preview.data as ActionPreview | undefined;
+  const previewData = preview.data;
 
   return (
     <Card>

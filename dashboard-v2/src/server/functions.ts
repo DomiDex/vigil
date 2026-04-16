@@ -97,7 +97,7 @@ export async function getActions({
   return api(`/api/actions${qs ? `?${qs}` : ""}`);
 }
 
-export async function getActionPreview({ data }: { data: { id: string } }) {
+export async function getActionPreview({ data }: { data: { id: string } }): Promise<import("../types/api").ActionPreview> {
   return api(`/api/actions/${encodeURIComponent(data.id)}/preview`);
 }
 
