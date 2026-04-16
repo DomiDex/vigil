@@ -13,6 +13,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { queryClient } from "../router";
 import { AppSidebar } from "../components/layout/app-sidebar";
 import { SiteHeader } from "../components/layout/site-header";
+import { Toaster } from "@/components/ui/sonner";
 import { useSSE } from "../hooks/use-sse";
 import { corePlugins } from "../plugins";
 import "../app.css";
@@ -59,6 +60,7 @@ function RootLayout() {
         <TooltipProvider>
           <AppShell />
         </TooltipProvider>
+        <Toaster />
       </QueryClientProvider>
     </RootDocument>
   );
