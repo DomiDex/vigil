@@ -17,10 +17,12 @@ import { Button } from "../../components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
 } from "../../components/ui/dialog";
+import { toast } from "sonner";
 import { Input } from "../../components/ui/input";
 import { Textarea } from "../../components/ui/textarea";
 import { Label } from "../../components/ui/label";
@@ -117,7 +119,14 @@ export default function TasksPage({ activeRepo }: Partial<WidgetProps> = {}) {
       setNewDescription("");
       setNewRepo("");
     },
+    onError: (err: Error) => toast.error(`Failed to create task: ${err.message}`),
   });
+
+  const resetCreateForm = () => {
+    setNewTitle("");
+    setNewDescription("");
+    setNewRepo("");
+  };
 
   const tasksData = data as TasksData | undefined;
   const tasks = tasksData?.tasks ?? [];
@@ -186,10 +195,11 @@ export default function TasksPage({ activeRepo }: Partial<WidgetProps> = {}) {
         </Button>
       </div>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) resetCreateForm(); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>New Task</DialogTitle>
+            <DialogDescription>Create a new task to track work.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">

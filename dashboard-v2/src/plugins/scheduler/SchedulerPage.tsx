@@ -15,10 +15,12 @@ import { Button } from "../../components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
 } from "../../components/ui/dialog";
+import { toast } from "sonner";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import {
@@ -90,7 +92,15 @@ export default function SchedulerPage({
       setNewAction("");
       setNewRepo("");
     },
+    onError: (err: Error) => toast.error(`Failed to create schedule: ${err.message}`),
   });
+
+  const resetCreateForm = () => {
+    setNewName("");
+    setNewCron("");
+    setNewAction("");
+    setNewRepo("");
+  };
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: vigilKeys.scheduler,
@@ -128,10 +138,11 @@ export default function SchedulerPage({
         </Button>
       </div>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) resetCreateForm(); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>New Schedule</DialogTitle>
+            <DialogDescription>Create a recurring schedule with a cron expression.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">

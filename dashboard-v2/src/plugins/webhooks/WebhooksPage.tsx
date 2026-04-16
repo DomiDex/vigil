@@ -16,10 +16,12 @@ import { Button } from "../../components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
 } from "../../components/ui/dialog";
+import { toast } from "sonner";
 import { Label } from "../../components/ui/label";
 import {
   Select,
@@ -92,7 +94,13 @@ export default function WebhooksPage({
       setSelectedRepo("");
       setSelectedEventTypes([]);
     },
+    onError: (err: Error) => toast.error(`Failed to create subscription: ${err.message}`),
   });
+
+  const resetCreateForm = () => {
+    setSelectedRepo("");
+    setSelectedEventTypes([]);
+  };
 
   const toggleEventType = (et: string) => {
     setSelectedEventTypes((prev) =>
@@ -202,10 +210,11 @@ export default function WebhooksPage({
           </Button>
         </div>
 
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) resetCreateForm(); }}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Add Subscription</DialogTitle>
+              <DialogDescription>Subscribe a repository to webhook events.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
