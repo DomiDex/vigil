@@ -1,9 +1,14 @@
-import { CheckCircle, XCircle, Clock, Shield } from "lucide-react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { CheckCircle, XCircle, Clock, Shield, Eye } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
+import { Skeleton } from "../ui/skeleton";
 import { cn } from "../../lib/cn";
-import type { ActionRequest } from "../../types/api";
+import { getActionPreview } from "../../server/functions";
+import { vigilKeys } from "../../lib/query-keys";
+import type { ActionRequest, ActionPreview } from "../../types/api";
 
 export function getTierBadgeClasses(tier: string): { bg: string; text: string } {
   switch (tier) {
@@ -48,10 +53,19 @@ interface ActionApprovalProps {
 }
 
 export function ActionApproval({ action, onApprove, onReject }: ActionApprovalProps) {
+  const [showPreview, setShowPreview] = useState(false);
   const tierClasses = getTierBadgeClasses(action.tier);
   const gateEntries = action.gateResults
     ? Object.entries(action.gateResults)
     : [];
+
+  const preview = useQuery({
+    queryKey: vigilKeys.actions.preview(action.id),
+    queryFn: () => getActionPreview({ data: { id: action.id } }),
+    enabled: showPreview,
+    staleTime: 60_000,
+  });
+  const previewData = preview.data as ActionPreview | undefined;
 
   return (
     <Card>
@@ -97,8 +111,40 @@ export function ActionApproval({ action, onApprove, onReject }: ActionApprovalPr
           </div>
         )}
 
+        {showPreview && (
+          <div className="space-y-2 border-t pt-2">
+            {preview.isLoading && <Skeleton className="h-20 w-full" />}
+            {preview.isError && (
+              <p className="text-xs text-muted-foreground">Preview unavailable</p>
+            )}
+            {previewData && (
+              <>
+                <p className="text-sm">{previewData.description}</p>
+                {previewData.dryRun && (
+                  <pre className="bg-muted p-3 rounded text-xs overflow-x-auto">
+                    {previewData.dryRun}
+                  </pre>
+                )}
+                {previewData.estimatedEffect && (
+                  <p className="text-xs text-muted-foreground">
+                    {previewData.estimatedEffect}
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
         {action.status === "pending" && (
           <div className="flex gap-2 pt-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setShowPreview((v) => !v)}
+            >
+              <Eye className="size-3 mr-1" />
+              Preview
+            </Button>
             <Button
               size="sm"
               variant="default"

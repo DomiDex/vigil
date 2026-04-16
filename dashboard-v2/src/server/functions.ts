@@ -97,6 +97,10 @@ export async function getActions({
   return api(`/api/actions${qs ? `?${qs}` : ""}`);
 }
 
+export async function getActionPreview({ data }: { data: { id: string } }) {
+  return api(`/api/actions/${encodeURIComponent(data.id)}/preview`);
+}
+
 export async function getActionsPending() {
   return api("/api/actions/pending");
 }

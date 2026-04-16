@@ -70,6 +70,23 @@ export function getActionsPendingJSON(ctx: DashboardContext) {
   };
 }
 
+// ── GET /api/actions/:id/preview ──
+
+export function getActionPreviewJSON(ctx: DashboardContext, id: string) {
+  const executor = ctx.daemon.actionExecutor;
+  const action = executor.getById(id);
+  if (!action) return null;
+
+  return {
+    id: action.id,
+    command: action.command,
+    args: action.args,
+    description: action.reason,
+    dryRun: null,
+    estimatedEffect: `Executes: ${action.command} ${action.args.join(" ")}`,
+  };
+}
+
 // ── POST /api/actions/:id/approve ──
 
 export async function handleApprove(ctx: DashboardContext, id: string): Promise<{ ok: boolean }> {

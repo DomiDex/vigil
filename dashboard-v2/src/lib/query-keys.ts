@@ -16,6 +16,7 @@ export const vigilKeys = {
   actions: {
     all: ["actions"],
     pending: ["actions", "pending"],
+    preview: (id: string) => ["actions", id, "preview"] as const,
   },
   tasks: ["tasks"],
   scheduler: ["scheduler"],

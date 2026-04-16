@@ -236,8 +236,64 @@ export function createFakeDashboardContext(opts: FakeContextOptions = {}) {
     config,
     repoPaths: opts.repoPaths ?? ["/home/user/projects/vigil"],
     actionExecutor: {
+      _actions: [
+        {
+          id: "act_001",
+          command: "run_tests",
+          args: ["--coverage"],
+          reason: "Test suite has not been run in 3 hours",
+          tier: "safe",
+          confidence: 0.92,
+          status: "pending",
+          repo: "vigil",
+          createdAt: Date.now() - 60_000,
+          updatedAt: Date.now() - 60_000,
+        },
+        {
+          id: "act_002",
+          command: "git_stash",
+          args: ["save", "auto-stash"],
+          reason: "Uncommitted changes detected before branch switch",
+          tier: "moderate",
+          confidence: 0.85,
+          status: "approved",
+          repo: "vigil",
+          createdAt: Date.now() - 120_000,
+          updatedAt: Date.now() - 90_000,
+        },
+        {
+          id: "act_003",
+          command: "run_lint",
+          args: ["--fix"],
+          reason: "Lint errors detected in recent commit",
+          tier: "safe",
+          confidence: 0.88,
+          status: "rejected",
+          repo: "vigil",
+          createdAt: Date.now() - 180_000,
+          updatedAt: Date.now() - 150_000,
+        },
+      ] as any[],
+      isOptedIn: true,
       getGateConfig() {
         return gateConfig;
+      },
+      getRecent(_limit: number) {
+        return this._actions;
+      },
+      getPending() {
+        return this._actions.filter((a: any) => a.status === "pending");
+      },
+      getById(id: string) {
+        return this._actions.find((a: any) => a.id === id) ?? null;
+      },
+      async approve(id: string, _repoPath: string) {
+        const a = this._actions.find((x: any) => x.id === id);
+        if (a) a.status = "approved";
+      },
+      reject(id: string) {
+        const a = this._actions.find((x: any) => x.id === id);
+        if (a) a.status = "rejected";
       },
     },
     featureGates,
