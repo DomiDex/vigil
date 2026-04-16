@@ -10,6 +10,8 @@ import {
   getChannelsJSON,
   handleChannelDelete,
   handleChannelRegister,
+  handleChannelTest,
+  handleChannelPermissionsUpdate,
 } from "./api/channels.ts";
 import { getConfigJSON, getFeatureGatesJSON, handleConfigUpdate, handleFeatureToggle } from "./api/config.ts";
 import { getDreamPatternsJSON, getDreamsJSON, handleDreamTrigger } from "./api/dreams.ts";
@@ -46,6 +48,7 @@ import {
 import { getTimelineJSON, handleReply } from "./api/timeline.ts";
 import {
   getWebhookEventsJSON,
+  getWebhookEventDetailJSON,
   getWebhookStatusJSON,
   getWebhookSubscriptionsJSON,
   handleSubscriptionCreate,
@@ -346,6 +349,13 @@ export async function startDashboard(daemon: Daemon, port = 7480): Promise<Retur
       }
 
       // --- Webhooks API ---
+      // Match GET /api/webhooks/events/:id (must be before the list endpoint)
+      const webhookEventDetailMatch = path.match(/^\/api\/webhooks\/events\/([^/]+)$/);
+      if (webhookEventDetailMatch && req.method === "GET") {
+        const detail = getWebhookEventDetailJSON(ctx, decodeURIComponent(webhookEventDetailMatch[1]));
+        if (!detail) return json({ error: "Event not found" }, 404);
+        return json(detail);
+      }
       if (path === "/api/webhooks/events" && req.method === "GET") {
         return json(getWebhookEventsJSON(ctx));
       }
@@ -381,6 +391,23 @@ export async function startDashboard(daemon: Daemon, port = 7480): Promise<Retur
         if (channelDeleteMatch) {
           return json(await handleChannelDelete(ctx, decodeURIComponent(channelDeleteMatch[1])));
         }
+      }
+      // Match POST /api/channels/:id/test
+      const channelTestMatch = path.match(/^\/api\/channels\/([^/]+)\/test$/);
+      if (channelTestMatch && req.method === "POST") {
+        const result = handleChannelTest(ctx, decodeURIComponent(channelTestMatch[1]));
+        if (!result) return json({ error: "Channel not found" }, 404);
+        return json(result);
+      }
+      // Match PATCH /api/channels/:id/permissions
+      const channelPermsPatchMatch = path.match(/^\/api\/channels\/([^/]+)\/permissions$/);
+      if (channelPermsPatchMatch && req.method === "PATCH") {
+        const body = await req.json().catch(() => null);
+        if (!body) return json({ error: "Invalid JSON body" }, 400);
+        const result = handleChannelPermissionsUpdate(ctx, decodeURIComponent(channelPermsPatchMatch[1]), body);
+        if (!result) return json({ error: "Channel not found" }, 404);
+        if (result.error) return json(result, 400);
+        return json(result);
       }
       if (req.method === "GET") {
         const channelPermsMatch = path.match(/^\/api\/channels\/([^/]+)\/permissions$/);

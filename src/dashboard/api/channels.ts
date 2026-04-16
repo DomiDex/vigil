@@ -64,3 +64,43 @@ export function getChannelPermissionsJSON(ctx: DashboardContext, channelId: stri
 export function getChannelQueueJSON(ctx: DashboardContext, channelId: string) {
   return getManager(ctx)?.getQueue(channelId) ?? [];
 }
+
+export function handleChannelTest(
+  ctx: DashboardContext,
+  channelId: string,
+): { success?: boolean; message?: string; channelId?: string; error?: string } | null {
+  const manager = getManager(ctx);
+  if (!manager) return { error: "Channel manager not available" };
+
+  const result = manager.testChannel?.(channelId);
+  if (!result) return null;
+
+  return result;
+}
+
+const permissionsUpdateSchema = z.object({
+  read: z.boolean(),
+  write: z.boolean(),
+  execute: z.boolean(),
+  admin: z.boolean(),
+  subscribe: z.boolean(),
+}).strict();
+
+export function handleChannelPermissionsUpdate(
+  ctx: DashboardContext,
+  channelId: string,
+  body: unknown,
+): { channelId?: string; error?: string; read?: boolean; write?: boolean; execute?: boolean; admin?: boolean; subscribe?: boolean } | null {
+  const parsed = permissionsUpdateSchema.safeParse(body);
+  if (!parsed.success) {
+    return { error: parsed.error.issues.map((i) => i.message).join("; ") };
+  }
+
+  const manager = getManager(ctx);
+  if (!manager) return { error: "Channel manager not available" };
+
+  const result = manager.updatePermissions?.(channelId, parsed.data);
+  if (!result) return null;
+
+  return result;
+}

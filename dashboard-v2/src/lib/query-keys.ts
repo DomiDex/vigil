@@ -34,6 +34,7 @@ export const vigilKeys = {
   webhooks: {
     all: ["webhooks"],
     events: ["webhooks", "events"],
+    eventDetail: (id: string) => ["webhooks", "events", id] as const,
     subscriptions: ["webhooks", "subscriptions"],
     status: ["webhooks", "status"],
   },

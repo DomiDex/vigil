@@ -56,3 +56,11 @@ export async function handleSubscriptionDelete(
 export function getWebhookStatusJSON(ctx: DashboardContext) {
   return getProcessor(ctx)?.getStatus() ?? { running: false, port: 0, eventsReceived: 0, errors: 0 };
 }
+
+export function getWebhookEventDetailJSON(ctx: DashboardContext, eventId: string) {
+  const processor = getProcessor(ctx);
+  if (!processor) return null;
+
+  const detail = processor.getEventDetail?.(eventId);
+  return detail ?? null;
+}
