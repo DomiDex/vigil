@@ -256,6 +256,33 @@ export interface MetricsData {
   };
 }
 
+// Webhook Event Detail
+export interface WebhookEvent {
+  id: string;
+  repo: string;
+  eventType: string;
+  source: string;
+  timestamp: string;
+  status: "received" | "processed" | "failed";
+  timeRelative?: string;
+}
+
+export interface WebhookEventDetail extends WebhookEvent {
+  payload: Record<string, unknown>;
+  headers?: Record<string, string>;
+  processingTime?: number;
+}
+
+// Channel Permissions
+export interface ChannelPermissions {
+  channelId: string;
+  read: boolean;
+  write: boolean;
+  execute: boolean;
+  admin: boolean;
+  subscribe: boolean;
+}
+
 // Scheduler
 export interface ScheduleEntry {
   id: string;

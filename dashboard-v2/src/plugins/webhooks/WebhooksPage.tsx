@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Webhook, Trash2, RefreshCw, Plus } from "lucide-react";
+import { Webhook, Trash2, RefreshCw, Plus, ChevronDown, ChevronRight } from "lucide-react";
 import { vigilKeys } from "../../lib/query-keys";
 import {
   getWebhookEvents,
@@ -9,6 +9,7 @@ import {
   deleteWebhookSubscription,
   createWebhookSubscription,
   getOverview,
+  getWebhookEventDetail,
 } from "../../server/functions";
 import { Card, CardContent } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
@@ -30,8 +31,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../components/ui/select";
+import { Skeleton } from "../../components/ui/skeleton";
 import { isWebhookFormValid } from "../../lib/form-validation";
 import type { WidgetProps } from "../../types/plugin";
+import type { WebhookEventDetail } from "../../types/api";
 
 interface WebhookStatus {
   running: boolean;
@@ -57,6 +60,12 @@ interface WebhookEvent {
   receivedAt?: string;
 }
 
+function formatPayload(payload: Record<string, unknown>): string {
+  const json = JSON.stringify(payload, null, 2);
+  if (json.length > 50_000) return json.slice(0, 50_000) + "\n\n// ... payload truncated";
+  return json;
+}
+
 const WEBHOOK_EVENT_TYPES = [
   "push",
   "commit",
@@ -72,6 +81,7 @@ export default function WebhooksPage({
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedRepo, setSelectedRepo] = useState("");
   const [selectedEventTypes, setSelectedEventTypes] = useState<string[]>([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const { data: overviewData } = useQuery({
@@ -128,6 +138,14 @@ export default function WebhooksPage({
     queryKey: vigilKeys.webhooks.events,
     queryFn: () => getWebhookEvents(),
   });
+
+  const detailQuery = useQuery({
+    queryKey: vigilKeys.webhooks.eventDetail(expandedId ?? ""),
+    queryFn: () => getWebhookEventDetail({ data: { id: expandedId! } }),
+    enabled: !!expandedId,
+    staleTime: 30_000,
+  });
+  const detailData = detailQuery.data as WebhookEventDetail | undefined;
 
   const status = statusData as WebhookStatus | undefined;
   const subscriptions = Array.isArray(subsData) ? (subsData as WebhookSubscription[]) : [];
@@ -305,27 +323,61 @@ export default function WebhooksPage({
             Recent Events
           </h4>
           <div className="space-y-2">
-            {events.map((evt, i) => (
-              <Card key={evt.id ?? i}>
-                <CardContent className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2">
-                    <RefreshCw className="size-3 text-muted-foreground" />
-                    <span className="font-medium">{evt.type}</span>
-                    {evt.repo && (
-                      <span className="text-muted-foreground">{evt.repo}</span>
-                    )}
-                  </div>
-                  {evt.status && (
-                    <Badge
-                      variant="outline"
-                      className={`text-[10px] ${evt.status === "ok" ? "text-green-400" : "text-red-400"}`}
+            {events.map((evt, i) => {
+              const evtId = evt.id ?? String(i);
+              const isExpanded = expandedId === evtId;
+
+              return (
+                <Card key={evtId}>
+                  <CardContent>
+                    <div
+                      className="flex items-center justify-between text-sm cursor-pointer"
+                      onClick={() =>
+                        setExpandedId(isExpanded ? null : evtId)
+                      }
                     >
-                      {evt.status}
-                    </Badge>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
+                      <div className="flex items-center gap-2">
+                        {isExpanded ? (
+                          <ChevronDown className="size-3 text-muted-foreground" />
+                        ) : (
+                          <ChevronRight className="size-3 text-muted-foreground" />
+                        )}
+                        <RefreshCw className="size-3 text-muted-foreground" />
+                        <span className="font-medium">{evt.type}</span>
+                        {evt.repo && (
+                          <span className="text-muted-foreground">{evt.repo}</span>
+                        )}
+                      </div>
+                      {evt.status && (
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] ${evt.status === "ok" ? "text-green-400" : "text-red-400"}`}
+                        >
+                          {evt.status}
+                        </Badge>
+                      )}
+                    </div>
+                    {isExpanded && (
+                      <div className="mt-3 space-y-2">
+                        {detailQuery.isLoading && (
+                          <Skeleton className="h-32 w-full" />
+                        )}
+                        {detailQuery.isError && (
+                          <span className="text-xs text-muted-foreground">
+                            Payload unavailable
+                          </span>
+                        )}
+                        {detailData && !detailQuery.isLoading && detailData.id === evtId && (
+                          <pre className="bg-muted p-3 rounded text-xs overflow-x-auto max-h-96 overflow-y-auto">
+                            {formatPayload(detailData.payload)}
+                          </pre>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </div>
       )}

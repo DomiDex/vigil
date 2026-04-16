@@ -327,6 +327,10 @@ export async function getWebhookStatus() {
   return api("/api/webhooks/status");
 }
 
+export async function getWebhookEventDetail({ data }: { data: { id: string } }) {
+  return api(`/api/webhooks/events/${encodeURIComponent(data.id)}`);
+}
+
 // --- Channels ---
 
 export async function getChannels() {
@@ -363,6 +367,24 @@ export async function getChannelPermissions({
 
 export async function getChannelQueue({ data }: { data: { id: string } }) {
   return api(`/api/channels/${encodeURIComponent(data.id)}/queue`);
+}
+
+export async function testChannel({ data }: { data: { id: string } }) {
+  return api(`/api/channels/${encodeURIComponent(data.id)}/test`, {
+    method: "POST",
+  });
+}
+
+export async function updateChannelPermissions({
+  data,
+}: {
+  data: { id: string; permissions: { read: boolean; write: boolean; execute: boolean; admin: boolean; subscribe: boolean } };
+}) {
+  return api(`/api/channels/${encodeURIComponent(data.id)}/permissions`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data.permissions),
+  });
 }
 
 // --- Notifications ---

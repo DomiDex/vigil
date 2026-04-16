@@ -1,16 +1,17 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Radio, Plus, Trash2, Shield } from "lucide-react";
+import { Radio, Trash2, Shield, Send } from "lucide-react";
 import { vigilKeys } from "../../lib/query-keys";
 import {
   getChannels,
-  registerChannel,
   deleteChannel,
-  getChannelPermissions,
-  getChannelQueue,
+  testChannel,
 } from "../../server/functions";
 import { Card, CardContent } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import { toast } from "sonner";
+import ChannelPermissionSheet from "./ChannelPermissionSheet";
 import type { WidgetProps } from "../../types/plugin";
 
 interface Channel {
@@ -23,19 +24,6 @@ interface Channel {
   createdAt: string;
 }
 
-interface ChannelPermissions {
-  channelId: string;
-  allowed: string[];
-  denied: string[];
-}
-
-interface ChannelQueue {
-  channelId: string;
-  depth: number;
-  oldest: string | null;
-  processing: number;
-}
-
 const STATUS_COLORS: Record<string, string> = {
   active: "text-green-400",
   inactive: "text-muted-foreground",
@@ -46,6 +34,11 @@ export default function ChannelsPage({
   activeRepo,
 }: Partial<WidgetProps> = {}) {
   const queryClient = useQueryClient();
+  const [permSheetChannel, setPermSheetChannel] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const [testingId, setTestingId] = useState<string | null>(null);
 
   const {
     data: channelsData,
@@ -59,17 +52,18 @@ export default function ChannelsPage({
 
   const channels = (channelsData as Channel[] | undefined) ?? [];
 
-  const registerMut = useMutation({
-    mutationFn: (payload: { name: string; type: string }) =>
-      registerChannel({ data: payload }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: vigilKeys.channels.all }),
-  });
-
   const deleteMut = useMutation({
     mutationFn: (id: string) => deleteChannel({ data: { id } }),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: vigilKeys.channels.all }),
+  });
+
+  const testMut = useMutation({
+    mutationFn: (id: string) => testChannel({ data: { id } }),
+    onMutate: (id) => setTestingId(id),
+    onSettled: () => setTestingId(null),
+    onSuccess: () => toast.success("Test message sent"),
+    onError: (err: Error) => toast.error(`Test failed: ${err.message}`),
   });
 
   return (
@@ -127,14 +121,33 @@ export default function ChannelsPage({
                     </div>
                   </div>
                 </div>
-                <Button
-                  size="xs"
-                  variant="secondary"
-                  onClick={() => deleteMut.mutate(ch.id)}
-                  disabled={deleteMut.isPending}
-                >
-                  <Trash2 className="size-3" />
-                </Button>
+                <div className="flex items-center gap-1">
+                  <Button
+                    size="xs"
+                    variant="secondary"
+                    onClick={() => testMut.mutate(ch.id)}
+                    disabled={testingId === ch.id || ch.status === "inactive"}
+                  >
+                    <Send className="size-3" />
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="secondary"
+                    onClick={() =>
+                      setPermSheetChannel({ id: ch.id, name: ch.name })
+                    }
+                  >
+                    <Shield className="size-3" />
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="secondary"
+                    onClick={() => deleteMut.mutate(ch.id)}
+                    disabled={deleteMut.isPending}
+                  >
+                    <Trash2 className="size-3" />
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -145,6 +158,17 @@ export default function ChannelsPage({
         <div className="text-sm text-muted-foreground text-center py-8">
           No channels registered.
         </div>
+      )}
+
+      {permSheetChannel && (
+        <ChannelPermissionSheet
+          channelId={permSheetChannel.id}
+          channelName={permSheetChannel.name}
+          open={!!permSheetChannel}
+          onOpenChange={(open) => {
+            if (!open) setPermSheetChannel(null);
+          }}
+        />
       )}
     </div>
   );

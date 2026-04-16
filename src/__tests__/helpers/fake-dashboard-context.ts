@@ -85,6 +85,19 @@ export function createFakeDashboardContext(opts: FakeContextOptions = {}) {
   // Webhook processor stub
   const webhookEvents: any[] = [];
   const webhookSubscriptions: any[] = [];
+  const webhookEventDetails: Record<string, any> = {
+    evt_001: {
+      id: "evt_001",
+      repo: "vigil",
+      eventType: "push",
+      source: "github",
+      timestamp: new Date().toISOString(),
+      status: "processed",
+      payload: { ref: "refs/heads/main", commits: [{ id: "abc123", message: "fix: typo" }] },
+      headers: { "x-github-event": "push" },
+      processingTime: 42,
+    },
+  };
   const webhookProcessor = {
     getEvents() {
       return webhookEvents;
@@ -111,6 +124,9 @@ export function createFakeDashboardContext(opts: FakeContextOptions = {}) {
         signatureFailures: 0,
         lastEventAt: Date.now() - 30000,
       };
+    },
+    getEventDetail(id: string) {
+      return webhookEventDetails[id] ?? null;
     },
   };
 
@@ -148,6 +164,16 @@ export function createFakeDashboardContext(opts: FakeContextOptions = {}) {
           createdAt: Date.now(),
         },
       ];
+    },
+    testChannel(id: string) {
+      const ch = channels.find((c: any) => c.id === id);
+      if (!ch) return null;
+      return { success: true, message: "Test message sent to channel", channelId: id };
+    },
+    updatePermissions(id: string, permissions: Record<string, boolean>) {
+      const ch = channels.find((c: any) => c.id === id);
+      if (!ch) return null;
+      return { channelId: id, ...permissions };
     },
   };
 
