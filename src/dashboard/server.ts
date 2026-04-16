@@ -18,7 +18,8 @@ import { getMemoryJSON, getMemorySearchJSON, handleAsk } from "./api/memory.ts";
 import { getMetricsJSON } from "./api/metrics.ts";
 import { getNotificationsJSON, handleNotificationRulesUpdate, handleTestNotification } from "./api/notifications.ts";
 import { getOverviewJSON } from "./api/overview.ts";
-import { getRepoDetailJSON, getReposJSON } from "./api/repos.ts";
+import { getRepoDiffJSON } from "./api/repos-diff.ts";
+import { addRepoJSON, getRepoDetailJSON, getReposJSON, removeRepoJSON } from "./api/repos.ts";
 import {
   getSchedulerJSON,
   handleSchedulerCreate,
@@ -125,12 +126,32 @@ export async function startDashboard(daemon: Daemon, port = 7480): Promise<Retur
       if (path === "/api/repos" && req.method === "GET") {
         return json(getReposJSON(ctx));
       }
-      // Match /api/repos/:name (must be after exact matches)
-      const repoDetailMatch = path.match(/^\/api\/repos\/([^/]+)$/);
-      if (repoDetailMatch && req.method === "GET") {
-        const detail = await getRepoDetailJSON(ctx, decodeURIComponent(repoDetailMatch[1]));
-        if (!detail) return json({ error: "Repo not found" }, 404);
-        return json(detail);
+      if (path === "/api/repos" && req.method === "POST") {
+        const body = await req.json().catch(() => null);
+        if (!body?.path) return json({ error: "Missing 'path' in request body" }, 400);
+        const result = await addRepoJSON(ctx, body.path);
+        return json(result, result.success ? 200 : 400);
+      }
+      // Match /api/repos/:name/diff (must be before generic :name)
+      const repoDiffMatch = path.match(/^\/api\/repos\/([^/]+)\/diff$/);
+      if (repoDiffMatch && req.method === "GET") {
+        const diff = await getRepoDiffJSON(ctx, decodeURIComponent(repoDiffMatch[1]));
+        if (!diff) return json({ error: "Repo not found" }, 404);
+        return json(diff);
+      }
+      // Match /api/repos/:name — GET (detail) or DELETE (remove)
+      const repoNameMatch = path.match(/^\/api\/repos\/([^/]+)$/);
+      if (repoNameMatch) {
+        const name = decodeURIComponent(repoNameMatch[1]);
+        if (req.method === "DELETE") {
+          const result = removeRepoJSON(ctx, name);
+          return json(result, result.success ? 200 : 404);
+        }
+        if (req.method === "GET") {
+          const detail = await getRepoDetailJSON(ctx, name);
+          if (!detail) return json({ error: "Repo not found" }, 404);
+          return json(detail);
+        }
       }
 
       // --- Timeline API ---
@@ -411,6 +432,16 @@ export async function startDashboard(daemon: Daemon, port = 7480): Promise<Retur
           }
         }
         return json({ error: "Not found" }, 404);
+      }
+
+      // --- Serve static assets from TanStack Start build ---
+      if (path.startsWith("/assets/")) {
+        const filePath = `${import.meta.dirname}/../../dashboard-v2/dist/client${path}`;
+        const file = Bun.file(filePath);
+        if (await file.exists()) {
+          return new Response(file);
+        }
+        return new Response("Not found", { status: 404 });
       }
 
       // --- TanStack Start handler for all non-API routes ---

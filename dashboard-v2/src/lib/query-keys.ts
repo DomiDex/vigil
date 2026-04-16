@@ -3,6 +3,7 @@ export const vigilKeys = {
   repos: {
     all: ["repos"],
     detail: (name: string) => ["repos", name] as const,
+    diff: (name: string) => ["repos", name, "diff"] as const,
   },
   timeline: (filters?: { status?: string; repo?: string; q?: string; page?: number }) =>
     ["timeline", filters ?? {}] as const,

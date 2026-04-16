@@ -31,6 +31,27 @@ export async function getRepoDetail({ data }: { data: { name: string } }) {
   return api(`/api/repos/${encodeURIComponent(data.name)}`);
 }
 
+export async function getRepoDiff({ data }: { data: { name: string } }) {
+  return api(`/api/repos/${encodeURIComponent(data.name)}/diff`);
+}
+
+export async function addRepo({ data }: { data: { path: string } }) {
+  const res = await fetch(`${BASE}/api/repos`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  const body = await res.json();
+  if (!res.ok || !body.success) {
+    throw new Error(body.error ?? `API /api/repos: ${res.status}`);
+  }
+  return body;
+}
+
+export async function removeRepo({ data }: { data: { name: string } }) {
+  return apiMutate(`/api/repos/${encodeURIComponent(data.name)}`, { method: "DELETE" });
+}
+
 export async function getTimeline({
   data,
 }: {
