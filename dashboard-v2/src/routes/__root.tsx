@@ -16,6 +16,7 @@ import { SiteHeader } from "../components/layout/site-header";
 import { Toaster } from "@/components/ui/sonner";
 import { useSSE } from "../hooks/use-sse";
 import { corePlugins } from "../plugins";
+import { CommandPalette } from "../components/vigil/command-palette";
 import "../app.css";
 
 export const Route = createRootRoute({
@@ -70,15 +71,18 @@ function AppShell() {
   useSSE();
 
   return (
-    <SidebarProvider>
-      <AppSidebar plugins={corePlugins} />
-      <SidebarInset>
-        <SiteHeader />
-        <main className="flex-1 overflow-y-auto p-6">
-          <Outlet />
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
+    <>
+      <SidebarProvider>
+        <AppSidebar plugins={corePlugins} />
+        <SidebarInset>
+          <SiteHeader />
+          <main className="flex-1 overflow-y-auto p-6">
+            <Outlet />
+          </main>
+        </SidebarInset>
+      </SidebarProvider>
+      <CommandPalette />
+    </>
   );
 }
 
