@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { CheckSquare, Plus } from "lucide-react";
+import { CheckSquare, Pencil, Plus } from "lucide-react";
 import { vigilKeys } from "../../lib/query-keys";
 import {
   getTasks,
@@ -9,6 +9,7 @@ import {
   failTask,
   cancelTask,
   createTask,
+  updateTask,
   getOverview,
 } from "../../server/functions";
 import { Card, CardContent } from "../../components/ui/card";
@@ -89,6 +90,7 @@ export default function TasksPage({ activeRepo }: Partial<WidgetProps> = {}) {
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newRepo, setNewRepo] = useState("");
+  const [editTarget, setEditTarget] = useState<{ id: string; title: string; description: string } | null>(null);
   const queryClient = useQueryClient();
 
   const { data, isLoading, isError, error } = useQuery({
@@ -156,6 +158,22 @@ export default function TasksPage({ activeRepo }: Partial<WidgetProps> = {}) {
   const cancel = useMutation({
     mutationFn: (id: string) => cancelTask({ data: { id } }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: vigilKeys.tasks }),
+  });
+
+  const update = useMutation({
+    mutationFn: () =>
+      updateTask({
+        data: {
+          id: editTarget!.id,
+          title: editTarget!.title,
+          description: editTarget!.description,
+        },
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: vigilKeys.tasks });
+      setEditTarget(null);
+    },
+    onError: (err: Error) => toast.error(`Failed to update task: ${err.message}`),
   });
 
   const handleAction = (action: string, id: string) => {
@@ -305,6 +323,15 @@ export default function TasksPage({ activeRepo }: Partial<WidgetProps> = {}) {
                   >
                     {task.status}
                   </Badge>
+                  {actions.length > 0 && (
+                    <Button
+                      size="xs"
+                      variant="secondary"
+                      onClick={() => setEditTarget({ id: task.id, title: task.title, description: task.description ?? "" })}
+                    >
+                      <Pencil className="size-3" />
+                    </Button>
+                  )}
                   {actions.map((action) => (
                     <Button
                       key={action}
@@ -327,6 +354,38 @@ export default function TasksPage({ activeRepo }: Partial<WidgetProps> = {}) {
           No tasks found.
         </div>
       )}
+
+      <Dialog open={editTarget !== null} onOpenChange={(open) => { if (!open) setEditTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Task</DialogTitle>
+            <DialogDescription>Update the task details.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-title">Title</Label>
+              <Input
+                id="edit-title"
+                value={editTarget?.title ?? ""}
+                onChange={(e) => setEditTarget((prev) => prev ? { ...prev, title: e.target.value } : null)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-desc">Description</Label>
+              <Textarea
+                id="edit-desc"
+                value={editTarget?.description ?? ""}
+                onChange={(e) => setEditTarget((prev) => prev ? { ...prev, description: e.target.value } : null)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => update.mutate()} disabled={update.isPending || !editTarget?.title}>
+              {update.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
