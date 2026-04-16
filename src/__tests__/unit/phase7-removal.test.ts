@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
@@ -149,7 +149,7 @@ describe("Phase 7: build script updates", () => {
 
   test("build script references dashboard:build", async () => {
     const pkg = JSON.parse(await readSource("package.json"));
-    expect(pkg.scripts["build"]).toContain("dashboard:build");
-    expect(pkg.scripts["build"]).not.toContain("css:build");
+    expect(pkg.scripts.build).toContain("dashboard:build");
+    expect(pkg.scripts.build).not.toContain("css:build");
   });
 });

@@ -10,7 +10,7 @@ function formatUptime(ms: number): string {
   return `${minutes}m`;
 }
 
-function shortModel(model: string): string {
+function _shortModel(model: string): string {
   return model.replace("claude-", "").replace("-20251001", "");
 }
 

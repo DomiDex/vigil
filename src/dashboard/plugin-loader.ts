@@ -1,7 +1,7 @@
-import { z } from "zod";
-import { join } from "node:path";
-import { homedir } from "node:os";
 import { readdir } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { z } from "zod";
 import type { PluginWidget } from "../../dashboard-v2/src/types/plugin";
 
 export const PluginManifestSchema = z.object({
@@ -44,12 +44,8 @@ export async function loadUserPlugins(): Promise<PluginWidget[]> {
     return [];
   }
 
-  const { corePlugins } = await import(
-    "../../dashboard-v2/src/plugins/index"
-  );
-  const coreIds = new Set(
-    (corePlugins as PluginWidget[]).map((p) => p.id),
-  );
+  const { corePlugins } = await import("../../dashboard-v2/src/plugins/index");
+  const coreIds = new Set((corePlugins as PluginWidget[]).map((p) => p.id));
 
   for (const entry of entries) {
     const widgetPath = join(pluginDir, entry, "widget.ts");
@@ -61,17 +57,12 @@ export async function loadUserPlugins(): Promise<PluginWidget[]> {
       const manifest = PluginManifestSchema.parse(mod.default);
 
       if (coreIds.has(manifest.id)) {
-        console.warn(
-          `[plugins] Skipping "${manifest.id}" — ID collides with core plugin`,
-        );
+        console.warn(`[plugins] Skipping "${manifest.id}" — ID collides with core plugin`);
         continue;
       }
 
       if (manifest.apiRoutes?.length) {
-        loadedApiRoutes.set(
-          manifest.id,
-          manifest.apiRoutes as PluginApiRoute[],
-        );
+        loadedApiRoutes.set(manifest.id, manifest.apiRoutes as PluginApiRoute[]);
       }
 
       plugins.push({
@@ -86,10 +77,7 @@ export async function loadUserPlugins(): Promise<PluginWidget[]> {
       });
     } catch (err) {
       if (err instanceof z.ZodError) {
-        console.warn(
-          `[plugins] Invalid manifest in ${entry}/:`,
-          err.issues.map((i) => i.message).join(", "),
-        );
+        console.warn(`[plugins] Invalid manifest in ${entry}/:`, err.issues.map((i) => i.message).join(", "));
       } else {
         console.warn(`[plugins] Failed to load ${entry}/:`, err);
       }

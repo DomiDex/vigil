@@ -1,17 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach, spyOn, mock } from "bun:test";
-import * as os from "node:os";
-import { join } from "node:path";
-import { rmSync } from "node:fs";
-import {
-  createTempPluginEnv,
-  type TempPluginEnv,
-} from "../helpers/temp-plugins";
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
+import { createTempPluginEnv, type TempPluginEnv } from "../helpers/temp-plugins";
 
 // Mock corePlugins
 mock.module("../../../dashboard-v2/src/plugins/index", () => ({
-  corePlugins: [
-    { id: "overview", label: "Overview", slot: "tab", order: 0 },
-  ],
+  corePlugins: [{ id: "overview", label: "Overview", slot: "tab", order: 0 }],
 }));
 
 import type { PluginApiRoute } from "../../dashboard/plugin-loader";
@@ -42,12 +34,10 @@ describe("plugin API route handling", () => {
         if (url.pathname.startsWith("/api/plugins/")) {
           const segments = url.pathname.split("/");
           const pluginId = segments[3];
-          const pluginPath = "/" + segments.slice(4).join("/");
+          const pluginPath = `/${segments.slice(4).join("/")}`;
           const routes = pluginRoutes.get(pluginId);
           if (routes) {
-            const route = routes.find(
-              (r) => r.path === pluginPath && r.method === req.method,
-            );
+            const route = routes.find((r) => r.path === pluginPath && r.method === req.method);
             if (route) {
               try {
                 return route.handler(req);
@@ -87,9 +77,7 @@ export default {
 `;
     env.addPlugin("test-api", widget);
 
-    const { loadUserPlugins, getPluginApiRoutes } = await import(
-      "../../dashboard/plugin-loader"
-    );
+    const { loadUserPlugins, getPluginApiRoutes } = await import("../../dashboard/plugin-loader");
     await loadUserPlugins();
     const pluginRoutes = getPluginApiRoutes();
 
@@ -121,9 +109,7 @@ export default {
 `;
     env.addPlugin("get-only", widget);
 
-    const { loadUserPlugins, getPluginApiRoutes } = await import(
-      "../../dashboard/plugin-loader"
-    );
+    const { loadUserPlugins, getPluginApiRoutes } = await import("../../dashboard/plugin-loader");
     await loadUserPlugins();
     const pluginRoutes = getPluginApiRoutes();
 
@@ -136,17 +122,13 @@ export default {
   });
 
   it("returns 404 for unknown plugin ID", async () => {
-    const { loadUserPlugins, getPluginApiRoutes } = await import(
-      "../../dashboard/plugin-loader"
-    );
+    const { loadUserPlugins, getPluginApiRoutes } = await import("../../dashboard/plugin-loader");
     await loadUserPlugins();
     const pluginRoutes = getPluginApiRoutes();
 
     createPluginServer(pluginRoutes);
 
-    const res = await fetch(
-      `http://localhost:${port}/api/plugins/nonexistent/data`,
-    );
+    const res = await fetch(`http://localhost:${port}/api/plugins/nonexistent/data`);
     expect(res.status).toBe(404);
     const body = await res.json();
     expect(body.error).toBe("Not found");
@@ -172,9 +154,7 @@ export default {
 `;
     env.addPlugin("crashy", widget);
 
-    const { loadUserPlugins, getPluginApiRoutes } = await import(
-      "../../dashboard/plugin-loader"
-    );
+    const { loadUserPlugins, getPluginApiRoutes } = await import("../../dashboard/plugin-loader");
     await loadUserPlugins();
     const pluginRoutes = getPluginApiRoutes();
 
@@ -212,7 +192,9 @@ describe("GET /api/plugins endpoint", () => {
   });
 
   it("returns merged core + user plugins sorted by order", async () => {
-    env.addPlugin("user-plugin", `
+    env.addPlugin(
+      "user-plugin",
+      `
 export default {
   id: "user-plugin",
   label: "User Plugin",
@@ -221,14 +203,13 @@ export default {
   order: 150,
   component: () => Promise.resolve({ default: () => null }),
 };
-`);
+`,
+    );
 
     const { loadUserPlugins } = await import("../../dashboard/plugin-loader");
     const userPlugins = await loadUserPlugins();
 
-    const corePlugins = [
-      { id: "overview", label: "Overview", icon: "Home", slot: "tab", order: 0 },
-    ];
+    const corePlugins = [{ id: "overview", label: "Overview", icon: "Home", slot: "tab", order: 0 }];
 
     const allPlugins = [
       ...corePlugins.map((p) => ({ ...p, source: "core" as const })),
@@ -279,7 +260,9 @@ export default {
   });
 
   it("does not include function references in response", async () => {
-    env.addPlugin("fn-plugin", `
+    env.addPlugin(
+      "fn-plugin",
+      `
 export default {
   id: "fn-plugin",
   label: "FN Plugin",
@@ -291,7 +274,8 @@ export default {
     { method: "GET" as const, path: "/x", handler: () => new Response("x") },
   ],
 };
-`);
+`,
+    );
 
     const { loadUserPlugins } = await import("../../dashboard/plugin-loader");
     const userPlugins = await loadUserPlugins();

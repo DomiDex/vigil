@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from "bun:test";
+import { describe, expect, it, mock } from "bun:test";
 
 const mockMemoryData = {
   pipeline: {
@@ -14,9 +14,30 @@ const mockMemoryData = {
 
 const mockSearchResults = {
   results: [
-    { id: "r1", repo: "vigil", type: "git_event", content: "Added repos plugin with state indicators", confidence: 0.92, timestamp: "2026-04-14T10:00:00Z" },
-    { id: "r2", repo: "vigil", type: "consolidated", content: "Dashboard rewrite progressing well", confidence: 0.85, timestamp: "2026-04-13T10:00:00Z" },
-    { id: "r3", repo: "my-app", type: "insight", content: "Auth flow implemented in my-app", confidence: 0.71, timestamp: "2026-04-12T10:00:00Z" },
+    {
+      id: "r1",
+      repo: "vigil",
+      type: "git_event",
+      content: "Added repos plugin with state indicators",
+      confidence: 0.92,
+      timestamp: "2026-04-14T10:00:00Z",
+    },
+    {
+      id: "r2",
+      repo: "vigil",
+      type: "consolidated",
+      content: "Dashboard rewrite progressing well",
+      confidence: 0.85,
+      timestamp: "2026-04-13T10:00:00Z",
+    },
+    {
+      id: "r3",
+      repo: "my-app",
+      type: "insight",
+      content: "Auth flow implemented in my-app",
+      confidence: 0.71,
+      timestamp: "2026-04-12T10:00:00Z",
+    },
   ],
 };
 

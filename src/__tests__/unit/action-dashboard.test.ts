@@ -3,11 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ActionExecutor } from "../../action/executor.ts";
-import {
-  getActionsJSON,
-  getActionsPendingJSON,
-  handleReject,
-} from "../../dashboard/api/actions.ts";
+import { getActionsJSON, getActionsPendingJSON, handleReject } from "../../dashboard/api/actions.ts";
 import type { DashboardContext } from "../../dashboard/server.ts";
 
 function makeMockCtx(executor: ActionExecutor): DashboardContext {

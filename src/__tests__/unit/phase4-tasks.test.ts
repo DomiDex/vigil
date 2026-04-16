@@ -1,14 +1,71 @@
-import { describe, it, expect, mock } from "bun:test";
+import { describe, expect, it, mock } from "bun:test";
 
 const mockTasks = {
   tasks: [
-    { id: "t1", title: "Add repos plugin", status: "pending", repo: "vigil", createdAt: "2026-04-14T10:00:00Z", updatedAt: "2026-04-14T10:00:00Z", waitCondition: null },
-    { id: "t2", title: "Fix state icons", status: "active", repo: "vigil", createdAt: "2026-04-14T10:00:00Z", updatedAt: "2026-04-14T10:00:00Z", waitCondition: null },
-    { id: "t3", title: "Write tests", status: "completed", repo: "vigil", createdAt: "2026-04-14T10:00:00Z", updatedAt: "2026-04-14T10:00:00Z", waitCondition: null },
-    { id: "t4", title: "Sub-task of t1", status: "pending", repo: "vigil", createdAt: "2026-04-14T10:00:00Z", updatedAt: "2026-04-14T10:00:00Z", waitCondition: null, parentId: "t1" },
-    { id: "t5", title: "Waiting task", status: "waiting", repo: "vigil", createdAt: "2026-04-14T10:00:00Z", updatedAt: "2026-04-14T10:00:00Z", waitCondition: { type: "event" as const } },
-    { id: "t6", title: "Failed task", status: "failed", repo: "my-app", createdAt: "2026-04-14T10:00:00Z", updatedAt: "2026-04-14T10:00:00Z", waitCondition: null },
-    { id: "t7", title: "Cancelled task", status: "cancelled", repo: "my-app", createdAt: "2026-04-14T10:00:00Z", updatedAt: "2026-04-14T10:00:00Z", waitCondition: null },
+    {
+      id: "t1",
+      title: "Add repos plugin",
+      status: "pending",
+      repo: "vigil",
+      createdAt: "2026-04-14T10:00:00Z",
+      updatedAt: "2026-04-14T10:00:00Z",
+      waitCondition: null,
+    },
+    {
+      id: "t2",
+      title: "Fix state icons",
+      status: "active",
+      repo: "vigil",
+      createdAt: "2026-04-14T10:00:00Z",
+      updatedAt: "2026-04-14T10:00:00Z",
+      waitCondition: null,
+    },
+    {
+      id: "t3",
+      title: "Write tests",
+      status: "completed",
+      repo: "vigil",
+      createdAt: "2026-04-14T10:00:00Z",
+      updatedAt: "2026-04-14T10:00:00Z",
+      waitCondition: null,
+    },
+    {
+      id: "t4",
+      title: "Sub-task of t1",
+      status: "pending",
+      repo: "vigil",
+      createdAt: "2026-04-14T10:00:00Z",
+      updatedAt: "2026-04-14T10:00:00Z",
+      waitCondition: null,
+      parentId: "t1",
+    },
+    {
+      id: "t5",
+      title: "Waiting task",
+      status: "waiting",
+      repo: "vigil",
+      createdAt: "2026-04-14T10:00:00Z",
+      updatedAt: "2026-04-14T10:00:00Z",
+      waitCondition: { type: "event" as const },
+    },
+    {
+      id: "t6",
+      title: "Failed task",
+      status: "failed",
+      repo: "my-app",
+      createdAt: "2026-04-14T10:00:00Z",
+      updatedAt: "2026-04-14T10:00:00Z",
+      waitCondition: null,
+    },
+    {
+      id: "t7",
+      title: "Cancelled task",
+      status: "cancelled",
+      repo: "my-app",
+      createdAt: "2026-04-14T10:00:00Z",
+      updatedAt: "2026-04-14T10:00:00Z",
+      waitCondition: null,
+    },
   ],
   counts: { pending: 2, active: 1, completed: 1, waiting: 1, failed: 1, cancelled: 1 } as Record<string, number>,
   completionRate: 14,
@@ -74,7 +131,16 @@ describe("Tasks plugin", () => {
     it("orphan children (missing parent) still render", () => {
       const tasksWithOrphan = [
         ...mockTasks.tasks,
-        { id: "t8", title: "Orphan", status: "pending", repo: "vigil", createdAt: "2026-04-14T10:00:00Z", updatedAt: "2026-04-14T10:00:00Z", waitCondition: null, parentId: "t-missing" },
+        {
+          id: "t8",
+          title: "Orphan",
+          status: "pending",
+          repo: "vigil",
+          createdAt: "2026-04-14T10:00:00Z",
+          updatedAt: "2026-04-14T10:00:00Z",
+          waitCondition: null,
+          parentId: "t-missing",
+        },
       ];
       const { sortTasksWithChildren } = require("../../../dashboard-v2/src/plugins/tasks/TasksPage");
       const sorted = sortTasksWithChildren(tasksWithOrphan);

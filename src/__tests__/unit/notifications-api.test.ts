@@ -1,11 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { createFakeDashboardContext } from "../helpers/fake-dashboard-context";
-import { withTempHome } from "../helpers/temp-config";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
   getNotificationsJSON,
-  handleTestNotification,
   handleNotificationRulesUpdate,
+  handleTestNotification,
 } from "../../dashboard/api/notifications";
+import { createFakeDashboardContext } from "../helpers/fake-dashboard-context";
+import { withTempHome } from "../helpers/temp-config";
 
 describe("notifications API", () => {
   let ctx: ReturnType<typeof createFakeDashboardContext>;

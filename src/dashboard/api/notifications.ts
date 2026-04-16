@@ -1,7 +1,7 @@
-import { z } from "zod";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
 import type { DashboardContext } from "../types.ts";
 
 const timeRegex = /^([01]\d|2[0-3]):[0-5]\d$/;

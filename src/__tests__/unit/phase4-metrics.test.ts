@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 
 describe("Metrics plugin", () => {
   describe("VIGIL_CHART_COLORS", () => {
@@ -66,7 +66,11 @@ describe("Metrics plugin", () => {
         totals: { SILENT: 19, OBSERVE: 9, NOTIFY: 3, ACT: 3 },
       },
       latency: {
-        series: [{ tick: 1, ms: 120 }, { tick: 2, ms: 95 }, { tick: 3, ms: 210 }],
+        series: [
+          { tick: 1, ms: 120 },
+          { tick: 2, ms: 95 },
+          { tick: 3, ms: 210 },
+        ],
         avg: 141,
         p95: 210,
         max: 210,
@@ -77,7 +81,10 @@ describe("Metrics plugin", () => {
         configured: 30,
         adaptiveCurrent: 45,
         recentActivity: 3,
-        series: [{ time: "10:00", count: 2 }, { time: "10:30", count: 3 }],
+        series: [
+          { time: "10:00", count: 2 },
+          { time: "10:30", count: 3 },
+        ],
       },
       ticks: { total: 42, sleeping: 3, proactive: 5, current: 30 },
       state: { isSleeping: false, uptime: "2h 0m", model: "haiku" },

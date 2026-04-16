@@ -1,13 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { getAgentsJSON, getCurrentAgentJSON, handleAgentSwitch } from "../../dashboard/api/agents";
 import { createFakeDashboardContext } from "../helpers/fake-dashboard-context";
-import {
-  getAgentsJSON,
-  getCurrentAgentJSON,
-  handleAgentSwitch,
-} from "../../dashboard/api/agents";
 
 describe("agents API", () => {
   let ctx: ReturnType<typeof createFakeDashboardContext>;

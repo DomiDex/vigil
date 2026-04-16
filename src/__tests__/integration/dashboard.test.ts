@@ -422,4 +422,3 @@ describe("GET /api/metrics", () => {
     }
   });
 });
-

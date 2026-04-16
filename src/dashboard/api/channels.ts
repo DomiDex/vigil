@@ -50,7 +50,15 @@ export async function handleChannelDelete(
 }
 
 export function getChannelPermissionsJSON(ctx: DashboardContext, channelId: string) {
-  return getManager(ctx)?.getPermissions(channelId) ?? { read: false, write: false, execute: false, admin: false, subscribe: false };
+  return (
+    getManager(ctx)?.getPermissions(channelId) ?? {
+      read: false,
+      write: false,
+      execute: false,
+      admin: false,
+      subscribe: false,
+    }
+  );
 }
 
 export function getChannelQueueJSON(ctx: DashboardContext, channelId: string) {

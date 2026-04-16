@@ -1,18 +1,22 @@
+import { corePlugins } from "../../dashboard-v2/src/plugins/index.ts";
 import { setVigilContext } from "../../dashboard-v2/src/server/vigil-context.ts";
 import type { Daemon } from "../core/daemon.ts";
+import { getA2AHistoryJSON, getA2ASkillsJSON, getA2AStatusJSON } from "./api/a2a-status.ts";
+import { getActionsJSON, getActionsPendingJSON, handleApprove, handleReject } from "./api/actions.ts";
+import { getAgentsJSON, getCurrentAgentJSON, handleAgentSwitch } from "./api/agents.ts";
 import {
-  getActionsJSON,
-  getActionsPendingJSON,
-  handleApprove,
-  handleReject,
-} from "./api/actions.ts";
+  getChannelPermissionsJSON,
+  getChannelQueueJSON,
+  getChannelsJSON,
+  handleChannelDelete,
+  handleChannelRegister,
+} from "./api/channels.ts";
+import { getConfigJSON, getFeatureGatesJSON, handleConfigUpdate, handleFeatureToggle } from "./api/config.ts";
 import { getDreamPatternsJSON, getDreamsJSON, handleDreamTrigger } from "./api/dreams.ts";
-import {
-  getMemoryJSON,
-  getMemorySearchJSON,
-  handleAsk,
-} from "./api/memory.ts";
+import { getHealthJSON } from "./api/health.ts";
+import { getMemoryJSON, getMemorySearchJSON, handleAsk } from "./api/memory.ts";
 import { getMetricsJSON } from "./api/metrics.ts";
+import { getNotificationsJSON, handleNotificationRulesUpdate, handleTestNotification } from "./api/notifications.ts";
 import { getOverviewJSON } from "./api/overview.ts";
 import { getRepoDetailJSON, getReposJSON } from "./api/repos.ts";
 import {
@@ -32,31 +36,14 @@ import {
   handleTaskUpdate,
 } from "./api/tasks.ts";
 import { getTimelineJSON, handleReply } from "./api/timeline.ts";
-import { getConfigJSON, handleConfigUpdate, getFeatureGatesJSON, handleFeatureToggle } from "./api/config.ts";
 import {
   getWebhookEventsJSON,
+  getWebhookStatusJSON,
   getWebhookSubscriptionsJSON,
   handleSubscriptionCreate,
   handleSubscriptionDelete,
-  getWebhookStatusJSON,
 } from "./api/webhooks.ts";
-import {
-  getChannelsJSON,
-  handleChannelRegister,
-  handleChannelDelete,
-  getChannelPermissionsJSON,
-  getChannelQueueJSON,
-} from "./api/channels.ts";
-import {
-  getNotificationsJSON,
-  handleTestNotification,
-  handleNotificationRulesUpdate,
-} from "./api/notifications.ts";
-import { getAgentsJSON, getCurrentAgentJSON, handleAgentSwitch } from "./api/agents.ts";
-import { getHealthJSON } from "./api/health.ts";
-import { getA2AStatusJSON, getA2ASkillsJSON, getA2AHistoryJSON } from "./api/a2a-status.ts";
-import { loadUserPlugins, getPluginApiRoutes, type PluginApiRoute } from "./plugin-loader.ts";
-import { corePlugins } from "../../dashboard-v2/src/plugins/index.ts";
+import { getPluginApiRoutes, loadUserPlugins } from "./plugin-loader.ts";
 import type { DashboardContext } from "./types.ts";
 
 // TanStack Start handler (loaded lazily on first request)
@@ -409,12 +396,10 @@ export async function startDashboard(daemon: Daemon, port = 7480): Promise<Retur
       if (path.startsWith("/api/plugins/")) {
         const segments = path.split("/");
         const pluginId = segments[3];
-        const pluginPath = "/" + segments.slice(4).join("/");
+        const pluginPath = `/${segments.slice(4).join("/")}`;
         const routes = pluginApiRoutes.get(pluginId);
         if (routes) {
-          const route = routes.find(
-            (r) => r.path === pluginPath && r.method === req.method,
-          );
+          const route = routes.find((r) => r.path === pluginPath && r.method === req.method);
           if (route) {
             try {
               return await route.handler(req);

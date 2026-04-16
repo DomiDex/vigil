@@ -1,10 +1,10 @@
-import { z } from "zod";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { DashboardContext } from "../types.ts";
-import { FEATURES } from "../../core/features.ts";
+import { z } from "zod";
 import { loadConfig } from "../../core/config.ts";
+import { FEATURES } from "../../core/features.ts";
+import type { DashboardContext } from "../types.ts";
 
 const configUpdateSchema = z
   .object({
@@ -84,11 +84,12 @@ export async function getFeatureGatesJSON(ctx: DashboardContext) {
   const results = [];
   for (const [key, _value] of Object.entries(FEATURES)) {
     // Use sync isEnabledCached if available, otherwise await async isEnabled
-    const enabled = typeof gates.isEnabledCached === "function"
-      ? gates.isEnabledCached(key)
-      : typeof gates.isEnabled === "function"
-        ? await gates.isEnabled(key)
-        : false;
+    const enabled =
+      typeof gates.isEnabledCached === "function"
+        ? gates.isEnabledCached(key)
+        : typeof gates.isEnabled === "function"
+          ? await gates.isEnabled(key)
+          : false;
 
     // diagnose is async in real FeatureGates
     let layers = { build: true, config: true, runtime: true, session: true };

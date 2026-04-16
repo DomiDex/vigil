@@ -1,10 +1,6 @@
-import { describe, it, expect, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, it } from "bun:test";
+import { getA2AHistoryJSON, getA2ASkillsJSON, getA2AStatusJSON } from "../../dashboard/api/a2a-status";
 import { createFakeDashboardContext } from "../helpers/fake-dashboard-context";
-import {
-  getA2AStatusJSON,
-  getA2ASkillsJSON,
-  getA2AHistoryJSON,
-} from "../../dashboard/api/a2a-status";
 
 describe("a2a-status API", () => {
   let ctx: ReturnType<typeof createFakeDashboardContext>;

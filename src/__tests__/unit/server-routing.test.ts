@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { createFakeDashboardContext } from "../helpers/fake-dashboard-context";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { startDashboard } from "../../dashboard/server";
+import { createFakeDashboardContext } from "../helpers/fake-dashboard-context";
 
 describe("server routing — Phase 5 routes", () => {
   let server: ReturnType<typeof Bun.serve>;

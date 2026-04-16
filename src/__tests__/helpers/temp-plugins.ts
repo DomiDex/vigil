@@ -1,8 +1,8 @@
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { spyOn } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import * as os from "node:os";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spyOn } from "bun:test";
-import * as os from "node:os";
 
 export interface TempPluginEnv {
   tmpDir: string;

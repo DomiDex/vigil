@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { createFakeDashboardContext } from "../helpers/fake-dashboard-context";
-import { withTempHome } from "../helpers/temp-config";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
   getConfigJSON,
-  handleConfigUpdate,
   getFeatureGatesJSON,
+  handleConfigUpdate,
   handleFeatureToggle,
 } from "../../dashboard/api/config";
+import { createFakeDashboardContext } from "../helpers/fake-dashboard-context";
+import { withTempHome } from "../helpers/temp-config";
 
 describe("config API", () => {
   let ctx: ReturnType<typeof createFakeDashboardContext>;

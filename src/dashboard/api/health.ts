@@ -1,6 +1,6 @@
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { existsSync } from "node:fs";
 import type { DashboardContext } from "../types.ts";
 
 function getDbSize(path: string): number {

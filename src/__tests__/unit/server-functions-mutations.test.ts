@@ -7,9 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 let fetchSpy: ReturnType<typeof spyOn>;
 
 beforeEach(() => {
-  fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
-    new Response("<div>ok</div>", { status: 200 }),
-  );
+  fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(new Response("<div>ok</div>", { status: 200 }));
 });
 
 afterEach(() => {

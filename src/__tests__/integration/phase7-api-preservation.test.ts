@@ -1,6 +1,6 @@
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { createMockDaemon } from "../helpers/mock-daemon.ts";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { startDashboard } from "../../dashboard/server.ts";
+import { createMockDaemon } from "../helpers/mock-daemon.ts";
 
 let server: ReturnType<typeof Bun.serve>;
 let port: number;

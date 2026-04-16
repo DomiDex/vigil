@@ -1,5 +1,5 @@
-import { z } from "zod";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { z } from "zod";
 import type { DashboardContext } from "../types.ts";
 
 const agentSwitchSchema = z.object({
@@ -75,10 +75,7 @@ function parseFrontmatter(content: string): { meta: Record<string, any>; body: s
   return { meta, body };
 }
 
-export async function getAgentsJSON(
-  ctx: DashboardContext,
-  agentDir?: string,
-): Promise<AgentDefinition[]> {
+export async function getAgentsJSON(ctx: DashboardContext, agentDir?: string): Promise<AgentDefinition[]> {
   const dir = agentDir ?? (ctx.daemon as any).agentDir ?? ".claude/agents";
 
   if (!existsSync(dir)) return [];

@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from "bun:test";
-import { createFakeDashboardContext } from "../helpers/fake-dashboard-context";
+import { beforeEach, describe, expect, it } from "bun:test";
 import { getHealthJSON } from "../../dashboard/api/health";
+import { createFakeDashboardContext } from "../helpers/fake-dashboard-context";
 
 describe("health API", () => {
   let ctx: ReturnType<typeof createFakeDashboardContext>;

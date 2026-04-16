@@ -89,11 +89,7 @@ export function getTimelineJSON(ctx: DashboardContext, url: URL) {
 
 // ── POST /api/timeline/:id/reply ─────────────────
 
-export function handleReply(
-  ctx: DashboardContext,
-  id: string,
-  reply: string,
-): { ok: boolean; error?: string } {
+export function handleReply(ctx: DashboardContext, id: string, reply: string): { ok: boolean; error?: string } {
   if (!reply.trim()) {
     return { ok: false, error: "Reply cannot be empty." };
   }

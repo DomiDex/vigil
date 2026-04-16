@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach, spyOn, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
+import * as os from "node:os";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import * as os from "node:os";
 
 // Mock corePlugins before importing plugin-loader
 mock.module("../../../dashboard-v2/src/plugins/index", () => ({
@@ -12,17 +12,9 @@ mock.module("../../../dashboard-v2/src/plugins/index", () => ({
   ],
 }));
 
-import {
-  PluginManifestSchema,
-  loadUserPlugins,
-  getPluginApiRoutes,
-} from "../../dashboard/plugin-loader";
+import { getPluginApiRoutes, loadUserPlugins, PluginManifestSchema } from "../../dashboard/plugin-loader";
 
-import {
-  createTempPluginEnv,
-  validWidgetSource,
-  type TempPluginEnv,
-} from "../helpers/temp-plugins";
+import { createTempPluginEnv, type TempPluginEnv, validWidgetSource } from "../helpers/temp-plugins";
 
 describe("PluginManifestSchema", () => {
   const validManifest = {
@@ -58,21 +50,15 @@ describe("PluginManifestSchema", () => {
   });
 
   it("rejects id with uppercase letters", () => {
-    expect(() =>
-      PluginManifestSchema.parse({ ...validManifest, id: "MyPlugin" }),
-    ).toThrow();
+    expect(() => PluginManifestSchema.parse({ ...validManifest, id: "MyPlugin" })).toThrow();
   });
 
   it("rejects id with spaces", () => {
-    expect(() =>
-      PluginManifestSchema.parse({ ...validManifest, id: "my plugin" }),
-    ).toThrow();
+    expect(() => PluginManifestSchema.parse({ ...validManifest, id: "my plugin" })).toThrow();
   });
 
   it("rejects id with special characters", () => {
-    expect(() =>
-      PluginManifestSchema.parse({ ...validManifest, id: "my_plugin!" }),
-    ).toThrow();
+    expect(() => PluginManifestSchema.parse({ ...validManifest, id: "my_plugin!" })).toThrow();
   });
 
   it("accepts id with hyphens and numbers", () => {
@@ -84,15 +70,11 @@ describe("PluginManifestSchema", () => {
   });
 
   it("rejects order below 100", () => {
-    expect(() =>
-      PluginManifestSchema.parse({ ...validManifest, order: 99 }),
-    ).toThrow();
+    expect(() => PluginManifestSchema.parse({ ...validManifest, order: 99 })).toThrow();
   });
 
   it("rejects order of 0", () => {
-    expect(() =>
-      PluginManifestSchema.parse({ ...validManifest, order: 0 }),
-    ).toThrow();
+    expect(() => PluginManifestSchema.parse({ ...validManifest, order: 0 })).toThrow();
   });
 
   it("accepts order of exactly 100", () => {
@@ -127,37 +109,25 @@ describe("PluginManifestSchema", () => {
   });
 
   it("rejects invalid slot value", () => {
-    expect(() =>
-      PluginManifestSchema.parse({ ...validManifest, slot: "footer" }),
-    ).toThrow();
+    expect(() => PluginManifestSchema.parse({ ...validManifest, slot: "footer" })).toThrow();
   });
 
   it("accepts all valid slot values", () => {
-    for (const slot of [
-      "tab",
-      "sidebar",
-      "timeline-card",
-      "overlay",
-      "top-bar",
-    ]) {
+    for (const slot of ["tab", "sidebar", "timeline-card", "overlay", "top-bar"]) {
       const result = PluginManifestSchema.parse({ ...validManifest, slot });
       expect(result.slot).toBe(slot);
     }
   });
 
   it("rejects non-function component", () => {
-    expect(() =>
-      PluginManifestSchema.parse({ ...validManifest, component: "not-a-fn" }),
-    ).toThrow();
+    expect(() => PluginManifestSchema.parse({ ...validManifest, component: "not-a-fn" })).toThrow();
   });
 
   it("rejects invalid apiRoute method", () => {
     expect(() =>
       PluginManifestSchema.parse({
         ...validManifest,
-        apiRoutes: [
-          { method: "PATCH", path: "/data", handler: () => new Response() },
-        ],
+        apiRoutes: [{ method: "PATCH", path: "/data", handler: () => new Response() }],
       }),
     ).toThrow();
   });
@@ -175,9 +145,7 @@ describe("PluginManifestSchema", () => {
     for (const method of ["GET", "POST", "PUT", "DELETE"]) {
       const result = PluginManifestSchema.parse({
         ...validManifest,
-        apiRoutes: [
-          { method, path: "/test", handler: () => new Response() },
-        ],
+        apiRoutes: [{ method, path: "/test", handler: () => new Response() }],
       });
       expect(result.apiRoutes![0].method).toBe(method);
     }
@@ -210,11 +178,14 @@ describe("loadUserPlugins", () => {
   });
 
   it("loads a valid plugin from widget.ts", async () => {
-    env.addPlugin("hello-world", validWidgetSource({
-      id: '"hello-world"',
-      label: '"Hello World"',
-      order: "150",
-    }));
+    env.addPlugin(
+      "hello-world",
+      validWidgetSource({
+        id: '"hello-world"',
+        label: '"Hello World"',
+        order: "150",
+      }),
+    );
 
     const plugins = await loadUserPlugins();
     expect(plugins).toHaveLength(1);
@@ -225,14 +196,20 @@ describe("loadUserPlugins", () => {
   });
 
   it("skips invalid manifest with warning and loads remaining plugins", async () => {
-    env.addPlugin("bad-plugin", validWidgetSource({
-      id: '"bad-plugin"',
-      order: "50",
-    }));
-    env.addPlugin("good-plugin", validWidgetSource({
-      id: '"good-plugin"',
-      order: "200",
-    }));
+    env.addPlugin(
+      "bad-plugin",
+      validWidgetSource({
+        id: '"bad-plugin"',
+        order: "50",
+      }),
+    );
+    env.addPlugin(
+      "good-plugin",
+      validWidgetSource({
+        id: '"good-plugin"',
+        order: "200",
+      }),
+    );
 
     const plugins = await loadUserPlugins();
     expect(plugins).toHaveLength(1);
@@ -243,10 +220,13 @@ describe("loadUserPlugins", () => {
   });
 
   it("skips plugin with ID colliding with core plugin", async () => {
-    env.addPlugin("overview", validWidgetSource({
-      id: '"overview"',
-      order: "100",
-    }));
+    env.addPlugin(
+      "overview",
+      validWidgetSource({
+        id: '"overview"',
+        order: "100",
+      }),
+    );
 
     const plugins = await loadUserPlugins();
     expect(plugins).toHaveLength(0);
@@ -264,18 +244,27 @@ describe("loadUserPlugins", () => {
   });
 
   it("loads multiple valid plugins", async () => {
-    env.addPlugin("plugin-a", validWidgetSource({
-      id: '"plugin-a"',
-      order: "100",
-    }));
-    env.addPlugin("plugin-b", validWidgetSource({
-      id: '"plugin-b"',
-      order: "200",
-    }));
-    env.addPlugin("plugin-c", validWidgetSource({
-      id: '"plugin-c"',
-      order: "300",
-    }));
+    env.addPlugin(
+      "plugin-a",
+      validWidgetSource({
+        id: '"plugin-a"',
+        order: "100",
+      }),
+    );
+    env.addPlugin(
+      "plugin-b",
+      validWidgetSource({
+        id: '"plugin-b"',
+        order: "200",
+      }),
+    );
+    env.addPlugin(
+      "plugin-c",
+      validWidgetSource({
+        id: '"plugin-c"',
+        order: "300",
+      }),
+    );
 
     const plugins = await loadUserPlugins();
     expect(plugins).toHaveLength(3);
@@ -285,9 +274,12 @@ describe("loadUserPlugins", () => {
 
   it("silently skips directory without widget.ts", async () => {
     env.addPluginDir("empty-dir");
-    env.addPlugin("real-plugin", validWidgetSource({
-      id: '"real-plugin"',
-    }));
+    env.addPlugin(
+      "real-plugin",
+      validWidgetSource({
+        id: '"real-plugin"',
+      }),
+    );
 
     const plugins = await loadUserPlugins();
     expect(plugins).toHaveLength(1);
@@ -329,9 +321,12 @@ export default {
   });
 
   it("plugin without apiRoutes does not appear in getPluginApiRoutes()", async () => {
-    env.addPlugin("no-routes", validWidgetSource({
-      id: '"no-routes"',
-    }));
+    env.addPlugin(
+      "no-routes",
+      validWidgetSource({
+        id: '"no-routes"',
+      }),
+    );
 
     await loadUserPlugins();
     const routes = getPluginApiRoutes();

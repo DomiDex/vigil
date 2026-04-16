@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeEach } from "bun:test";
-import { createFakeDashboardContext } from "../helpers/fake-dashboard-context";
+import { beforeEach, describe, expect, it } from "bun:test";
 import {
   getWebhookEventsJSON,
+  getWebhookStatusJSON,
   getWebhookSubscriptionsJSON,
   handleSubscriptionCreate,
   handleSubscriptionDelete,
-  getWebhookStatusJSON,
 } from "../../dashboard/api/webhooks";
+import { createFakeDashboardContext } from "../helpers/fake-dashboard-context";
 
 describe("webhooks API", () => {
   let ctx: ReturnType<typeof createFakeDashboardContext>;

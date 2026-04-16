@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeEach } from "bun:test";
-import { createFakeDashboardContext } from "../helpers/fake-dashboard-context";
+import { beforeEach, describe, expect, it } from "bun:test";
 import {
-  getChannelsJSON,
-  handleChannelRegister,
-  handleChannelDelete,
   getChannelPermissionsJSON,
   getChannelQueueJSON,
+  getChannelsJSON,
+  handleChannelDelete,
+  handleChannelRegister,
 } from "../../dashboard/api/channels";
+import { createFakeDashboardContext } from "../helpers/fake-dashboard-context";
 
 describe("channels API", () => {
   let ctx: ReturnType<typeof createFakeDashboardContext>;

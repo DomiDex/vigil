@@ -1,12 +1,33 @@
-import { describe, it, expect, mock } from "bun:test";
+import { describe, expect, it, mock } from "bun:test";
 
 // Mock server functions
 const mockGetRepos = mock(() =>
   Promise.resolve({
     repos: [
-      { name: "vigil", path: "/repos/vigil", state: "active" as const, branch: "main", head: "abc1234def5678", dirty: false },
-      { name: "my-app", path: "/repos/my-app", state: "sleeping" as const, branch: "feat/login", head: "def5678abc1234", dirty: true },
-      { name: "docs", path: "/repos/docs", state: "dreaming" as const, branch: "main", head: "111222333444555", dirty: false },
+      {
+        name: "vigil",
+        path: "/repos/vigil",
+        state: "active" as const,
+        branch: "main",
+        head: "abc1234def5678",
+        dirty: false,
+      },
+      {
+        name: "my-app",
+        path: "/repos/my-app",
+        state: "sleeping" as const,
+        branch: "feat/login",
+        head: "def5678abc1234",
+        dirty: true,
+      },
+      {
+        name: "docs",
+        path: "/repos/docs",
+        state: "dreaming" as const,
+        branch: "main",
+        head: "111222333444555",
+        dirty: false,
+      },
     ],
   }),
 );

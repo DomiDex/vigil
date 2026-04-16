@@ -1,14 +1,47 @@
-import { describe, it, expect, mock } from "bun:test";
+import { describe, expect, it, mock } from "bun:test";
 
 const mockSchedulerData = {
   entries: [
-    { id: "s1", name: "Hourly Dream", cron: "0 * * * *", action: "dream", repo: "vigil", nextRun: "2026-04-15T11:00:00Z", msToNext: 1800000, nextRunRelative: "in 30m" },
-    { id: "s2", name: "Daily Summary", cron: "0 9 * * *", action: "summary", repo: undefined, nextRun: "2026-04-16T09:00:00Z", msToNext: 43200000, nextRunRelative: "in 12h" },
-    { id: "s3", name: "Overdue Job", cron: "*/5 * * * *", action: "check", repo: "my-app", nextRun: null, msToNext: 0, nextRunRelative: "now" },
+    {
+      id: "s1",
+      name: "Hourly Dream",
+      cron: "0 * * * *",
+      action: "dream",
+      repo: "vigil",
+      nextRun: "2026-04-15T11:00:00Z",
+      msToNext: 1800000,
+      nextRunRelative: "in 30m",
+    },
+    {
+      id: "s2",
+      name: "Daily Summary",
+      cron: "0 9 * * *",
+      action: "summary",
+      repo: undefined,
+      nextRun: "2026-04-16T09:00:00Z",
+      msToNext: 43200000,
+      nextRunRelative: "in 12h",
+    },
+    {
+      id: "s3",
+      name: "Overdue Job",
+      cron: "*/5 * * * *",
+      action: "check",
+      repo: "my-app",
+      nextRun: null,
+      msToNext: 0,
+      nextRunRelative: "now",
+    },
   ],
   history: [
     { startedAt: Date.now() - 3600000, scheduleName: "Hourly Dream", status: "ok" as const, duration: 5200 },
-    { startedAt: Date.now() - 86400000, scheduleName: "Daily Summary", status: "fail" as const, duration: 120000, error: "Timeout" },
+    {
+      startedAt: Date.now() - 86400000,
+      scheduleName: "Daily Summary",
+      status: "fail" as const,
+      duration: 120000,
+      error: "Timeout",
+    },
   ],
 };
 
