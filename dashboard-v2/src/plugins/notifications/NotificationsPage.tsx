@@ -1,14 +1,19 @@
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Bell, Send, Settings } from "lucide-react";
+import { Bell, Send, Settings, Moon } from "lucide-react";
 import { vigilKeys } from "../../lib/query-keys";
 import {
   getNotifications,
   testNotification,
   updateNotificationRules,
 } from "../../server/functions";
-import { Card, CardContent } from "../../components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import { Label } from "../../components/ui/label";
+import { Switch } from "../../components/ui/switch";
+import { toast } from "sonner";
 import type { WidgetProps } from "../../types/plugin";
 
 interface NotificationEntry {
@@ -26,6 +31,7 @@ interface NotificationConfig {
   rateLimit: number;
   rateLimitWindow: number;
   channels: string[];
+  quietHours?: { start: string; end: string };
 }
 
 interface NotificationsData {
@@ -39,6 +45,19 @@ const SEVERITY_COLORS: Record<string, string> = {
   error: "text-red-400",
   critical: "text-red-500",
 };
+
+function isWithinQuietHours(start: string, end: string): boolean {
+  const now = new Date();
+  const hh = now.getHours().toString().padStart(2, "0");
+  const mm = now.getMinutes().toString().padStart(2, "0");
+  const current = `${hh}:${mm}`;
+
+  if (start <= end) {
+    return current >= start && current < end;
+  }
+  // Wraps midnight (e.g., 22:00 - 07:00)
+  return current >= start || current < end;
+}
 
 export default function NotificationsPage({
   activeRepo,
@@ -59,6 +78,25 @@ export default function NotificationsPage({
   const config = data?.config;
   const history = data?.history ?? [];
 
+  // Quiet hours local state
+  const [quietEnabled, setQuietEnabled] = useState(false);
+  const [quietStart, setQuietStart] = useState("22:00");
+  const [quietEnd, setQuietEnd] = useState("07:00");
+
+  // Sync from server data
+  const quietHoursStart = config?.quietHours?.start;
+  const quietHoursEnd = config?.quietHours?.end;
+
+  useEffect(() => {
+    if (quietHoursStart && quietHoursEnd) {
+      setQuietEnabled(true);
+      setQuietStart(quietHoursStart);
+      setQuietEnd(quietHoursEnd);
+    } else {
+      setQuietEnabled(false);
+    }
+  }, [quietHoursStart, quietHoursEnd]);
+
   const testMut = useMutation({
     mutationFn: () => testNotification(),
     onSuccess: () =>
@@ -68,9 +106,25 @@ export default function NotificationsPage({
   const updateRulesMut = useMutation({
     mutationFn: (rules: Partial<NotificationConfig>) =>
       updateNotificationRules({ data: rules }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: vigilKeys.notifications }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: vigilKeys.notifications });
+      toast.success("Quiet hours updated");
+    },
+    onError: (err: Error) => {
+      toast.error(`Failed to update: ${err.message}`);
+    },
   });
+
+  const handleSaveQuietHours = () => {
+    if (quietEnabled) {
+      updateRulesMut.mutate({ quietHours: { start: quietStart, end: quietEnd } });
+    } else {
+      toast.success("Quiet hours disabled");
+      return;
+    }
+  };
+
+  const quietActive = quietEnabled && isWithinQuietHours(quietStart, quietEnd);
 
   return (
     <div className="space-y-6">
@@ -146,6 +200,70 @@ export default function NotificationsPage({
           </Card>
         </div>
       )}
+
+      {/* Quiet Hours Section */}
+      <div className="space-y-3">
+        <h4 className="text-xs font-medium text-muted-foreground uppercase">
+          Quiet Hours
+        </h4>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between text-sm">
+              <div className="flex items-center gap-2">
+                <Moon className="size-4" />
+                Quiet Hours
+                {quietActive && (
+                  <Badge variant="secondary" className="text-[10px] text-amber-400">
+                    active now
+                  </Badge>
+                )}
+              </div>
+              <Switch
+                checked={quietEnabled}
+                onCheckedChange={setQuietEnabled}
+              />
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="quiet-start">Start</Label>
+                <Input
+                  id="quiet-start"
+                  type="time"
+                  value={quietStart}
+                  onChange={(e) => setQuietStart(e.target.value)}
+                  disabled={!quietEnabled}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="quiet-end">End</Label>
+                <Input
+                  id="quiet-end"
+                  type="time"
+                  value={quietEnd}
+                  onChange={(e) => setQuietEnd(e.target.value)}
+                  disabled={!quietEnabled}
+                />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center justify-between">
+              <div className="text-xs text-muted-foreground">
+                {quietEnabled
+                  ? `Notifications silenced ${quietStart} - ${quietEnd}`
+                  : "Quiet hours disabled"}
+              </div>
+              <Button
+                size="sm"
+                onClick={handleSaveQuietHours}
+                disabled={updateRulesMut.isPending}
+              >
+                {updateRulesMut.isPending ? "Saving..." : "Save"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Test Notification */}
       <div className="flex items-center gap-3">
