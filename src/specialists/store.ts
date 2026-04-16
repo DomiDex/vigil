@@ -2,6 +2,65 @@ import { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { getDataDir } from "../core/config.ts";
 
+// --- Row types (match SQLite column names) ---
+
+export interface FindingRow {
+  id: string;
+  specialist: string;
+  severity: string;
+  title: string;
+  detail: string;
+  file: string | null;
+  line: number | null;
+  suggestion: string | null;
+  repo: string;
+  confidence: number;
+  commit_hash: string | null;
+  dismissed: number;
+  dismissed_at: number | null;
+  ignore_pattern: string | null;
+  source_action_id: string | null;
+  created_at: number;
+}
+
+export interface ConfigRow {
+  name: string;
+  class: string;
+  description: string;
+  trigger_events: string;
+  watch_patterns: string;
+  enabled: number;
+  is_builtin: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface TestRunRow {
+  id: string;
+  repo: string;
+  commit_hash: string;
+  branch: string;
+  test_name: string;
+  test_file: string;
+  passed: number;
+  created_at: number;
+}
+
+export interface FlakinessRow {
+  repo: string;
+  test_name: string;
+  test_file: string;
+  total_runs: number;
+  total_passes: number;
+  total_failures: number;
+  flaky_commits: number;
+  last_seen_commit: string | null;
+  last_seen_passed: number | null;
+  updated_at: number;
+}
+
+// --- Input types ---
+
 interface StoreFindingInput {
   id: string;
   specialist: string;
@@ -43,6 +102,13 @@ interface StoreTestRunInput {
   testName: string;
   testFile: string;
   passed: boolean;
+}
+
+export interface SpecialistStats {
+  total: number;
+  bySeverity: { severity: string; count: number }[];
+  avgConfidence: number;
+  lastWeek: number;
 }
 
 export class SpecialistStore {
@@ -120,29 +186,28 @@ export class SpecialistStore {
   }
 
   storeFinding(input: StoreFindingInput): void {
-    this.db.run(
+    this.db.query(
       `INSERT OR REPLACE INTO specialist_findings
        (id, specialist, severity, title, detail, file, line, suggestion, repo, confidence, commit_hash, source_action_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        input.id,
-        input.specialist,
-        input.severity,
-        input.title,
-        input.detail,
-        input.file ?? null,
-        input.line ?? null,
-        input.suggestion ?? null,
-        input.repo,
-        input.confidence,
-        input.commitHash ?? null,
-        input.sourceActionId ?? null,
-        Date.now(),
-      ]
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)`
+    ).run(
+      input.id,
+      input.specialist,
+      input.severity,
+      input.title,
+      input.detail,
+      input.file ?? null,
+      input.line ?? null,
+      input.suggestion ?? null,
+      input.repo,
+      input.confidence,
+      input.commitHash ?? null,
+      input.sourceActionId ?? null,
+      Date.now(),
     );
   }
 
-  getFindings(opts?: GetFindingsOptions): { findings: Record<string, unknown>[]; total: number } {
+  getFindings(opts?: GetFindingsOptions): { findings: FindingRow[]; total: number } {
     const conditions: string[] = [];
     const params: (string | number | null)[] = [];
 
@@ -167,26 +232,25 @@ export class SpecialistStore {
     const offset = opts?.offset ?? 0;
 
     const countRow = this.db.query(`SELECT COUNT(*) as count FROM specialist_findings ${where}`).get(...params) as { count: number };
-    const findings = this.db.query(`SELECT * FROM specialist_findings ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).all(...params, limit, offset);
+    const findings = this.db.query(`SELECT * FROM specialist_findings ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).all(...params, limit, offset) as FindingRow[];
 
-    return { findings: findings as Record<string, unknown>[], total: countRow.count };
+    return { findings, total: countRow.count };
   }
 
-  getFindingById(id: string): Record<string, unknown> | null {
-    return this.db.query("SELECT * FROM specialist_findings WHERE id = ?").get(id) as Record<string, unknown> | null;
+  getFindingById(id: string): FindingRow | null {
+    return this.db.query("SELECT * FROM specialist_findings WHERE id = ?").get(id) as FindingRow | null;
   }
 
-  getRecentFindings(repo: string, specialist: string, limit = 10): Record<string, unknown>[] {
+  getRecentFindings(repo: string, specialist: string, limit = 10): FindingRow[] {
     return this.db.query(
       "SELECT * FROM specialist_findings WHERE repo = ? AND specialist = ? AND dismissed = 0 ORDER BY created_at DESC LIMIT ?"
-    ).all(repo, specialist, limit) as Record<string, unknown>[];
+    ).all(repo, specialist, limit) as FindingRow[];
   }
 
   dismissFinding(id: string, ignorePattern?: string): void {
-    this.db.run(
-      "UPDATE specialist_findings SET dismissed = 1, dismissed_at = ?, ignore_pattern = ? WHERE id = ?",
-      [Date.now(), ignorePattern ?? null, id]
-    );
+    this.db.query(
+      "UPDATE specialist_findings SET dismissed = 1, dismissed_at = ?1, ignore_pattern = ?2 WHERE id = ?3"
+    ).run(Date.now(), ignorePattern ?? null, id);
   }
 
   getIgnorePatterns(specialist: string): string[] {
@@ -196,47 +260,46 @@ export class SpecialistStore {
     return rows.map((r) => r.ignore_pattern);
   }
 
-  getSpecialistConfigs(): Record<string, unknown>[] {
-    return this.db.query("SELECT * FROM specialist_configs ORDER BY name").all() as Record<string, unknown>[];
+  getSpecialistConfigs(): ConfigRow[] {
+    return this.db.query("SELECT * FROM specialist_configs ORDER BY name").all() as ConfigRow[];
   }
 
-  getSpecialistConfig(name: string): Record<string, unknown> | null {
-    return this.db.query("SELECT * FROM specialist_configs WHERE name = ?").get(name) as Record<string, unknown> | null;
+  getSpecialistConfig(name: string): ConfigRow | null {
+    return this.db.query("SELECT * FROM specialist_configs WHERE name = ?").get(name) as ConfigRow | null;
   }
 
   upsertSpecialistConfig(input: UpsertConfigInput): void {
     const now = Date.now();
-    this.db.run(
+    this.db.query(
       `INSERT INTO specialist_configs (name, class, description, trigger_events, watch_patterns, is_builtin, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
        ON CONFLICT(name) DO UPDATE SET
          class = excluded.class,
          description = excluded.description,
          trigger_events = excluded.trigger_events,
          watch_patterns = excluded.watch_patterns,
-         updated_at = excluded.updated_at`,
-      [
-        input.name,
-        input.class,
-        input.description,
-        JSON.stringify(input.triggerEvents),
-        JSON.stringify(input.watchPatterns ?? []),
-        input.isBuiltin ? 1 : 0,
-        now,
-        now,
-      ]
+         updated_at = excluded.updated_at`
+    ).run(
+      input.name,
+      input.class,
+      input.description,
+      JSON.stringify(input.triggerEvents),
+      JSON.stringify(input.watchPatterns ?? []),
+      input.isBuiltin ? 1 : 0,
+      now,
+      now,
     );
   }
 
   deleteSpecialistConfig(name: string): void {
-    this.db.run("DELETE FROM specialist_configs WHERE name = ? AND is_builtin = 0", [name]);
+    this.db.query("DELETE FROM specialist_configs WHERE name = ? AND is_builtin = 0").run(name);
   }
 
   toggleSpecialist(name: string, enabled: boolean): void {
-    this.db.run("UPDATE specialist_configs SET enabled = ?, updated_at = ? WHERE name = ?", [enabled ? 1 : 0, Date.now(), name]);
+    this.db.query("UPDATE specialist_configs SET enabled = ?1, updated_at = ?2 WHERE name = ?3").run(enabled ? 1 : 0, Date.now(), name);
   }
 
-  getSpecialistStats(name: string): Record<string, unknown> {
+  getSpecialistStats(name: string): SpecialistStats {
     const total = this.db.query("SELECT COUNT(*) as count FROM specialist_findings WHERE specialist = ?").get(name) as { count: number };
     const bySeverity = this.db.query(
       "SELECT severity, COUNT(*) as count FROM specialist_findings WHERE specialist = ? GROUP BY severity"
@@ -258,24 +321,22 @@ export class SpecialistStore {
   }
 
   storeTestRun(input: StoreTestRunInput): void {
-    this.db.run(
+    this.db.query(
       `INSERT INTO test_runs (id, repo, commit_hash, branch, test_name, test_file, passed, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [input.id, input.repo, input.commitHash, input.branch, input.testName, input.testFile, input.passed ? 1 : 0, Date.now()]
-    );
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`
+    ).run(input.id, input.repo, input.commitHash, input.branch, input.testName, input.testFile, input.passed ? 1 : 0, Date.now());
   }
 
   updateFlakiness(repo: string, testName: string, testFile: string, passed: boolean, commitHash: string): void {
     const existing = this.db.query(
       "SELECT * FROM test_flakiness WHERE repo = ? AND test_name = ?"
-    ).get(repo, testName) as Record<string, unknown> | null;
+    ).get(repo, testName) as FlakinessRow | null;
 
     if (!existing) {
-      this.db.run(
+      this.db.query(
         `INSERT INTO test_flakiness (repo, test_name, test_file, total_runs, total_passes, total_failures, flaky_commits, last_seen_commit, last_seen_passed, updated_at)
-         VALUES (?, ?, ?, 1, ?, ?, 0, ?, ?, ?)`,
-        [repo, testName, testFile, passed ? 1 : 0, passed ? 0 : 1, commitHash, passed ? 1 : 0, Date.now()]
-      );
+         VALUES (?1, ?2, ?3, 1, ?4, ?5, 0, ?6, ?7, ?8)`
+      ).run(repo, testName, testFile, passed ? 1 : 0, passed ? 0 : 1, commitHash, passed ? 1 : 0, Date.now());
       return;
     }
 
@@ -284,53 +345,51 @@ export class SpecialistStore {
     const differentResult = sameCommit && (existing.last_seen_passed === 1) !== passed;
     const flakyIncrement = differentResult ? 1 : 0;
 
-    this.db.run(
+    this.db.query(
       `UPDATE test_flakiness SET
          total_runs = total_runs + 1,
-         total_passes = total_passes + ?,
-         total_failures = total_failures + ?,
-         flaky_commits = flaky_commits + ?,
-         last_seen_commit = ?,
-         last_seen_passed = ?,
-         updated_at = ?
-       WHERE repo = ? AND test_name = ?`,
-      [
-        passed ? 1 : 0,
-        passed ? 0 : 1,
-        flakyIncrement,
-        commitHash,
-        passed ? 1 : 0,
-        Date.now(),
-        repo,
-        testName,
-      ]
+         total_passes = total_passes + ?1,
+         total_failures = total_failures + ?2,
+         flaky_commits = flaky_commits + ?3,
+         last_seen_commit = ?4,
+         last_seen_passed = ?5,
+         updated_at = ?6
+       WHERE repo = ?7 AND test_name = ?8`
+    ).run(
+      passed ? 1 : 0,
+      passed ? 0 : 1,
+      flakyIncrement,
+      commitHash,
+      passed ? 1 : 0,
+      Date.now(),
+      repo,
+      testName,
     );
   }
 
-  getFlakyTests(repo?: string): Record<string, unknown>[] {
+  getFlakyTests(repo?: string): FlakinessRow[] {
     if (repo) {
       return this.db.query(
         "SELECT * FROM test_flakiness WHERE repo = ? AND flaky_commits > 0 ORDER BY flaky_commits DESC"
-      ).all(repo) as Record<string, unknown>[];
+      ).all(repo) as FlakinessRow[];
     }
     return this.db.query(
       "SELECT * FROM test_flakiness WHERE flaky_commits > 0 ORDER BY flaky_commits DESC"
-    ).all() as Record<string, unknown>[];
+    ).all() as FlakinessRow[];
   }
 
   resetFlakyTest(repo: string, testName: string): void {
-    this.db.run("DELETE FROM test_flakiness WHERE repo = ? AND test_name = ?", [repo, testName]);
+    this.db.query("DELETE FROM test_flakiness WHERE repo = ? AND test_name = ?").run(repo, testName);
   }
 
   pruneTestHistory(maxPerTest: number): void {
     const tests = this.db.query("SELECT DISTINCT repo, test_name FROM test_runs").all() as { repo: string; test_name: string }[];
     for (const t of tests) {
-      this.db.run(
+      this.db.query(
         `DELETE FROM test_runs WHERE id IN (
-           SELECT id FROM test_runs WHERE repo = ? AND test_name = ? ORDER BY created_at DESC LIMIT -1 OFFSET ?
-         )`,
-        [t.repo, t.test_name, maxPerTest]
-      );
+           SELECT id FROM test_runs WHERE repo = ?1 AND test_name = ?2 ORDER BY created_at DESC LIMIT -1 OFFSET ?3
+         )`
+      ).run(t.repo, t.test_name, maxPerTest);
     }
   }
 
