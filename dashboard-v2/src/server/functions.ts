@@ -31,6 +31,22 @@ export async function getRepoDetail({ data }: { data: { name: string } }) {
   return api(`/api/repos/${encodeURIComponent(data.name)}`);
 }
 
+export async function getRepoDiff({ data }: { data: { name: string } }) {
+  return api(`/api/repos/${encodeURIComponent(data.name)}/diff`);
+}
+
+export async function addRepo({ data }: { data: { path: string } }) {
+  return api("/api/repos", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function removeRepo({ data }: { data: { name: string } }) {
+  return apiMutate(`/api/repos/${encodeURIComponent(data.name)}`, { method: "DELETE" });
+}
+
 export async function getTimeline({
   data,
 }: {

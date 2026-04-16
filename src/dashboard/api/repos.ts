@@ -1,4 +1,5 @@
-import { resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { gitExec } from "../../git/exec.ts";
 import { TopicTier } from "../../memory/topic-tier.ts";
 import type { DashboardContext } from "../types.ts";
@@ -209,4 +210,50 @@ export async function getRepoDetailJSON(ctx: DashboardContext, repoName: string)
     patterns: profile?.patterns ?? [],
     topics,
   };
+}
+
+// ── API: POST /api/repos ────────────────────────
+
+export async function addRepoJSON(
+  ctx: DashboardContext,
+  path: string,
+): Promise<{ success: boolean; error?: string }> {
+  const absPath = resolve(path);
+
+  if (!existsSync(absPath)) {
+    return { success: false, error: `Path does not exist: ${absPath}` };
+  }
+
+  if (!existsSync(join(absPath, ".git"))) {
+    return { success: false, error: `Not a git repository: ${absPath}` };
+  }
+
+  // Check if already watching
+  if (ctx.daemon.repoPaths.some((p) => resolve(p) === absPath)) {
+    return { success: false, error: `Already watching: ${absPath}` };
+  }
+
+  try {
+    await ctx.daemon.gitWatcher.addRepo(absPath);
+    ctx.daemon.repoPaths.push(absPath);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: `Failed to add repo: ${(err as Error).message}` };
+  }
+}
+
+// ── API: DELETE /api/repos/:name ────────────────
+
+export function removeRepoJSON(
+  ctx: DashboardContext,
+  repoName: string,
+): { success: boolean; error?: string } {
+  const repoPath = ctx.daemon.repoPaths.find((p) => repoNameFromPath(p) === repoName);
+  if (!repoPath) {
+    return { success: false, error: `Repo not found: ${repoName}` };
+  }
+
+  ctx.daemon.gitWatcher.removeRepo(repoName);
+  ctx.daemon.repoPaths = ctx.daemon.repoPaths.filter((p) => repoNameFromPath(p) !== repoName);
+  return { success: true };
 }

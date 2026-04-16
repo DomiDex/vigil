@@ -282,6 +282,18 @@ export class GitWatcher {
     ].join("\n");
   }
 
+  removeRepo(repoName: string): void {
+    for (const [path, state] of this.repos) {
+      if (state.name === repoName) {
+        this.repos.delete(path);
+        // Note: FSWatcher instances don't expose their watched path,
+        // so we can't selectively close them here. Events from the old
+        // watcher are harmlessly ignored since the repo is no longer in the map.
+        return;
+      }
+    }
+  }
+
   getRepos(): Map<string, RepoState> {
     return this.repos;
   }
