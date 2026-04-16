@@ -12,6 +12,27 @@ export interface ActionGateConfig {
   autoApprove: boolean;
 }
 
+export interface SpecialistGlobalConfig {
+  enabled: boolean;
+  agents: string[];
+  maxParallel: number;
+  cooldownSeconds: number;
+  severityThreshold: "info" | "warning" | "critical";
+  flakyTest: {
+    testCommand: string;
+    runOnCommit: boolean;
+    minRunsToJudge: number;
+    flakyThreshold: number;
+    maxTestHistory: number;
+  };
+  autoAction: {
+    enabled: boolean;
+    minSeverity: "critical" | "warning" | "info";
+    minConfidence: number;
+    tierCap: "safe" | "moderate" | "dangerous";
+  };
+}
+
 export const DEFAULT_GATE_CONFIG: ActionGateConfig = {
   enabled: false,
   allowedRepos: [],
@@ -65,6 +86,8 @@ export interface VigilConfig {
     /** Bypass allowlist for dev channels */
     devMode: boolean;
   };
+  /** Specialist agents config */
+  specialists: SpecialistGlobalConfig;
 }
 
 const DEFAULT_CONFIG: VigilConfig = {
@@ -100,6 +123,26 @@ const DEFAULT_CONFIG: VigilConfig = {
     sessionChannels: [],
     allowlist: [],
     devMode: false,
+  },
+  specialists: {
+    enabled: true,
+    agents: ["code-review", "security", "test-drift", "flaky-test"],
+    maxParallel: 2,
+    cooldownSeconds: 300,
+    severityThreshold: "info",
+    flakyTest: {
+      testCommand: "bun test",
+      runOnCommit: true,
+      minRunsToJudge: 3,
+      flakyThreshold: 0.5,
+      maxTestHistory: 100,
+    },
+    autoAction: {
+      enabled: false,
+      minSeverity: "critical",
+      minConfidence: 0.8,
+      tierCap: "safe",
+    },
   },
 };
 
