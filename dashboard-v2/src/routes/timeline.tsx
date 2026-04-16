@@ -1,8 +1,8 @@
 import { createFileRoute, lazyRouteComponent } from "@tanstack/react-router";
 
-export const Route = createFileRoute("/")({
+export const Route = createFileRoute("/timeline")({
   component: lazyRouteComponent(
-    () => import("../plugins/overview/OverviewPage"),
+    () => import("../plugins/timeline/TimelinePage"),
     "default",
   ),
 });

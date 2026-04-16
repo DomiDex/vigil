@@ -2,6 +2,16 @@ import type { PluginWidget } from "../types/plugin";
 
 export const corePlugins: PluginWidget[] = [
   {
+    id: "overview",
+    label: "Overview",
+    icon: "LayoutDashboard",
+    slot: "tab",
+    order: -1,
+    component: () => import("./overview/OverviewPage"),
+    sseEvents: ["tick", "message", "action_pending"],
+    queryKeys: [["overview"]],
+  },
+  {
     id: "timeline",
     label: "Timeline",
     icon: "Activity",
