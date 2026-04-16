@@ -15,6 +15,7 @@ export const corePlugins: PluginWidget[] = [
     id: "timeline",
     label: "Timeline",
     icon: "Activity",
+    path: "/timeline",
     slot: "tab",
     order: 0,
     component: () => import("./timeline/TimelinePage"),

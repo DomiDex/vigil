@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import {
   GitBranch,
   Zap,
@@ -17,7 +17,7 @@ import { ActionApproval } from "../../components/vigil/action-approval";
 import { vigilKeys } from "../../lib/query-keys";
 import {
   getOverview,
-  getTasks,
+  getTimeline,
   getActionsPending,
   getHealth,
   getMetrics,
@@ -30,7 +30,7 @@ import type {
   OverviewData,
   ActionsPendingData,
   MetricsData,
-  TimelineMessage,
+  TimelineData,
 } from "../../types/api";
 
 function StatCard({
@@ -39,28 +39,42 @@ function StatCard({
   value,
   trend,
   href,
+  isLoading,
 }: {
   icon: LucideIcon;
   title: string;
   value: string | number;
   trend?: string;
   href: string;
+  isLoading?: boolean;
 }) {
-  const navigate = useNavigate();
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="flex items-center gap-3 py-4">
+          <Skeleton className="size-5" />
+          <div className="space-y-1">
+            <Skeleton className="h-3 w-20" />
+            <Skeleton className="h-5 w-12" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
-    <Card
-      className="cursor-pointer transition-colors hover:border-vigil/30"
-      onClick={() => navigate({ to: href })}
-    >
-      <CardContent className="flex items-center gap-3 py-4">
-        <Icon className="size-5 text-vigil" />
-        <div>
-          <div className="text-xs text-text-muted">{title}</div>
-          <div className="text-lg font-semibold">{value}</div>
-          {trend && <div className="text-xs text-text-muted">{trend}</div>}
-        </div>
-      </CardContent>
-    </Card>
+    <Link to={href} className="block">
+      <Card className="cursor-pointer transition-colors hover:border-vigil/30">
+        <CardContent className="flex items-center gap-3 py-4">
+          <Icon className="size-5 text-vigil" />
+          <div>
+            <div className="text-xs text-text-muted">{title}</div>
+            <div className="text-lg font-semibold">{value}</div>
+            {trend && <div className="text-xs text-text-muted">{trend}</div>}
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
   );
 }
 
@@ -91,9 +105,9 @@ export default function OverviewPage(_props: Partial<WidgetProps> = {}) {
     queryKey: vigilKeys.overview,
     queryFn: getOverview,
   });
-  useQuery({
-    queryKey: vigilKeys.tasks,
-    queryFn: () => getTasks({ data: {} }),
+  const timeline = useQuery({
+    queryKey: vigilKeys.timeline({ page: 1 }),
+    queryFn: () => getTimeline({ data: { page: 1 } }),
   });
   const pending = useQuery({
     queryKey: vigilKeys.actions.pending,
@@ -112,12 +126,14 @@ export default function OverviewPage(_props: Partial<WidgetProps> = {}) {
   const pendingData = pending.data as ActionsPendingData | undefined;
   const metricsData = metrics.data as MetricsData | undefined;
   const healthData = health.data as { status?: string; uptime?: string } | undefined;
+  const timelineData = timeline.data as TimelineData | undefined;
 
   const pendingActions = pendingData?.pending ?? [];
   const repos = overviewData?.repos ?? [];
   const repoCount = overviewData?.repoCount ?? 0;
   const dreamCount = metricsData?.ticks?.total ?? 0;
   const healthStatus = healthData?.status ?? "unknown";
+  const lastEvents = timelineData?.messages?.slice(0, 5) ?? [];
 
   const approve = useMutation({
     mutationFn: (id: string) => approveAction({ data: { id } }),
@@ -137,55 +153,38 @@ export default function OverviewPage(_props: Partial<WidgetProps> = {}) {
       queryClient.invalidateQueries({ queryKey: vigilKeys.dreams }),
   });
 
-  const recentEvents = (overview.data as any)?.recentEvents as TimelineMessage[] | undefined;
-  const lastEvents = recentEvents?.slice(0, 5) ?? [];
-
   return (
     <div className="space-y-6">
-      {/* Stat Cards */}
+      {/* Stat Cards — each renders independently as its query resolves */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {overview.isLoading || pending.isLoading || health.isLoading || metrics.isLoading ? (
-          <>
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Card key={i}>
-                <CardContent className="flex items-center gap-3 py-4">
-                  <Skeleton className="size-5" />
-                  <div className="space-y-1">
-                    <Skeleton className="h-3 w-20" />
-                    <Skeleton className="h-5 w-12" />
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </>
-        ) : (
-          <>
-            <StatCard
-              icon={GitBranch}
-              title="Watched Repos"
-              value={repoCount}
-              href="/repos"
-            />
-            <StatCard
-              icon={Zap}
-              title="Pending Actions"
-              value={pendingActions.length}
-              href="/actions"
-            />
-            <StatCard
-              icon={Sparkles}
-              title="Total Dreams"
-              value={dreamCount}
-              href="/dreams"
-            />
-            <StatCard
-              icon={HeartPulse}
-              title="Health Score"
-              value={healthStatus}
-              href="/health"
-            />
-          </>
-        )}
+        <StatCard
+          icon={GitBranch}
+          title="Watched Repos"
+          value={repoCount}
+          href="/repos"
+          isLoading={overview.isLoading}
+        />
+        <StatCard
+          icon={Zap}
+          title="Pending Actions"
+          value={pendingActions.length}
+          href="/actions"
+          isLoading={pending.isLoading}
+        />
+        <StatCard
+          icon={Sparkles}
+          title="Total Dreams"
+          value={dreamCount}
+          href="/dreams"
+          isLoading={metrics.isLoading}
+        />
+        <StatCard
+          icon={HeartPulse}
+          title="Health Score"
+          value={healthStatus}
+          href="/health"
+          isLoading={health.isLoading}
+        />
       </div>
 
       {/* Bottom 2-column layout */}
@@ -198,10 +197,10 @@ export default function OverviewPage(_props: Partial<WidgetProps> = {}) {
               <CardTitle className="text-sm">Recent Activity</CardTitle>
             </CardHeader>
             <CardContent>
-              {overview.isLoading ? (
+              {timeline.isLoading ? (
                 <SectionSkeleton />
-              ) : overview.isError ? (
-                <SectionError message={overview.error?.message ?? "Unknown error"} />
+              ) : timeline.isError ? (
+                <SectionError message={timeline.error?.message ?? "Unknown error"} />
               ) : lastEvents.length > 0 ? (
                 <div className="space-y-3">
                   {lastEvents.map((event) => (
@@ -341,7 +340,7 @@ export default function OverviewPage(_props: Partial<WidgetProps> = {}) {
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-text-muted">Uptime</span>
-                    <span>{metricsData?.state?.uptime ?? "—"}</span>
+                    <span>{metricsData?.state?.uptime ?? "\u2014"}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-text-muted">Total Ticks</span>
@@ -349,7 +348,7 @@ export default function OverviewPage(_props: Partial<WidgetProps> = {}) {
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-text-muted">Avg Latency</span>
-                    <span>{metricsData?.latency?.avg ? `${Math.round(metricsData.latency.avg)}ms` : "—"}</span>
+                    <span>{metricsData?.latency?.avg ? `${Math.round(metricsData.latency.avg)}ms` : "\u2014"}</span>
                   </div>
                   <Button
                     variant="secondary"
