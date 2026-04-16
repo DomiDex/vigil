@@ -1,7 +1,12 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
 import type { DashboardContext } from "../types.ts";
+
+const pruneSchema = z.object({
+  olderThanDays: z.number().int().min(1).max(365),
+});
 
 function getDbSize(path: string): number {
   try {
@@ -62,4 +67,36 @@ export function getHealthJSON(ctx: DashboardContext) {
     },
     uptimeTimeline,
   };
+}
+
+export function handleVacuum(ctx: DashboardContext) {
+  const daemon = ctx.daemon as any;
+  const db = daemon.eventLog?.db ?? daemon.memory?.eventLog?.db;
+  if (!db) return { success: false, error: "No database available", freedBytes: 0 };
+
+  const pageSizeBefore = (db.query("PRAGMA page_size").get() as any).page_size;
+  const pageCountBefore = (db.query("PRAGMA page_count").get() as any).page_count;
+
+  db.exec("VACUUM");
+
+  const pageCountAfter = (db.query("PRAGMA page_count").get() as any).page_count;
+  const freedBytes = (pageCountBefore - pageCountAfter) * pageSizeBefore;
+
+  return { success: true, freedBytes: Math.max(0, freedBytes) };
+}
+
+export function handlePrune(ctx: DashboardContext, body: unknown) {
+  const parsed = pruneSchema.safeParse(body);
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input", deletedCount: 0 };
+  }
+
+  const daemon = ctx.daemon as any;
+  const db = daemon.eventLog?.db ?? daemon.memory?.eventLog?.db;
+  if (!db) return { success: false, error: "No database available", deletedCount: 0 };
+
+  const threshold = Date.now() - parsed.data.olderThanDays * 86_400_000;
+  const result = db.run("DELETE FROM events WHERE timestamp < ?", [threshold]);
+
+  return { success: true, deletedCount: result.changes };
 }

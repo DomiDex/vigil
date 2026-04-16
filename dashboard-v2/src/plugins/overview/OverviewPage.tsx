@@ -129,7 +129,7 @@ export default function OverviewPage(_props: Partial<WidgetProps> = {}) {
   });
   const metrics = useQuery<MetricsData>({
     queryKey: vigilKeys.metrics,
-    queryFn: getMetrics,
+    queryFn: () => getMetrics(),
     staleTime: 30_000,
   });
 

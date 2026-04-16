@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { z } from "zod";
 import { getDataDir, getLogsDir } from "../../core/config.ts";
 import { type AskContext, AskEngine } from "../../llm/ask-engine.ts";
 import { IndexTier } from "../../memory/index-tier.ts";
@@ -177,6 +178,78 @@ export async function handleAsk(
   } catch (err) {
     return { error: String(err) };
   }
+}
+
+// ── Zod schemas for memory CRUD ──
+
+const createMemorySchema = z.object({
+  content: z.string().min(1).max(5000),
+  repo: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+});
+
+const relevanceSchema = z.object({
+  relevant: z.boolean(),
+});
+
+// ── POST /api/memory ──
+
+export function handleMemoryCreate(
+  ctx: DashboardContext,
+  body: { content: string; repo?: string; tags?: string[] },
+): { id?: string; error?: string } {
+  const result = createMemorySchema.safeParse(body);
+  if (!result.success) {
+    return { error: result.error.issues.map((i) => i.message).join("; ") };
+  }
+
+  const { content, repo, tags } = result.data;
+  const id = crypto.randomUUID();
+  const repoName = repo || ctx.daemon.repoPaths[0]?.split("/").pop() || "unknown";
+
+  ctx.daemon.vectorStore.store({
+    id,
+    timestamp: Date.now(),
+    repo: repoName,
+    type: "insight",
+    content,
+    metadata: tags ? { tags } : {},
+    confidence: 0.5,
+  });
+
+  return { id };
+}
+
+// ── DELETE /api/memory/:id ──
+
+export function handleMemoryDelete(
+  ctx: DashboardContext,
+  id: string,
+): { success: boolean; error?: string } {
+  const deleted = ctx.daemon.vectorStore.delete(id);
+  if (!deleted) {
+    return { success: false, error: "Memory entry not found" };
+  }
+  return { success: true };
+}
+
+// ── PATCH /api/memory/:id ──
+
+export function handleMemoryRelevance(
+  ctx: DashboardContext,
+  id: string,
+  body: { relevant: boolean },
+): { success: boolean; error?: string } {
+  const result = relevanceSchema.safeParse(body);
+  if (!result.success) {
+    return { success: false, error: result.error.issues.map((i) => i.message).join("; ") };
+  }
+
+  const updated = ctx.daemon.vectorStore.updateRelevance(id, result.data.relevant);
+  if (!updated) {
+    return { success: false, error: "Memory entry not found" };
+  }
+  return { success: true };
 }
 
 async function getGitContext(repoPath: string): Promise<string> {
