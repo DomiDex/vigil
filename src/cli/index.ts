@@ -20,6 +20,10 @@ import { NotificationRouter } from "../notify/push.ts";
 const webhookSubMod = feature("VIGIL_WEBHOOKS")
   ? (require("../webhooks/subscriptions.ts") as typeof import("../webhooks/subscriptions.ts"))
   : null;
+
+const specialistStoreMod = feature("VIGIL_SPECIALISTS")
+  ? (require("../specialists/store.ts") as typeof import("../specialists/store.ts"))
+  : null;
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 const program = new Command();
@@ -68,14 +72,20 @@ program
   .description("View event log")
   .option("-r, --repo <name>", "Filter by repo name")
   .option("-t, --type <type>", "Filter by event type")
+  .option("-s, --specialist [name]", "Filter to specialist events (optionally by name)")
   .option("-l, --limit <n>", "Max entries to show", parseInt, 20)
   .action((opts) => {
     const eventLog = new EventLog();
-    const entries = eventLog.query({
+    let entries = eventLog.query({
       repo: opts.repo,
-      type: opts.type,
+      type: opts.specialist !== undefined ? "specialist" : opts.type,
       limit: opts.limit,
     });
+
+    if (opts.specialist && typeof opts.specialist === "string") {
+      const tag = `[${opts.specialist}]`;
+      entries = entries.filter((e) => (e.detail as string).includes(tag));
+    }
 
     if (entries.length === 0) {
       console.log(chalk.gray("\n  No log entries found.\n"));
@@ -91,6 +101,7 @@ program
       notify: "🔔",
       act: "⚡",
       user_reply: "💬",
+      specialist: "\u{1F50D}",
     };
 
     console.log(chalk.cyan("\n  Event Log\n"));
@@ -108,7 +119,109 @@ program
   .description("Ask Vigil a question about a repo")
   .argument("<question...>", "Your question")
   .option("-r, --repo <path>", "Repo path", ".")
+  .option("-s, --specialist <name>", "Force run a specialist instead of asking")
   .action(async (questionParts: string[], opts) => {
+    if (opts.specialist) {
+      if (!specialistStoreMod) {
+        console.log(chalk.red("\n  Specialists feature is not enabled.\n"));
+        return;
+      }
+
+      const { SpecialistRunner } = await import("../specialists/runner.ts");
+      const { BUILTIN_SPECIALISTS, createFlakyTestAgent } = await import("../specialists/agents/index.ts");
+
+      const config = loadConfig();
+      const store = new specialistStoreMod.SpecialistStore();
+      try {
+        const flakyAgent = createFlakyTestAgent(store, config);
+        const allSpecialists = [...BUILTIN_SPECIALISTS, flakyAgent];
+
+        const target = allSpecialists.find((s) => s.name === opts.specialist);
+        if (!target) {
+          console.log(chalk.red(`\n  Unknown specialist: ${opts.specialist}`));
+          console.log(chalk.gray(`  Available: ${allSpecialists.map((s) => s.name).join(", ")}\n`));
+          return;
+        }
+
+        const repoPath = resolve(opts.repo);
+        const repoName = repoPath.split("/").pop() || "unknown";
+
+        console.log(chalk.gray(`\n  Running ${opts.specialist} on ${repoName}...\n`));
+
+        const diffProc = Bun.spawn(["git", "diff", "HEAD~1", "--stat", "-p"], {
+          cwd: repoPath,
+          stdout: "pipe",
+          stderr: "pipe",
+        });
+        const diff = (await new Response(diffProc.stdout).text()).slice(0, 10_000);
+        await diffProc.exited;
+
+        const filesProc = Bun.spawn(["git", "diff", "HEAD~1", "--name-only"], {
+          cwd: repoPath,
+          stdout: "pipe",
+          stderr: "pipe",
+        });
+        const changedFiles = (await new Response(filesProc.stdout).text()).trim().split("\n").filter(Boolean);
+        await filesProc.exited;
+
+        const branchProc = Bun.spawn(["git", "rev-parse", "--abbrev-ref", "HEAD"], {
+          cwd: repoPath,
+          stdout: "pipe",
+          stderr: "pipe",
+        });
+        const branch = (await new Response(branchProc.stdout).text()).trim();
+        await branchProc.exited;
+
+        const recentFindings = store.getRecentFindings(repoName, opts.specialist, 10).map((row) => ({
+          id: row.id,
+          specialist: row.specialist as "code-review" | "security" | "test-drift" | "flaky-test",
+          severity: row.severity as "info" | "warning" | "critical",
+          title: row.title,
+          detail: row.detail,
+          file: row.file ?? undefined,
+          line: row.line ?? undefined,
+          suggestion: row.suggestion ?? undefined,
+        }));
+
+        const context = {
+          repoName,
+          repoPath,
+          branch,
+          diff,
+          changedFiles,
+          recentCommits: [],
+          recentFindings,
+        };
+
+        const runner = new SpecialistRunner(config);
+        const result = await runner.run(target, context);
+
+        if (result.skippedReason) {
+          console.log(chalk.gray(`  Skipped: ${result.skippedReason}\n`));
+        } else if (result.findings.length === 0) {
+          console.log(chalk.green(`  No findings. Confidence: ${(result.confidence * 100).toFixed(0)}%\n`));
+        } else {
+          console.log(
+            chalk.cyan(
+              `  ${result.findings.length} finding(s) (confidence: ${(result.confidence * 100).toFixed(0)}%)\n`,
+            ),
+          );
+          for (const f of result.findings) {
+            const sevColor =
+              f.severity === "critical" ? chalk.red : f.severity === "warning" ? chalk.yellow : chalk.gray;
+            console.log(`  ${sevColor(`[${f.severity.toUpperCase()}]`)} ${chalk.white(f.title)}`);
+            console.log(chalk.gray(`    ${f.detail}`));
+            if (f.file) console.log(chalk.gray(`    File: ${f.file}${f.line ? `:${f.line}` : ""}`));
+            if (f.suggestion) console.log(chalk.cyan(`    Suggestion: ${f.suggestion}`));
+            console.log();
+          }
+        }
+      } finally {
+        store.close();
+      }
+      return;
+    }
+
     const question = questionParts.join(" ");
     const config = loadConfig();
     const engine = new DecisionEngine(config);
@@ -522,5 +635,86 @@ function resolveFeatureName(input: string): FeatureName | null {
 
   return null;
 }
+
+// ── flaky ──
+program
+  .command("flaky")
+  .description("Show flaky tests across watched repos")
+  .argument("[repo]", "Filter by repo name")
+  .option("--reset <test-name>", "Clear flakiness history for a test")
+  .option("--run", "Force a test run now (requires daemon running)")
+  .action((repo: string | undefined, opts: { reset?: string; run?: boolean }) => {
+    if (!specialistStoreMod) {
+      console.log(chalk.red("\n  Specialists feature is not enabled.\n"));
+      return;
+    }
+
+    const store = new specialistStoreMod.SpecialistStore();
+
+    try {
+      if (opts.reset) {
+        const repoName = repo || "";
+        if (!repoName) {
+          console.log(
+            chalk.red("\n  Repo name required with --reset. Usage: vigil flaky <repo> --reset <test-name>\n"),
+          );
+          return;
+        }
+        const existed = store.getTrackedTests(repoName).some((t) => t.test_name === opts.reset);
+        store.resetFlakyTest(repoName, opts.reset);
+        if (existed) {
+          console.log(chalk.green(`\n  Reset flakiness history for: ${opts.reset}\n`));
+        } else {
+          console.log(chalk.gray(`\n  No flakiness data found for: ${opts.reset}\n`));
+        }
+        return;
+      }
+
+      const tests = store.getFlakyTests(repo);
+      if (tests.length === 0) {
+        console.log(chalk.gray("\n  No test data recorded yet. Run the daemon to collect test results.\n"));
+        return;
+      }
+
+      console.log(chalk.cyan("\n  Flaky Test Report\n"));
+      console.log(
+        `${
+          chalk.gray("  ") + "Test Name".padEnd(50) + "Pass Rate".padEnd(12) + "Runs".padEnd(8) + "Flaky".padEnd(8)
+        }Status`,
+      );
+      console.log(chalk.gray(`  ${"\u2500".repeat(88)}`));
+
+      for (const t of tests) {
+        const rate = t.total_runs > 0 ? `${((t.total_passes / t.total_runs) * 100).toFixed(0)}%` : "N/A";
+
+        let status: string;
+        let statusColor: typeof chalk.red;
+        if (t.flaky_commits > 0) {
+          status = "FLAKY (definitive)";
+          statusColor = chalk.red;
+        } else if (t.total_runs > 0 && t.total_passes / t.total_runs < 0.5) {
+          status = "FLAKY (statistical)";
+          statusColor = chalk.yellow;
+        } else {
+          status = "STABLE";
+          statusColor = chalk.green;
+        }
+
+        const name = t.test_name.length > 48 ? `${t.test_name.slice(0, 45)}...` : t.test_name;
+        console.log(
+          `  ${chalk.white(name.padEnd(50))}${chalk.cyan(rate.padEnd(12))}${chalk.gray(
+            String(t.total_runs).padEnd(8),
+          )}${chalk.gray(String(t.flaky_commits).padEnd(8))}${statusColor(status)}`,
+        );
+      }
+
+      const flakyCount = tests.filter(
+        (t) => t.flaky_commits > 0 || (t.total_runs > 0 && t.total_passes / t.total_runs < 0.5),
+      ).length;
+      console.log(chalk.gray(`\n  ${tests.length} test(s) tracked, ${flakyCount} flaky\n`));
+    } finally {
+      store.close();
+    }
+  });
 
 program.parse();
