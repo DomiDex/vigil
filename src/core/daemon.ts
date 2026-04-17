@@ -53,12 +53,29 @@ const ntfyMod = feature("VIGIL_PUSH")
   ? (require("../messaging/backends/ntfy.ts") as typeof import("../messaging/backends/ntfy.ts"))
   : null;
 
+const specialistsMod = feature("VIGIL_SPECIALISTS")
+  ? (require("../specialists/router.ts") as typeof import("../specialists/router.ts"))
+  : null;
+const specialistRunnerMod = feature("VIGIL_SPECIALISTS")
+  ? (require("../specialists/runner.ts") as typeof import("../specialists/runner.ts"))
+  : null;
+const specialistAgentsMod = feature("VIGIL_SPECIALISTS")
+  ? (require("../specialists/agents/index.ts") as typeof import("../specialists/agents/index.ts"))
+  : null;
+const specialistStoreMod = feature("VIGIL_SPECIALISTS")
+  ? (require("../specialists/store.ts") as typeof import("../specialists/store.ts"))
+  : null;
+
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 // Type-only imports for class fields (zero-cost, erased at compile time)
 import type { ChannelHandler } from "../channels/handler.ts";
 import type { ChannelPermissionManager } from "../channels/permissions.ts";
 import { startDashboard } from "../dashboard/server.ts";
+import type { SpecialistRouter } from "../specialists/router.ts";
+import type { SpecialistRunner } from "../specialists/runner.ts";
+import type { SpecialistStore } from "../specialists/store.ts";
+import type { SpecialistContext } from "../specialists/types.ts";
 import type { WebhookProcessor } from "../webhooks/processor.ts";
 import type { WebhookEvent, WebhookServer } from "../webhooks/server.ts";
 import type { SubscriptionManager } from "../webhooks/subscriptions.ts";
@@ -132,6 +149,9 @@ export class Daemon {
   scheduler!: Scheduler;
   taskManager!: TaskManager;
   private dashboardServer: Awaited<ReturnType<typeof startDashboard>> | null = null;
+  private specialistRouter: SpecialistRouter | null = null;
+  private specialistRunner: SpecialistRunner | null = null;
+  specialistStore: SpecialistStore | null = null;
   /** CLI overrides that must survive config hot-reloads */
   private cliOverrides: { tickInterval?: number; model?: string } = {};
 
@@ -261,6 +281,32 @@ export class Daemon {
           devMode: this.config.channels?.devMode ?? false,
         }));
     }
+
+    // Specialist agents (SA Phase 3) — gated by build-time + runtime flag
+    if (
+      specialistsMod &&
+      specialistRunnerMod &&
+      specialistAgentsMod &&
+      specialistStoreMod &&
+      this.config.specialists?.enabled
+    ) {
+      this.specialistStore = new specialistStoreMod.SpecialistStore();
+      this.specialistRouter = new specialistsMod.SpecialistRouter(this.config, specialistAgentsMod.BUILTIN_SPECIALISTS);
+      this.specialistRunner = new specialistRunnerMod.SpecialistRunner(this.config);
+
+      const enabledAgents = new Set(this.config.specialists.agents);
+      for (const agent of specialistAgentsMod.BUILTIN_SPECIALISTS) {
+        this.specialistStore.upsertSpecialistConfig({
+          name: agent.name,
+          class: agent.class,
+          description: agent.description,
+          triggerEvents: agent.triggerEvents,
+          watchPatterns: agent.watchPatterns,
+          isBuiltin: true,
+        });
+        this.specialistStore.toggleSpecialist(agent.name, enabledAgents.has(agent.name));
+      }
+    }
   }
 
   async start(): Promise<void> {
@@ -296,6 +342,11 @@ export class Daemon {
       .map(([key]) => key.replace("VIGIL_", "").toLowerCase());
     if (activeFeatures.length > 0) {
       console.log(chalk.gray(`  Features: ${activeFeatures.join(", ")}`));
+    }
+    if (this.specialistStore) {
+      const configs = this.specialistStore.getSpecialistConfigs();
+      const enabledCount = configs.filter((c) => c.enabled === 1).length;
+      console.log(chalk.gray(`  Specialists: ${enabledCount}/${configs.length} enabled`));
     }
     console.log();
 
@@ -434,6 +485,7 @@ export class Daemon {
       this.webhookServer?.stop();
       this.dashboardServer?.stop();
       this.channelHandler?.removeAllListeners();
+      this.specialistStore?.close();
       stopWatchingConfig();
       releaseLock(this.sessionId);
       this.scheduler.stopAll();
@@ -688,9 +740,153 @@ export class Daemon {
       this.recentDecisions.set(repoName, history);
     }
 
+    // — Specialist phase (post-decision, AD-1) —
+    if (this.specialistRouter && !isSleeping) {
+      for (const repoPath of this.repoPaths) {
+        const repoName = repoPath.split("/").pop() || repoPath;
+        const repoState = this.gitWatcher.getRepoState(repoPath);
+        if (!repoState) continue;
+
+        const changedFiles = await this.getSpecialistChangedFiles(repoPath);
+        if (changedFiles.length === 0) continue;
+
+        const diff = await this.getSpecialistDiff(repoPath);
+        const specialistCtx: SpecialistContext = {
+          repoName,
+          repoPath,
+          branch: repoState.currentBranch,
+          diff,
+          changedFiles,
+          recentCommits: [],
+          recentFindings: [],
+        };
+
+        try {
+          await this.runSpecialists(repoPath, repoName, "new_commit", changedFiles, specialistCtx);
+        } catch (err) {
+          console.warn(chalk.red(`  [specialists] Error for ${repoName}: ${(err as Error).message}`));
+        }
+      }
+    }
+
     // Show reply prompt after the last non-silent observation
     if (lastObservation) {
       this.userReply.showPrompt(tickNum, lastObservation.repo, lastObservation.decision, lastObservation.content);
+    }
+  }
+
+  /** Get truncated git diff for specialist context (capped at 10KB for LLM prompts) */
+  private async getSpecialistDiff(repoPath: string): Promise<string> {
+    try {
+      const proc = Bun.spawn(["git", "diff", "HEAD~1", "--stat", "-p"], {
+        cwd: repoPath,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const text = await new Response(proc.stdout).text();
+      await proc.exited;
+      return text.slice(0, 10_000);
+    } catch {
+      return "";
+    }
+  }
+
+  /** Get changed files from the last commit */
+  private async getSpecialistChangedFiles(repoPath: string): Promise<string[]> {
+    try {
+      const proc = Bun.spawn(["git", "diff", "HEAD~1", "--name-only"], {
+        cwd: repoPath,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const text = await new Response(proc.stdout).text();
+      await proc.exited;
+      return text.trim().split("\n").filter(Boolean);
+    } catch {
+      return [];
+    }
+  }
+
+  /** Run specialists for a single repo and handle results */
+  private async runSpecialists(
+    _repoPath: string,
+    repoName: string,
+    eventType: string,
+    changedFiles: string[],
+    context: SpecialistContext,
+  ): Promise<void> {
+    if (!this.specialistRouter || !this.specialistRunner || !this.specialistStore) return;
+
+    const router = this.specialistRouter;
+    const runner = this.specialistRunner;
+    const store = this.specialistStore;
+
+    const matched = router.match(eventType, changedFiles).filter((s) => !router.isOnCooldown(s.name, repoName));
+    if (matched.length === 0) return;
+
+    for (const s of matched) {
+      const recent = store.getRecentFindings(repoName, s.name, 10);
+      context.recentFindings = recent as unknown as typeof context.recentFindings;
+    }
+
+    const results = await runner.runAll(matched, context);
+    const repoState = this.gitWatcher.getRepoState(_repoPath);
+
+    for (const result of results) {
+      router.recordRun(result.specialist, repoName);
+
+      if (result.findings.length === 0) {
+        if (result.skippedReason) {
+          console.log(chalk.gray(`  [specialist:${result.specialist}] Skipped: ${result.skippedReason}`));
+        }
+        continue;
+      }
+
+      for (const finding of result.findings) {
+        store.storeFinding({
+          ...finding,
+          repo: repoName,
+          confidence: result.confidence,
+          commitHash: repoState?.lastCommitHash,
+        });
+
+        if (finding.severity === "critical") {
+          await this.notifier.send(
+            `Vigil — ${repoName} [${finding.specialist}]`,
+            `CRITICAL: ${finding.title}\n${finding.detail}`,
+            "warning",
+          );
+        }
+      }
+
+      const specialistMsg = createMessage({
+        source: {
+          repo: repoName,
+          branch: repoState?.currentBranch,
+          event: "specialist",
+        },
+        status: "normal",
+        severity: result.findings.some((f) => f.severity === "critical") ? "critical" : "info",
+        message: `[specialist:${result.specialist}] ${result.findings.length} finding(s)`,
+        metadata: {
+          specialist: result.specialist,
+          findingCount: result.findings.length,
+          findings: result.findings.map((f) => ({
+            severity: f.severity,
+            title: f.title,
+          })),
+        },
+      });
+      await this.messageRouter.route(specialistMsg);
+
+      this.eventLog.append(repoName, {
+        type: "specialist",
+        detail: `[${result.specialist}] ${result.findings.length} finding(s): ${result.findings.map((f) => f.title).join(", ")}`,
+      });
+
+      console.log(
+        chalk.yellow(`  [specialist:${result.specialist}] ${result.findings.length} finding(s) for ${repoName}`),
+      );
     }
   }
 
