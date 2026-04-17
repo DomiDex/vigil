@@ -3,7 +3,7 @@ import { join } from "node:path";
 import chalk from "chalk";
 import { ActionExecutor } from "../action/executor.ts";
 import { feature } from "../build/features.ts";
-import { type GitEvent, GitWatcher } from "../git/watcher.ts";
+import { type GitEvent, GitWatcher, type RepoState } from "../git/watcher.ts";
 import { DecisionEngine } from "../llm/decision-max.ts";
 import { CrossRepoAnalyzer } from "../memory/cross-repo.ts";
 import { EventLog, type MemoryEntry, VectorStore } from "../memory/store.ts";
@@ -74,8 +74,8 @@ import type { ChannelPermissionManager } from "../channels/permissions.ts";
 import { startDashboard } from "../dashboard/server.ts";
 import type { SpecialistRouter } from "../specialists/router.ts";
 import type { SpecialistRunner } from "../specialists/runner.ts";
-import type { SpecialistStore } from "../specialists/store.ts";
-import type { SpecialistContext } from "../specialists/types.ts";
+import type { FindingRow, SpecialistStore } from "../specialists/store.ts";
+import type { Finding, SpecialistContext } from "../specialists/types.ts";
 import type { WebhookProcessor } from "../webhooks/processor.ts";
 import type { WebhookEvent, WebhookServer } from "../webhooks/server.ts";
 import type { SubscriptionManager } from "../webhooks/subscriptions.ts";
@@ -95,6 +95,20 @@ const BANNER = `
 /** Format text for console display — preserve newlines, indent continuation lines */
 function formatTick(text: string): string {
   return text.trim().replace(/\n/g, "\n    ");
+}
+
+/** Narrow a FindingRow from the store into a Finding (null → undefined) */
+function rowToFinding(row: FindingRow): Finding {
+  return {
+    id: row.id,
+    specialist: row.specialist as Finding["specialist"],
+    severity: row.severity as Finding["severity"],
+    title: row.title,
+    detail: row.detail,
+    file: row.file ?? undefined,
+    line: row.line ?? undefined,
+    suggestion: row.suggestion ?? undefined,
+  };
 }
 
 /** Dependency injection for testability */
@@ -751,18 +765,17 @@ export class Daemon {
         if (changedFiles.length === 0) continue;
 
         const diff = await this.getSpecialistDiff(repoPath);
-        const specialistCtx: SpecialistContext = {
+        const baseCtx: Omit<SpecialistContext, "recentFindings"> = {
           repoName,
           repoPath,
           branch: repoState.currentBranch,
           diff,
           changedFiles,
           recentCommits: [],
-          recentFindings: [],
         };
 
         try {
-          await this.runSpecialists(repoPath, repoName, "new_commit", changedFiles, specialistCtx);
+          await this.runSpecialists(repoState, repoName, "new_commit", changedFiles, baseCtx);
         } catch (err) {
           console.warn(chalk.red(`  [specialists] Error for ${repoName}: ${(err as Error).message}`));
         }
@@ -791,6 +804,12 @@ export class Daemon {
     }
   }
 
+  /** Load recent findings for a specialist, mapping SQLite nulls to optional fields */
+  private loadRecentFindings(repoName: string, specialist: string): Finding[] {
+    if (!this.specialistStore) return [];
+    return this.specialistStore.getRecentFindings(repoName, specialist, 10).map(rowToFinding);
+  }
+
   /** Get changed files from the last commit */
   private async getSpecialistChangedFiles(repoPath: string): Promise<string[]> {
     try {
@@ -809,11 +828,11 @@ export class Daemon {
 
   /** Run specialists for a single repo and handle results */
   private async runSpecialists(
-    _repoPath: string,
+    repoState: RepoState,
     repoName: string,
     eventType: string,
     changedFiles: string[],
-    context: SpecialistContext,
+    baseCtx: Omit<SpecialistContext, "recentFindings">,
   ): Promise<void> {
     if (!this.specialistRouter || !this.specialistRunner || !this.specialistStore) return;
 
@@ -824,13 +843,13 @@ export class Daemon {
     const matched = router.match(eventType, changedFiles).filter((s) => !router.isOnCooldown(s.name, repoName));
     if (matched.length === 0) return;
 
-    for (const s of matched) {
-      const recent = store.getRecentFindings(repoName, s.name, 10);
-      context.recentFindings = recent as unknown as typeof context.recentFindings;
-    }
+    // Build per-specialist contexts so each specialist dedups against its own
+    // history, not whatever was assigned last into a shared object.
+    const contexts = new Map<string, SpecialistContext>(
+      matched.map((s) => [s.name, { ...baseCtx, recentFindings: this.loadRecentFindings(repoName, s.name) }]),
+    );
 
-    const results = await runner.runAll(matched, context);
-    const repoState = this.gitWatcher.getRepoState(_repoPath);
+    const results = await runner.runAll(matched, (s) => contexts.get(s.name) ?? { ...baseCtx, recentFindings: [] });
 
     for (const result of results) {
       router.recordRun(result.specialist, repoName);

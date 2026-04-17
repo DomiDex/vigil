@@ -59,14 +59,23 @@ export class SpecialistRunner {
     }
   }
 
-  /** Run multiple specialists in parallel, bounded by maxParallel */
-  async runAll(specialists: SpecialistConfig[], context: SpecialistContext): Promise<SpecialistResult[]> {
+  /**
+   * Run multiple specialists in parallel, bounded by maxParallel.
+   * `contextOrFactory` may be a single shared context or a per-specialist
+   * factory, so callers can inject specialist-specific history without
+   * mutating a shared object.
+   */
+  async runAll(
+    specialists: SpecialistConfig[],
+    contextOrFactory: SpecialistContext | ((spec: SpecialistConfig) => SpecialistContext),
+  ): Promise<SpecialistResult[]> {
+    const getContext = typeof contextOrFactory === "function" ? contextOrFactory : () => contextOrFactory;
     const maxParallel = this.config.specialists?.maxParallel ?? 2;
     const results: SpecialistResult[] = [];
 
     for (let i = 0; i < specialists.length; i += maxParallel) {
       const batch = specialists.slice(i, i + maxParallel);
-      const batchResults = await Promise.allSettled(batch.map((s) => this.run(s, context)));
+      const batchResults = await Promise.allSettled(batch.map((s) => this.run(s, getContext(s))));
       for (let j = 0; j < batchResults.length; j++) {
         const r = batchResults[j];
         if (r.status === "fulfilled") results.push(r.value);
