@@ -153,10 +153,7 @@ describe("config", () => {
   it("partial nested override preserves sibling defaults (specialists)", async () => {
     const { getConfigDir, loadConfig } = await import("../../core/config.ts");
     const dir = getConfigDir();
-    writeFileSync(
-      join(dir, "config.json"),
-      JSON.stringify({ specialists: { enabled: false } }),
-    );
+    writeFileSync(join(dir, "config.json"), JSON.stringify({ specialists: { enabled: false } }));
     const config = loadConfig();
     // User override applied
     expect(config.specialists.enabled).toBe(false);
@@ -190,10 +187,7 @@ describe("config", () => {
   it("partial nested override preserves sibling defaults (push)", async () => {
     const { getConfigDir, loadConfig } = await import("../../core/config.ts");
     const dir = getConfigDir();
-    writeFileSync(
-      join(dir, "config.json"),
-      JSON.stringify({ push: { enabled: true } }),
-    );
+    writeFileSync(join(dir, "config.json"), JSON.stringify({ push: { enabled: true } }));
     const config = loadConfig();
     expect(config.push.enabled).toBe(true);
     expect(config.push.minSeverity).toBe("warning");
@@ -204,10 +198,7 @@ describe("config", () => {
   it("array overrides replace entirely (not merged)", async () => {
     const { getConfigDir, loadConfig } = await import("../../core/config.ts");
     const dir = getConfigDir();
-    writeFileSync(
-      join(dir, "config.json"),
-      JSON.stringify({ specialists: { agents: ["code-review"] } }),
-    );
+    writeFileSync(join(dir, "config.json"), JSON.stringify({ specialists: { agents: ["code-review"] } }));
     const config = loadConfig();
     expect(config.specialists.agents).toEqual(["code-review"]);
     // Other defaults still present
