@@ -132,7 +132,22 @@ function createSpecialistContext() {
         flakyTests.splice(idx, 1);
         return true;
       }
-      return false;
+      // Default: pretend we reset it so `success: true` path stays exercised
+      // by the happy-path test. The "not found" path uses a separate fake.
+      return true;
+    },
+    getSpecialistSummaries: () => {
+      const summaries = new Map<string, { total: number; lastAt: number | null; lastRepo: string | null }>();
+      for (const f of findings.values() as Iterable<any>) {
+        const cur = summaries.get(f.specialist) ?? { total: 0, lastAt: null, lastRepo: null };
+        cur.total += 1;
+        if (cur.lastAt === null || f.created_at > cur.lastAt) {
+          cur.lastAt = f.created_at;
+          cur.lastRepo = f.repo;
+        }
+        summaries.set(f.specialist, cur);
+      }
+      return summaries;
     },
   };
 
@@ -278,10 +293,9 @@ describe("specialist CRUD lifecycle", () => {
   it("create -> list -> update -> detail -> delete", () => {
     const createResult = handleSpecialistCreate(ctx, {
       name: "test-agent",
-      class: "analytical",
+      class: "deterministic",
       description: "A test specialist",
       triggerEvents: ["new_commit"],
-      systemPrompt: "Analyze code for issues",
     });
     expect(createResult.success).toBe(true);
     expect(createResult.name).toBe("test-agent");
@@ -314,14 +328,14 @@ describe("handleSpecialistCreate", () => {
     expect(result.error).toBeDefined();
   });
 
-  it("rejects analytical specialist without systemPrompt", () => {
+  it("rejects analytical specialists (Phase 3 gap)", () => {
     const result = handleSpecialistCreate(ctx, {
-      name: "no-prompt",
+      name: "analytical-one",
       class: "analytical",
-      description: "Missing prompt",
+      description: "Would need a systemPrompt",
       triggerEvents: ["new_commit"],
     });
-    expect(result.error).toContain("systemPrompt");
+    expect(result.error).toContain("Analytical");
   });
 
   it("rejects duplicate name", () => {
@@ -332,6 +346,17 @@ describe("handleSpecialistCreate", () => {
       triggerEvents: ["new_commit"],
     });
     expect(result.error).toContain("already exists");
+  });
+
+  it("rejects fields the backend cannot yet persist", () => {
+    const result = handleSpecialistCreate(ctx, {
+      name: "with-model",
+      class: "deterministic",
+      description: "Has an unsupported model override",
+      triggerEvents: ["new_commit"],
+      model: "claude-haiku-4-5-20251001",
+    });
+    expect(result.error).toContain("model");
   });
 });
 
@@ -444,9 +469,21 @@ describe("handleFlakyTestRun", () => {
 });
 
 describe("handleFlakyTestReset", () => {
-  it("returns success", () => {
+  it("returns success on happy path (falls back to first watched repo)", () => {
     const result = handleFlakyTestReset(ctx, "some-test");
     expect(result.success).toBe(true);
+  });
+
+  it("returns error when nothing was deleted", () => {
+    (ctx.daemon as any).specialistStore.resetFlakyTest = () => false;
+    const result = handleFlakyTestReset(ctx, "missing-test");
+    expect(result.error).toContain("not found");
+  });
+
+  it("returns error when no repo query param and no watched repos", () => {
+    (ctx.daemon as any).repoPaths = [];
+    const result = handleFlakyTestReset(ctx, "some-test");
+    expect(result.error).toContain("repo");
   });
 });
 

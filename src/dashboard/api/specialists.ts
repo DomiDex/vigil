@@ -2,6 +2,12 @@ import type { DashboardContext } from "../types.ts";
 
 // ── Helpers ──
 
+// Fields the client may send in create/update that the backend can't yet
+// persist (Phase 3 gap). Reject rather than silently drop.
+const UNSUPPORTED_CONFIG_FIELDS = ["systemPrompt", "model", "cooldownSeconds", "severityThreshold"] as const;
+
+type BySeverity = { critical: number; warning: number; info: number };
+
 function parseJsonArray(raw: unknown): string[] {
   if (Array.isArray(raw)) return raw as string[];
   if (typeof raw !== "string") return [];
@@ -37,61 +43,77 @@ function rowToConfig(row: any): {
   };
 }
 
+function repoNames(ctx: DashboardContext): string[] {
+  return (ctx.daemon.repoPaths ?? [])
+    .map((p) => p.split("/").filter(Boolean).pop() ?? "")
+    .filter((n): n is string => n.length > 0);
+}
+
 function firstRepoName(ctx: DashboardContext): string | undefined {
-  const path = ctx.daemon.repoPaths?.[0];
-  if (!path) return undefined;
-  return path.split("/").filter(Boolean).pop();
+  return repoNames(ctx)[0];
 }
 
-function getCooldown(ctx: DashboardContext, name: string): number {
+/** Per-repo cooldown map. 0 = ready. */
+function cooldownsByRepo(ctx: DashboardContext, name: string): Record<string, number> {
   const router = (ctx.daemon as any).specialistRouter;
-  if (!router) return 0;
-  const repo = firstRepoName(ctx) ?? "";
-  try {
-    return router.getCooldownRemaining(name, repo) ?? 0;
-  } catch {
-    return 0;
+  if (!router) return {};
+  const out: Record<string, number> = {};
+  for (const repo of repoNames(ctx)) {
+    try {
+      out[repo] = router.getCooldownRemaining(name, repo) ?? 0;
+    } catch {
+      out[repo] = 0;
+    }
   }
+  return out;
 }
 
-function lastRunMeta(ctx: DashboardContext, name: string): { at: number | null; repo: string | null } {
-  const store = ctx.daemon.specialistStore;
-  if (!store) return { at: null, repo: null };
-  try {
-    const { findings } = store.getFindings({ specialist: name, limit: 1, offset: 0 });
-    if (findings.length === 0) return { at: null, repo: null };
-    const latest = findings[0] as any;
-    return {
-      at: latest.created_at ?? null,
-      repo: latest.repo ?? null,
-    };
-  } catch {
-    return { at: null, repo: null };
+/** Minimum cooldown across all watched repos (0 = ready on at least one). */
+function minCooldown(cooldowns: Record<string, number>): number {
+  const vals = Object.values(cooldowns);
+  return vals.length === 0 ? 0 : Math.min(...vals);
+}
+
+function normalizeBySeverity(bySeverityRows: unknown): BySeverity {
+  const out: BySeverity = { critical: 0, warning: 0, info: 0 };
+  if (!Array.isArray(bySeverityRows)) return out;
+  for (const row of bySeverityRows) {
+    const severity = (row as { severity?: string })?.severity;
+    const count = (row as { count?: number })?.count ?? 0;
+    if (severity === "critical" || severity === "warning" || severity === "info") {
+      out[severity] = count;
+    }
   }
+  return out;
+}
+
+function globalConfig(ctx: DashboardContext) {
+  const g = (ctx.daemon.config as any).specialists ?? {};
+  return {
+    enabled: g.enabled ?? false,
+    maxParallel: g.maxParallel ?? 2,
+    cooldownSeconds: g.cooldownSeconds ?? 300,
+    severityThreshold: g.severityThreshold ?? "info",
+  };
 }
 
 // ── GET /api/specialists ──
 
 export function getSpecialistsJSON(ctx: DashboardContext) {
   const store = ctx.daemon.specialistStore;
-  const globalConfig = (ctx.daemon.config as any).specialists ?? {};
-  if (!store) {
-    return {
-      specialists: [],
-      globalConfig: {
-        enabled: globalConfig.enabled ?? false,
-        maxParallel: globalConfig.maxParallel ?? 2,
-        cooldownSeconds: globalConfig.cooldownSeconds ?? 300,
-        severityThreshold: globalConfig.severityThreshold ?? "info",
-      },
-    };
-  }
+  if (!store) return { specialists: [], globalConfig: globalConfig(ctx) };
 
   const rows = store.getSpecialistConfigs();
+  // Batched: one SQL call for counts + lastAt + lastRepo across all specialists.
+  const summaries =
+    typeof (store as any).getSpecialistSummaries === "function"
+      ? (store as any).getSpecialistSummaries()
+      : new Map<string, { total: number; lastAt: number | null; lastRepo: string | null }>();
+
   const specialists = rows.map((row: any) => {
     const cfg = rowToConfig(row);
-    const stats = store.getSpecialistStats(cfg.name);
-    const last = lastRunMeta(ctx, cfg.name);
+    const s = summaries.get(cfg.name) ?? { total: 0, lastAt: null, lastRepo: null };
+    const cooldowns = cooldownsByRepo(ctx, cfg.name);
     return {
       name: cfg.name,
       class: cfg.class,
@@ -100,22 +122,15 @@ export function getSpecialistsJSON(ctx: DashboardContext) {
       triggerEvents: cfg.triggerEvents,
       watchPatterns: cfg.watchPatterns,
       isBuiltin: cfg.isBuiltin,
-      findingCount: stats.total,
-      lastRunAt: last.at,
-      lastRunRepo: last.repo,
-      cooldownRemaining: getCooldown(ctx, cfg.name),
+      findingCount: s.total,
+      lastRunAt: s.lastAt,
+      lastRunRepo: s.lastRepo,
+      cooldownRemaining: minCooldown(cooldowns),
+      cooldowns,
     };
   });
 
-  return {
-    specialists,
-    globalConfig: {
-      enabled: globalConfig.enabled ?? false,
-      maxParallel: globalConfig.maxParallel ?? 2,
-      cooldownSeconds: globalConfig.cooldownSeconds ?? 300,
-      severityThreshold: globalConfig.severityThreshold ?? "info",
-    },
-  };
+  return { specialists, globalConfig: globalConfig(ctx) };
 }
 
 // ── GET /api/specialists/:name ──
@@ -127,9 +142,14 @@ export function getSpecialistDetailJSON(ctx: DashboardContext, name: string) {
   if (!row) return null;
   const cfg = rowToConfig(row);
   const stats = store.getSpecialistStats(name);
-  const repoName = firstRepoName(ctx) ?? "";
-  const recentFindings = repoName ? store.getRecentFindings(repoName, name, 20) : [];
-  const last = lastRunMeta(ctx, name);
+  // Repo-agnostic: show findings from every watched repo, not just the first.
+  const { findings: recentFindings } = store.getFindings({ specialist: name, limit: 20, offset: 0 });
+  const summaries =
+    typeof (store as any).getSpecialistSummaries === "function"
+      ? (store as any).getSpecialistSummaries()
+      : new Map<string, { total: number; lastAt: number | null; lastRepo: string | null }>();
+  const summary = summaries.get(name) ?? { total: stats.total, lastAt: null, lastRepo: null };
+  const cooldowns = cooldownsByRepo(ctx, name);
 
   return {
     config: {
@@ -141,14 +161,15 @@ export function getSpecialistDetailJSON(ctx: DashboardContext, name: string) {
       watchPatterns: cfg.watchPatterns,
       isBuiltin: cfg.isBuiltin,
       findingCount: stats.total,
-      lastRunAt: last.at,
-      lastRunRepo: last.repo,
-      cooldownRemaining: getCooldown(ctx, name),
+      lastRunAt: summary.lastAt,
+      lastRunRepo: summary.lastRepo,
+      cooldownRemaining: minCooldown(cooldowns),
+      cooldowns,
     },
     recentFindings,
     stats: {
       totalFindings: stats.total,
-      bySeverity: stats.bySeverity,
+      bySeverity: normalizeBySeverity(stats.bySeverity),
       avgConfidence: stats.avgConfidence,
       lastWeekFindings: stats.lastWeek,
     },
@@ -166,17 +187,10 @@ export function getSpecialistFindingsJSON(ctx: DashboardContext, url: URL) {
   const offset = (page - 1) * limit;
 
   const store = ctx.daemon.specialistStore;
-  if (!store) {
-    return { findings: [], total: 0, page, hasMore: false };
-  }
+  if (!store) return { findings: [], total: 0, page, hasMore: false };
 
   const { findings, total } = store.getFindings({ specialist, severity, repo, limit, offset });
-  return {
-    findings,
-    total,
-    page,
-    hasMore: offset + findings.length < total,
-  };
+  return { findings, total, page, hasMore: offset + findings.length < total };
 }
 
 // ── GET /api/specialists/findings/:id ──
@@ -200,13 +214,28 @@ export function handleSpecialistCreate(
   if (body.class !== "deterministic" && body.class !== "analytical") {
     return { error: "class must be 'deterministic' or 'analytical'" };
   }
-  if (body.class === "analytical" && !body.systemPrompt) {
-    return { error: "Analytical specialists require a systemPrompt" };
+
+  // Analytical specialists need systemPrompt/model wiring that the backend
+  // can't yet persist — reject rather than store a half-configured row.
+  if (body.class === "analytical") {
+    return {
+      error:
+        "Analytical specialists are not yet supported by the backend (Phase 3 gap). " +
+        "Only deterministic specialists can be created for now.",
+    };
+  }
+
+  // Reject fields the backend can't yet persist — silently dropping them
+  // would hand callers a false success.
+  const dropped = UNSUPPORTED_CONFIG_FIELDS.filter((k) => body[k] !== undefined);
+  if (dropped.length > 0) {
+    return {
+      error: `Unsupported fields (Phase 3 gap): ${dropped.join(", ")}. Remove them and retry.`,
+    };
   }
 
   const store = ctx.daemon.specialistStore;
   if (!store) return { error: "Specialists subsystem is not enabled" };
-
   if (store.getSpecialistConfig(body.name)) {
     return { error: `Specialist '${body.name}' already exists` };
   }
@@ -273,7 +302,22 @@ export function handleSpecialistToggle(ctx: DashboardContext, name: string, body
 
 // ── POST /api/specialists/:name/run ──
 
-export async function handleSpecialistRun(ctx: DashboardContext, name: string, body: any): Promise<any | null> {
+export type SpecialistRunResponse =
+  | { error: string; runId?: undefined; findings?: undefined }
+  | {
+      runId?: string;
+      findings?: unknown[];
+      confidence?: number;
+      specialist?: string;
+      repo?: string;
+      error?: undefined;
+    };
+
+export async function handleSpecialistRun(
+  ctx: DashboardContext,
+  name: string,
+  body: any,
+): Promise<SpecialistRunResponse | null> {
   const store = ctx.daemon.specialistStore;
   if (!store) return null;
   const row = store.getSpecialistConfig(name);
@@ -358,11 +402,18 @@ export async function handleFlakyTestRun(
 
 // ── DELETE /api/specialists/flaky/:testName ──
 
-export function handleFlakyTestReset(ctx: DashboardContext, testName: string, repo?: string): { success: true } {
-  const store = ctx.daemon.specialistStore;
-  if (store) {
-    const targetRepo = repo ?? firstRepoName(ctx) ?? "";
-    store.resetFlakyTest(targetRepo, testName);
+export function handleFlakyTestReset(
+  ctx: DashboardContext,
+  testName: string,
+  repo?: string,
+): { success?: true; error?: string } {
+  const targetRepo = repo ?? firstRepoName(ctx);
+  if (!targetRepo) {
+    return { error: "repo query param is required (no watched repos to fall back to)" };
   }
+  const store = ctx.daemon.specialistStore;
+  if (!store) return { error: "Specialists subsystem is not enabled" };
+  const deleted = store.resetFlakyTest(targetRepo, testName);
+  if (!deleted) return { error: "Flaky test not found" };
   return { success: true };
 }

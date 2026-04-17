@@ -515,7 +515,9 @@ export async function startDashboard(daemon: Daemon, port = 7480): Promise<Retur
       const flakyResetMatch = path.match(/^\/api\/specialists\/flaky\/([^/]+)$/);
       if (flakyResetMatch && req.method === "DELETE") {
         const repo = url.searchParams.get("repo") || undefined;
-        return json(handleFlakyTestReset(ctx, decodeURIComponent(flakyResetMatch[1]), repo));
+        const result = handleFlakyTestReset(ctx, decodeURIComponent(flakyResetMatch[1]), repo);
+        if (result.error === "Flaky test not found") return json(result, 404);
+        return json(result, result.error ? 400 : 200);
       }
       if (path === "/api/specialists/flaky" && req.method === "GET") {
         return json(getFlakyTestsJSON(ctx, url));

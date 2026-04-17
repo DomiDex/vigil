@@ -103,6 +103,19 @@ function createSpecialistDaemon() {
     }),
     getFlakyTests: (_repo?: string) => flakyTests,
     resetFlakyTest: (_repo: string, _testName: string) => true,
+    getSpecialistSummaries: () => {
+      const map = new Map<string, { total: number; lastAt: number | null; lastRepo: string | null }>();
+      for (const f of findings.values() as Iterable<any>) {
+        const cur = map.get(f.specialist) ?? { total: 0, lastAt: null, lastRepo: null };
+        cur.total += 1;
+        if (cur.lastAt === null || f.created_at > cur.lastAt) {
+          cur.lastAt = f.created_at;
+          cur.lastRepo = f.repo;
+        }
+        map.set(f.specialist, cur);
+      }
+      return map;
+    },
   };
 
   daemon.specialistRouter = {
@@ -245,10 +258,9 @@ describe("Route matching: collection and single-resource endpoints", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: "test-agent",
-        class: "analytical",
+        class: "deterministic",
         description: "Test",
         triggerEvents: ["new_commit"],
-        systemPrompt: "Analyze",
       }),
     });
     expect(res.status).toBe(200);
