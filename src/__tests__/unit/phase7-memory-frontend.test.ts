@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { z } from "zod";
 
 // Client-side Zod schema (same as API route — shared validation)
@@ -8,19 +8,27 @@ const createMemorySchema = z.object({
   tags: z.array(z.string()).optional(),
 });
 
-// Mock fetch for wrapper tests
-const mockFetch = mock(() =>
-  Promise.resolve(
-    new Response(JSON.stringify({ id: 1, success: true }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    })
-  )
-);
+// Intercept only localhost:7480 API calls, letting real fetch pass through.
+const origFetch = globalThis.fetch;
+let calls: [string, RequestInit | undefined][];
 
 beforeEach(() => {
-  globalThis.fetch = mockFetch as any;
-  mockFetch.mockClear();
+  calls = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input.toString();
+    if (url.startsWith("http://localhost:7480/")) {
+      calls.push([url, init]);
+      return new Response(JSON.stringify({ id: 1, success: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    return origFetch(input, init);
+  }) as typeof fetch;
+});
+
+afterEach(() => {
+  globalThis.fetch = origFetch;
 });
 
 describe("Phase 7: Client-side form validation", () => {
@@ -56,10 +64,10 @@ describe("Phase 7: Delete confirmation flow", () => {
 
     await deleteMemory({ id: 99 });
 
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(calls).toHaveLength(1);
+    const [url, init] = calls[0];
     expect(url).toContain("/api/memory/99");
-    expect(init.method).toBe("DELETE");
+    expect(init?.method).toBe("DELETE");
   });
 });
 
@@ -69,9 +77,9 @@ describe("Phase 7: Relevance mutation calls", () => {
 
     await updateMemoryRelevance({ id: 5, data: { relevant: true } });
 
-    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    const [url, init] = calls[0];
     expect(url).toContain("/api/memory/5");
-    const body = JSON.parse(init.body as string);
+    const body = JSON.parse(init?.body as string);
     expect(body.relevant).toBe(true);
   });
 
@@ -80,9 +88,9 @@ describe("Phase 7: Relevance mutation calls", () => {
 
     await updateMemoryRelevance({ id: 5, data: { relevant: false } });
 
-    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    const [url, init] = calls[0];
     expect(url).toContain("/api/memory/5");
-    const body = JSON.parse(init.body as string);
+    const body = JSON.parse(init?.body as string);
     expect(body.relevant).toBe(false);
   });
 });

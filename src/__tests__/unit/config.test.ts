@@ -88,6 +88,26 @@ describe("config", () => {
         allowlist: [],
         devMode: false,
       },
+      specialists: {
+        enabled: true,
+        agents: ["code-review", "security", "test-drift", "flaky-test"],
+        maxParallel: 2,
+        cooldownSeconds: 300,
+        severityThreshold: "info" as const,
+        flakyTest: {
+          testCommand: "bun test",
+          runOnCommit: true,
+          minRunsToJudge: 3,
+          flakyThreshold: 0.5,
+          maxTestHistory: 100,
+        },
+        autoAction: {
+          enabled: false,
+          minSeverity: "critical" as const,
+          minConfidence: 0.8,
+          tierCap: "safe" as const,
+        },
+      },
     };
     saveConfig(custom);
     const loaded = loadConfig();

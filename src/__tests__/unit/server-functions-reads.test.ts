@@ -1,31 +1,37 @@
-import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-// Server functions now use fetch("/api/...") instead of getVigilContext().
-// We mock globalThis.fetch to verify the correct endpoints are called.
-
-let fetchSpy: ReturnType<typeof spyOn>;
-
-beforeEach(() => {
-  fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
-    new Response(JSON.stringify({ ok: true }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    }),
-  );
-});
-
-afterEach(() => {
-  fetchSpy.mockRestore();
-});
+// Server functions use fetch("http://localhost:7480/api/...") in non-browser env.
+// We intercept only those calls, letting real fetch (used by other test files) pass through.
 
 describe("server functions -- reads", () => {
+  const origFetch = globalThis.fetch;
+  let calls: [string, RequestInit | undefined][];
+
+  beforeEach(() => {
+    calls = [];
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.startsWith("http://localhost:7480/")) {
+        calls.push([url, init]);
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return origFetch(input, init);
+    }) as typeof fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = origFetch;
+  });
+
   describe("getOverview", () => {
     it("fetches from /api/overview", async () => {
       const { getOverview } = await import("../../../dashboard-v2/src/server/functions.ts");
       await getOverview();
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
-      const url = fetchSpy.mock.calls[0][0] as string;
-      expect(url).toContain("/api/overview");
+      expect(calls).toHaveLength(1);
+      expect(calls[0][0]).toContain("/api/overview");
     });
   });
 
@@ -33,9 +39,8 @@ describe("server functions -- reads", () => {
     it("fetches from /api/repos", async () => {
       const { getRepos } = await import("../../../dashboard-v2/src/server/functions.ts");
       await getRepos();
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
-      const url = fetchSpy.mock.calls[0][0] as string;
-      expect(url).toContain("/api/repos");
+      expect(calls).toHaveLength(1);
+      expect(calls[0][0]).toContain("/api/repos");
     });
   });
 
@@ -43,9 +48,8 @@ describe("server functions -- reads", () => {
     it("fetches from /api/repos/:name with encoded name", async () => {
       const { getRepoDetail } = await import("../../../dashboard-v2/src/server/functions.ts");
       await getRepoDetail({ data: { name: "vigil" } });
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
-      const url = fetchSpy.mock.calls[0][0] as string;
-      expect(url).toContain("/api/repos/vigil");
+      expect(calls).toHaveLength(1);
+      expect(calls[0][0]).toContain("/api/repos/vigil");
     });
   });
 
@@ -53,8 +57,8 @@ describe("server functions -- reads", () => {
     it("fetches from /api/timeline with query params", async () => {
       const { getTimeline } = await import("../../../dashboard-v2/src/server/functions.ts");
       await getTimeline({ data: { status: "OBSERVE", repo: "vigil", page: 2 } });
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
-      const url = fetchSpy.mock.calls[0][0] as string;
+      expect(calls).toHaveLength(1);
+      const url = calls[0][0];
       expect(url).toContain("/api/timeline");
       expect(url).toContain("status=OBSERVE");
       expect(url).toContain("repo=vigil");
@@ -66,9 +70,8 @@ describe("server functions -- reads", () => {
     it("fetches from /api/dreams", async () => {
       const { getDreams } = await import("../../../dashboard-v2/src/server/functions.ts");
       await getDreams();
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
-      const url = fetchSpy.mock.calls[0][0] as string;
-      expect(url).toContain("/api/dreams");
+      expect(calls).toHaveLength(1);
+      expect(calls[0][0]).toContain("/api/dreams");
     });
   });
 
@@ -76,9 +79,8 @@ describe("server functions -- reads", () => {
     it("fetches from /api/dreams/patterns/:repo", async () => {
       const { getDreamPatterns } = await import("../../../dashboard-v2/src/server/functions.ts");
       await getDreamPatterns({ data: { repo: "vigil" } });
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
-      const url = fetchSpy.mock.calls[0][0] as string;
-      expect(url).toContain("/api/dreams/patterns/vigil");
+      expect(calls).toHaveLength(1);
+      expect(calls[0][0]).toContain("/api/dreams/patterns/vigil");
     });
   });
 
@@ -86,8 +88,8 @@ describe("server functions -- reads", () => {
     it("fetches from /api/tasks with optional filters", async () => {
       const { getTasks } = await import("../../../dashboard-v2/src/server/functions.ts");
       await getTasks({ data: { status: "active", repo: "vigil" } });
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
-      const url = fetchSpy.mock.calls[0][0] as string;
+      expect(calls).toHaveLength(1);
+      const url = calls[0][0];
       expect(url).toContain("/api/tasks");
       expect(url).toContain("status=active");
       expect(url).toContain("repo=vigil");
@@ -98,9 +100,8 @@ describe("server functions -- reads", () => {
     it("fetches from /api/actions", async () => {
       const { getActions } = await import("../../../dashboard-v2/src/server/functions.ts");
       await getActions({ data: {} });
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
-      const url = fetchSpy.mock.calls[0][0] as string;
-      expect(url).toContain("/api/actions");
+      expect(calls).toHaveLength(1);
+      expect(calls[0][0]).toContain("/api/actions");
     });
   });
 
@@ -108,9 +109,8 @@ describe("server functions -- reads", () => {
     it("fetches from /api/memory", async () => {
       const { getMemory } = await import("../../../dashboard-v2/src/server/functions.ts");
       await getMemory();
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
-      const url = fetchSpy.mock.calls[0][0] as string;
-      expect(url).toContain("/api/memory");
+      expect(calls).toHaveLength(1);
+      expect(calls[0][0]).toContain("/api/memory");
     });
   });
 
@@ -118,8 +118,8 @@ describe("server functions -- reads", () => {
     it("fetches from /api/memory/search with query params", async () => {
       const { searchMemory } = await import("../../../dashboard-v2/src/server/functions.ts");
       await searchMemory({ data: { query: "test", repo: "vigil" } });
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
-      const url = fetchSpy.mock.calls[0][0] as string;
+      expect(calls).toHaveLength(1);
+      const url = calls[0][0];
       expect(url).toContain("/api/memory/search");
       expect(url).toContain("memq=test");
       expect(url).toContain("memrepo=vigil");
@@ -130,9 +130,8 @@ describe("server functions -- reads", () => {
     it("fetches from /api/metrics", async () => {
       const { getMetrics } = await import("../../../dashboard-v2/src/server/functions.ts");
       await getMetrics();
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
-      const url = fetchSpy.mock.calls[0][0] as string;
-      expect(url).toContain("/api/metrics");
+      expect(calls).toHaveLength(1);
+      expect(calls[0][0]).toContain("/api/metrics");
     });
   });
 
@@ -140,9 +139,8 @@ describe("server functions -- reads", () => {
     it("fetches from /api/scheduler", async () => {
       const { getScheduler } = await import("../../../dashboard-v2/src/server/functions.ts");
       await getScheduler();
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
-      const url = fetchSpy.mock.calls[0][0] as string;
-      expect(url).toContain("/api/scheduler");
+      expect(calls).toHaveLength(1);
+      expect(calls[0][0]).toContain("/api/scheduler");
     });
   });
 });

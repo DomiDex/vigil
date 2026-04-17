@@ -21,7 +21,7 @@ describe("Index route wiring", () => {
     expect(routeSource).not.toContain("getVigilContext");
   });
 
-  it("references TimelinePage plugin path", () => {
-    expect(routeSource).toContain("TimelinePage");
+  it("references OverviewPage plugin path", () => {
+    expect(routeSource).toContain("OverviewPage");
   });
 });
