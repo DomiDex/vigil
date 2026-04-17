@@ -408,8 +408,10 @@ export class SpecialistStore {
       .all(repo) as FlakinessRow[];
   }
 
-  resetFlakyTest(repo: string, testName: string): void {
-    this.db.query("DELETE FROM test_flakiness WHERE repo = ? AND test_name = ?").run(repo, testName);
+  /** Returns true if a row was deleted, false if no matching test existed. */
+  resetFlakyTest(repo: string, testName: string): boolean {
+    const result = this.db.query("DELETE FROM test_flakiness WHERE repo = ? AND test_name = ?").run(repo, testName);
+    return result.changes > 0;
   }
 
   pruneTestHistory(maxPerTest: number): void {
