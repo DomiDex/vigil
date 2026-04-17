@@ -305,11 +305,16 @@ export class Daemon {
       this.config.specialists?.enabled
     ) {
       this.specialistStore = new specialistStoreMod.SpecialistStore();
-      this.specialistRouter = new specialistsMod.SpecialistRouter(this.config, specialistAgentsMod.BUILTIN_SPECIALISTS);
+
+      // Deterministic agents (SA Phase 4) — factory-constructed with store + config
+      const flakyAgent = specialistAgentsMod.createFlakyTestAgent(this.specialistStore, this.config);
+      const allSpecialists = [...specialistAgentsMod.BUILTIN_SPECIALISTS, flakyAgent];
+
+      this.specialistRouter = new specialistsMod.SpecialistRouter(this.config, allSpecialists);
       this.specialistRunner = new specialistRunnerMod.SpecialistRunner(this.config);
 
       const enabledAgents = new Set(this.config.specialists.agents);
-      for (const agent of specialistAgentsMod.BUILTIN_SPECIALISTS) {
+      for (const agent of allSpecialists) {
         this.specialistStore.upsertSpecialistConfig({
           name: agent.name,
           class: agent.class,
