@@ -14,6 +14,7 @@ import { GitWatcher } from "../git/watcher.ts";
 import { DecisionEngine } from "../llm/decision-max.ts";
 import { EventLog, VectorStore } from "../memory/store.ts";
 import { NotificationRouter } from "../notify/push.ts";
+import type { Finding, FindingSeverity, SpecialistName } from "../specialists/types.ts";
 
 // Build-time gated: webhook subscriptions (Phase 12)
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -24,7 +25,20 @@ const webhookSubMod = feature("VIGIL_WEBHOOKS")
 const specialistStoreMod = feature("VIGIL_SPECIALISTS")
   ? (require("../specialists/store.ts") as typeof import("../specialists/store.ts"))
   : null;
+const specialistRunnerMod = feature("VIGIL_SPECIALISTS")
+  ? (require("../specialists/runner.ts") as typeof import("../specialists/runner.ts"))
+  : null;
+const specialistAgentsMod = feature("VIGIL_SPECIALISTS")
+  ? (require("../specialists/agents/index.ts") as typeof import("../specialists/agents/index.ts"))
+  : null;
 /* eslint-enable @typescript-eslint/no-require-imports */
+
+async function runGit(args: string[], cwd: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  const proc = Bun.spawn(["git", ...args], { cwd, stdout: "pipe", stderr: "pipe" });
+  const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
+  await proc.exited;
+  return { stdout, stderr, exitCode: proc.exitCode ?? 0 };
+}
 
 const program = new Command();
 
@@ -82,7 +96,7 @@ program
       limit: opts.limit,
     });
 
-    if (opts.specialist && typeof opts.specialist === "string") {
+    if (typeof opts.specialist === "string") {
       const tag = `[${opts.specialist}]`;
       entries = entries.filter((e) => (e.detail as string).includes(tag));
     }
@@ -122,24 +136,23 @@ program
   .option("-s, --specialist <name>", "Force run a specialist instead of asking")
   .action(async (questionParts: string[], opts) => {
     if (opts.specialist) {
-      if (!specialistStoreMod) {
-        console.log(chalk.red("\n  Specialists feature is not enabled.\n"));
+      if (!specialistStoreMod || !specialistRunnerMod || !specialistAgentsMod) {
+        console.error(chalk.red("\n  Specialists feature is not enabled.\n"));
+        process.exitCode = 1;
         return;
       }
-
-      const { SpecialistRunner } = await import("../specialists/runner.ts");
-      const { BUILTIN_SPECIALISTS, createFlakyTestAgent } = await import("../specialists/agents/index.ts");
 
       const config = loadConfig();
       const store = new specialistStoreMod.SpecialistStore();
       try {
-        const flakyAgent = createFlakyTestAgent(store, config);
-        const allSpecialists = [...BUILTIN_SPECIALISTS, flakyAgent];
+        const flakyAgent = specialistAgentsMod.createFlakyTestAgent(store, config);
+        const allSpecialists = [...specialistAgentsMod.BUILTIN_SPECIALISTS, flakyAgent];
 
         const target = allSpecialists.find((s) => s.name === opts.specialist);
         if (!target) {
-          console.log(chalk.red(`\n  Unknown specialist: ${opts.specialist}`));
-          console.log(chalk.gray(`  Available: ${allSpecialists.map((s) => s.name).join(", ")}\n`));
+          console.error(chalk.red(`\n  Unknown specialist: ${opts.specialist}`));
+          console.error(chalk.gray(`  Available: ${allSpecialists.map((s) => s.name).join(", ")}\n`));
+          process.exitCode = 1;
           return;
         }
 
@@ -148,34 +161,32 @@ program
 
         console.log(chalk.gray(`\n  Running ${opts.specialist} on ${repoName}...\n`));
 
-        const diffProc = Bun.spawn(["git", "diff", "HEAD~1", "--stat", "-p"], {
-          cwd: repoPath,
-          stdout: "pipe",
-          stderr: "pipe",
-        });
-        const diff = (await new Response(diffProc.stdout).text()).slice(0, 10_000);
-        await diffProc.exited;
+        const gitDir = await runGit(["rev-parse", "--git-dir"], repoPath);
+        if (gitDir.exitCode !== 0) {
+          console.error(chalk.red(`  Not a git repository: ${repoPath}\n`));
+          process.exitCode = 1;
+          return;
+        }
 
-        const filesProc = Bun.spawn(["git", "diff", "HEAD~1", "--name-only"], {
-          cwd: repoPath,
-          stdout: "pipe",
-          stderr: "pipe",
-        });
-        const changedFiles = (await new Response(filesProc.stdout).text()).trim().split("\n").filter(Boolean);
-        await filesProc.exited;
+        const branchResult = await runGit(["rev-parse", "--abbrev-ref", "HEAD"], repoPath);
+        if (branchResult.exitCode !== 0) {
+          console.error(chalk.red(`  Failed to read branch: ${branchResult.stderr.trim()}\n`));
+          process.exitCode = 1;
+          return;
+        }
 
-        const branchProc = Bun.spawn(["git", "rev-parse", "--abbrev-ref", "HEAD"], {
-          cwd: repoPath,
-          stdout: "pipe",
-          stderr: "pipe",
-        });
-        const branch = (await new Response(branchProc.stdout).text()).trim();
-        await branchProc.exited;
+        const diffResult = await runGit(["diff", "HEAD~1", "--stat", "-p"], repoPath);
+        const filesResult = await runGit(["diff", "HEAD~1", "--name-only"], repoPath);
+        if (diffResult.exitCode !== 0 || filesResult.exitCode !== 0) {
+          console.error(
+            chalk.yellow("  Warning: could not diff against HEAD~1 (single-commit repo?). Running with empty diff.\n"),
+          );
+        }
 
-        const recentFindings = store.getRecentFindings(repoName, opts.specialist, 10).map((row) => ({
+        const recentFindings: Finding[] = store.getRecentFindings(repoName, opts.specialist, 10).map((row) => ({
           id: row.id,
-          specialist: row.specialist as "code-review" | "security" | "test-drift" | "flaky-test",
-          severity: row.severity as "info" | "warning" | "critical",
+          specialist: row.specialist as SpecialistName,
+          severity: row.severity as FindingSeverity,
           title: row.title,
           detail: row.detail,
           file: row.file ?? undefined,
@@ -186,14 +197,14 @@ program
         const context = {
           repoName,
           repoPath,
-          branch,
-          diff,
-          changedFiles,
+          branch: branchResult.stdout.trim(),
+          diff: diffResult.exitCode === 0 ? diffResult.stdout.slice(0, 10_000) : "",
+          changedFiles: filesResult.exitCode === 0 ? filesResult.stdout.trim().split("\n").filter(Boolean) : [],
           recentCommits: [],
           recentFindings,
         };
 
-        const runner = new SpecialistRunner(config);
+        const runner = new specialistRunnerMod.SpecialistRunner(config);
         const result = await runner.run(target, context);
 
         if (result.skippedReason) {
@@ -642,10 +653,10 @@ program
   .description("Show flaky tests across watched repos")
   .argument("[repo]", "Filter by repo name")
   .option("--reset <test-name>", "Clear flakiness history for a test")
-  .option("--run", "Force a test run now (requires daemon running)")
-  .action((repo: string | undefined, opts: { reset?: string; run?: boolean }) => {
+  .action((repo: string | undefined, opts: { reset?: string }) => {
     if (!specialistStoreMod) {
-      console.log(chalk.red("\n  Specialists feature is not enabled.\n"));
+      console.error(chalk.red("\n  Specialists feature is not enabled.\n"));
+      process.exitCode = 1;
       return;
     }
 
@@ -653,16 +664,15 @@ program
 
     try {
       if (opts.reset) {
-        const repoName = repo || "";
-        if (!repoName) {
-          console.log(
+        if (!repo) {
+          console.error(
             chalk.red("\n  Repo name required with --reset. Usage: vigil flaky <repo> --reset <test-name>\n"),
           );
+          process.exitCode = 1;
           return;
         }
-        const existed = store.getTrackedTests(repoName).some((t) => t.test_name === opts.reset);
-        store.resetFlakyTest(repoName, opts.reset);
-        if (existed) {
+        const removed = store.resetFlakyTest(repo, opts.reset);
+        if (removed) {
           console.log(chalk.green(`\n  Reset flakiness history for: ${opts.reset}\n`));
         } else {
           console.log(chalk.gray(`\n  No flakiness data found for: ${opts.reset}\n`));
@@ -682,7 +692,7 @@ program
           chalk.gray("  ") + "Test Name".padEnd(50) + "Pass Rate".padEnd(12) + "Runs".padEnd(8) + "Flaky".padEnd(8)
         }Status`,
       );
-      console.log(chalk.gray(`  ${"\u2500".repeat(88)}`));
+      console.log(chalk.gray(`  ${"\u2500".repeat(84)}`));
 
       for (const t of tests) {
         const rate = t.total_runs > 0 ? `${((t.total_passes / t.total_runs) * 100).toFixed(0)}%` : "N/A";

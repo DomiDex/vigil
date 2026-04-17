@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { SpecialistStore } from "../../specialists/store.ts";
 
 function classifyFlakyStatus(row: {
   flaky_commits: number;
@@ -11,65 +12,17 @@ function classifyFlakyStatus(row: {
   return "STABLE";
 }
 
-function createTestDb(): Database {
-  const db = new Database(":memory:");
-  db.run(`CREATE TABLE IF NOT EXISTS test_flakiness (
-    repo TEXT NOT NULL,
-    test_name TEXT NOT NULL,
-    test_file TEXT DEFAULT '',
-    total_runs INTEGER DEFAULT 0,
-    total_passes INTEGER DEFAULT 0,
-    total_failures INTEGER DEFAULT 0,
-    flaky_commits INTEGER DEFAULT 0,
-    last_flaky_at TEXT,
-    first_seen TEXT DEFAULT (datetime('now')),
-    last_seen TEXT DEFAULT (datetime('now')),
-    PRIMARY KEY (repo, test_name)
-  )`);
-  db.run(`CREATE TABLE IF NOT EXISTS test_runs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    repo TEXT NOT NULL,
-    test_name TEXT NOT NULL,
-    commit_sha TEXT NOT NULL,
-    passed INTEGER NOT NULL,
-    run_at TEXT DEFAULT (datetime('now'))
-  )`);
-  db.run(`CREATE TABLE IF NOT EXISTS findings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    repo TEXT NOT NULL,
-    specialist TEXT NOT NULL,
-    severity TEXT NOT NULL,
-    title TEXT NOT NULL,
-    detail TEXT DEFAULT '',
-    file TEXT,
-    line INTEGER,
-    suggestion TEXT,
-    commit_sha TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
-  )`);
-  return db;
+function seed(store: SpecialistStore) {
+  // Definitive flaky on my-app: same commit, different result
+  store.updateFlakiness("my-app", "test > login flow", "auth.test.ts", true, "abc");
+  store.updateFlakiness("my-app", "test > login flow", "auth.test.ts", false, "abc");
+  // Stable on my-app
+  store.updateFlakiness("my-app", "test > renders ok", "ui.test.ts", true, "abc");
+  // Stable on other-repo
+  store.updateFlakiness("other-repo", "test > build step", "build.test.ts", true, "xyz");
 }
 
-function seedRows(db: Database) {
-  db.run(
-    `INSERT INTO test_flakiness (repo, test_name, test_file, total_runs, total_passes, total_failures, flaky_commits)
-    VALUES ('my-app', 'test > login flow', 'auth.test.ts', 20, 18, 2, 3)`,
-  );
-  db.run(
-    `INSERT INTO test_flakiness (repo, test_name, test_file, total_runs, total_passes, total_failures, flaky_commits)
-    VALUES ('my-app', 'test > data fetch', 'api.test.ts', 10, 3, 7, 0)`,
-  );
-  db.run(
-    `INSERT INTO test_flakiness (repo, test_name, test_file, total_runs, total_passes, total_failures, flaky_commits)
-    VALUES ('my-app', 'test > renders ok', 'ui.test.ts', 15, 15, 0, 0)`,
-  );
-  db.run(
-    `INSERT INTO test_flakiness (repo, test_name, test_file, total_runs, total_passes, total_failures, flaky_commits)
-    VALUES ('other-repo', 'test > build step', 'build.test.ts', 5, 5, 0, 0)`,
-  );
-}
-
-describe("Phase 5: flaky status classification", () => {
+describe("Phase 5: classifyFlakyStatus (CLI status logic)", () => {
   test("flaky_commits > 0 yields FLAKY (definitive)", () => {
     expect(classifyFlakyStatus({ flaky_commits: 3, total_runs: 20, total_passes: 18 })).toBe("FLAKY (definitive)");
   });
@@ -82,7 +35,7 @@ describe("Phase 5: flaky status classification", () => {
     expect(classifyFlakyStatus({ flaky_commits: 0, total_runs: 15, total_passes: 15 })).toBe("STABLE");
   });
 
-  test("zero total_runs yields STABLE (not division by zero)", () => {
+  test("zero total_runs yields STABLE (no division by zero)", () => {
     expect(classifyFlakyStatus({ flaky_commits: 0, total_runs: 0, total_passes: 0 })).toBe("STABLE");
   });
 
@@ -96,83 +49,57 @@ describe("Phase 5: flaky status classification", () => {
 });
 
 describe("Phase 5: SpecialistStore.getFlakyTests()", () => {
-  let db: Database;
+  let store: SpecialistStore;
 
   beforeEach(() => {
-    db = createTestDb();
-    seedRows(db);
+    store = new SpecialistStore(new Database(":memory:"));
+    seed(store);
   });
 
-  afterEach(() => {
-    db.close();
+  test("returns only flaky-definitive rows when no repo filter", () => {
+    const rows = store.getFlakyTests();
+    expect(rows.length).toBe(1);
+    expect(rows[0].test_name).toBe("test > login flow");
+    expect(rows[0].flaky_commits).toBeGreaterThan(0);
   });
 
-  test("returns all rows when no repo filter", () => {
-    const rows = db.query("SELECT * FROM test_flakiness").all();
-    expect(rows).toHaveLength(4);
-  });
-
-  test("filters by repo when repo argument provided", () => {
-    const rows = db.query("SELECT * FROM test_flakiness WHERE repo = ?").all("my-app");
-    expect(rows).toHaveLength(3);
+  test("filters by repo when provided", () => {
+    const rows = store.getFlakyTests("my-app");
+    expect(rows.length).toBe(1);
+    expect(rows.every((r) => r.repo === "my-app")).toBe(true);
   });
 
   test("returns empty array for unknown repo", () => {
-    const rows = db.query("SELECT * FROM test_flakiness WHERE repo = ?").all("nonexistent");
-    expect(rows).toHaveLength(0);
+    expect(store.getFlakyTests("nonexistent")).toHaveLength(0);
   });
 });
 
 describe("Phase 5: SpecialistStore.resetFlakyTest()", () => {
-  let db: Database;
+  let store: SpecialistStore;
 
   beforeEach(() => {
-    db = createTestDb();
-    seedRows(db);
-    db.run(
-      `INSERT INTO test_runs (repo, test_name, commit_sha, passed)
-      VALUES ('my-app', 'test > login flow', 'abc123', 1)`,
-    );
+    store = new SpecialistStore(new Database(":memory:"));
+    seed(store);
   });
 
-  afterEach(() => {
-    db.close();
+  test("returns true when a row was deleted", () => {
+    expect(store.resetFlakyTest("my-app", "test > login flow")).toBe(true);
   });
 
-  test("deletes matching flakiness row", () => {
-    const before = db
-      .query("SELECT * FROM test_flakiness WHERE repo = ? AND test_name = ?")
-      .all("my-app", "test > login flow");
-    expect(before).toHaveLength(1);
-
-    db.run("DELETE FROM test_flakiness WHERE repo = ? AND test_name = ?", ["my-app", "test > login flow"]);
-    db.run("DELETE FROM test_runs WHERE repo = ? AND test_name = ?", ["my-app", "test > login flow"]);
-
-    const after = db
-      .query("SELECT * FROM test_flakiness WHERE repo = ? AND test_name = ?")
-      .all("my-app", "test > login flow");
-    expect(after).toHaveLength(0);
+  test("returns false for nonexistent test", () => {
+    expect(store.resetFlakyTest("my-app", "test > does-not-exist")).toBe(false);
   });
 
-  test("deletes associated test_runs rows", () => {
-    db.run("DELETE FROM test_runs WHERE repo = ? AND test_name = ?", ["my-app", "test > login flow"]);
-    const runs = db
-      .query("SELECT * FROM test_runs WHERE repo = ? AND test_name = ?")
-      .all("my-app", "test > login flow");
-    expect(runs).toHaveLength(0);
+  test("removes the targeted row from getTrackedTests", () => {
+    store.resetFlakyTest("my-app", "test > login flow");
+    const remaining = store.getTrackedTests("my-app").map((r) => r.test_name);
+    expect(remaining).not.toContain("test > login flow");
+    expect(remaining).toContain("test > renders ok");
   });
 
-  test("returns false (no-op) for nonexistent test", () => {
-    const row = db
-      .query("SELECT * FROM test_flakiness WHERE repo = ? AND test_name = ?")
-      .get("my-app", "nonexistent test");
-    expect(row).toBeNull();
-  });
-
-  test("other tests remain after reset", () => {
-    db.run("DELETE FROM test_flakiness WHERE repo = ? AND test_name = ?", ["my-app", "test > login flow"]);
-    const remaining = db.query("SELECT * FROM test_flakiness WHERE repo = ?").all("my-app");
-    expect(remaining).toHaveLength(2);
+  test("does not affect other repos", () => {
+    store.resetFlakyTest("my-app", "test > login flow");
+    expect(store.getTrackedTests("other-repo")).toHaveLength(1);
   });
 });
 
@@ -226,33 +153,5 @@ describe("Phase 5: pass rate formatting", () => {
     const totalRuns = 0;
     const rate = totalRuns > 0 ? `${((0 / totalRuns) * 100).toFixed(0)}%` : "N/A";
     expect(rate).toBe("N/A");
-  });
-});
-
-describe("Phase 5: feature gate disabled path (US-5)", () => {
-  test("null module check short-circuits", () => {
-    const specialistStoreMod: { SpecialistStore: unknown } | null = null;
-    let reachedStore = false;
-
-    if (!specialistStoreMod) {
-      // would print "not enabled" in real CLI
-    } else {
-      reachedStore = true;
-    }
-
-    expect(reachedStore).toBe(false);
-  });
-
-  test("enabled module check proceeds", () => {
-    const specialistStoreMod: { SpecialistStore: unknown } | null = { SpecialistStore: class {} };
-    let reachedStore = false;
-
-    if (!specialistStoreMod) {
-      // not enabled
-    } else {
-      reachedStore = true;
-    }
-
-    expect(reachedStore).toBe(true);
   });
 });
