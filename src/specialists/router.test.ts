@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { SpecialistRouter } from "./router.ts";
 import type { VigilConfig } from "../core/config.ts";
+import { SpecialistRouter } from "./router.ts";
 import type { SpecialistConfig } from "./types.ts";
 
 const mockConfig = {

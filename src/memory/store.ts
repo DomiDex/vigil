@@ -322,10 +322,10 @@ export class VectorStore {
     if (relevant) {
       const existing = this.db.query("SELECT id FROM memories WHERE id = ?").get(id);
       if (!existing) return false;
-      this.db.run(
-        "UPDATE memories SET confidence = MIN(confidence + 0.1, 1.0), updated_at = ? WHERE id = ?",
-        [Date.now(), id],
-      );
+      this.db.run("UPDATE memories SET confidence = MIN(confidence + 0.1, 1.0), updated_at = ? WHERE id = ?", [
+        Date.now(),
+        id,
+      ]);
       return true;
     }
     return this.delete(id);

@@ -44,7 +44,7 @@ export function parseDiffOutput(rawDiff: string): DiffResult {
       if (line.startsWith("-") && !line.startsWith("---")) deletions++;
     }
 
-    files.push({ path, additions, deletions, chunks: "diff --git " + chunk });
+    files.push({ path, additions, deletions, chunks: `diff --git ${chunk}` });
     totalInsertions += additions;
     totalDeletions += deletions;
   }

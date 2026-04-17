@@ -1,5 +1,5 @@
 // src/__tests__/unit/phase9-sorting-logic.test.ts
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 
 // ---- Test data ----
 
@@ -14,11 +14,51 @@ interface MockAction {
 }
 
 const MOCK_ACTIONS: MockAction[] = [
-  { id: "a1", command: "run_tests", status: "approved", tier: "safe", createdAt: 1000, confidence: 0.9, reason: "Tests needed" },
-  { id: "a2", command: "git_stash", status: "rejected", tier: "moderate", createdAt: 3000, confidence: 0.85, reason: "Stash changes" },
-  { id: "a3", command: "deploy", status: "executed", tier: "dangerous", createdAt: 2000, confidence: 0.95, reason: "Deploy" },
-  { id: "a4", command: "run_lint", status: "failed", tier: "safe", createdAt: 4000, confidence: 0.7, reason: "Lint fix" },
-  { id: "a5", command: "backup_db", status: "approved", tier: "moderate", createdAt: 5000, confidence: 0.88, reason: "Backup" },
+  {
+    id: "a1",
+    command: "run_tests",
+    status: "approved",
+    tier: "safe",
+    createdAt: 1000,
+    confidence: 0.9,
+    reason: "Tests needed",
+  },
+  {
+    id: "a2",
+    command: "git_stash",
+    status: "rejected",
+    tier: "moderate",
+    createdAt: 3000,
+    confidence: 0.85,
+    reason: "Stash changes",
+  },
+  {
+    id: "a3",
+    command: "deploy",
+    status: "executed",
+    tier: "dangerous",
+    createdAt: 2000,
+    confidence: 0.95,
+    reason: "Deploy",
+  },
+  {
+    id: "a4",
+    command: "run_lint",
+    status: "failed",
+    tier: "safe",
+    createdAt: 4000,
+    confidence: 0.7,
+    reason: "Lint fix",
+  },
+  {
+    id: "a5",
+    command: "backup_db",
+    status: "approved",
+    tier: "moderate",
+    createdAt: 5000,
+    confidence: 0.88,
+    reason: "Backup",
+  },
 ];
 
 // ---- Pure sorting functions (mirroring ActionsPage logic) ----
@@ -28,7 +68,7 @@ const TIER_ORDER: Record<string, number> = { safe: 0, moderate: 1, dangerous: 2 
 function sortActions(
   actions: MockAction[],
   sortBy: "date" | "status" | "tier" | "command",
-  sortDir: "asc" | "desc"
+  sortDir: "asc" | "desc",
 ): MockAction[] {
   const sorted = [...actions].sort((a, b) => {
     let cmp = 0;
@@ -56,7 +96,11 @@ function filterByStatus(actions: MockAction[], status: string): MockAction[] {
   return actions.filter((a) => a.status === status);
 }
 
-function paginate<T>(items: T[], page: number, perPage: number): { data: T[]; hasNext: boolean; hasPrev: boolean; total: number } {
+function paginate<T>(
+  items: T[],
+  page: number,
+  perPage: number,
+): { data: T[]; hasNext: boolean; hasPrev: boolean; total: number } {
   const start = page * perPage;
   const end = Math.min(start + perPage, items.length);
   return {

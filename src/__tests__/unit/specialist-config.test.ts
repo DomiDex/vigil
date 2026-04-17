@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test, spyOn } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import * as os from "node:os";
 import { tmpdir } from "node:os";
@@ -58,7 +58,7 @@ describe("VigilConfig specialist defaults", () => {
       join(dir, "config.json"),
       JSON.stringify({
         specialists: { enabled: false, maxParallel: 4 },
-      })
+      }),
     );
     const config = loadConfig();
 

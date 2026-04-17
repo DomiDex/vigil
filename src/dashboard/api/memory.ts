@@ -222,10 +222,7 @@ export function handleMemoryCreate(
 
 // ── DELETE /api/memory/:id ──
 
-export function handleMemoryDelete(
-  ctx: DashboardContext,
-  id: string,
-): { success: boolean; error?: string } {
+export function handleMemoryDelete(ctx: DashboardContext, id: string): { success: boolean; error?: string } {
   const deleted = ctx.daemon.vectorStore.delete(id);
   if (!deleted) {
     return { success: false, error: "Memory entry not found" };

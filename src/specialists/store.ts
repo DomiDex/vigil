@@ -186,25 +186,27 @@ export class SpecialistStore {
   }
 
   storeFinding(input: StoreFindingInput): void {
-    this.db.query(
-      `INSERT OR REPLACE INTO specialist_findings
+    this.db
+      .query(
+        `INSERT OR REPLACE INTO specialist_findings
        (id, specialist, severity, title, detail, file, line, suggestion, repo, confidence, commit_hash, source_action_id, created_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)`
-    ).run(
-      input.id,
-      input.specialist,
-      input.severity,
-      input.title,
-      input.detail,
-      input.file ?? null,
-      input.line ?? null,
-      input.suggestion ?? null,
-      input.repo,
-      input.confidence,
-      input.commitHash ?? null,
-      input.sourceActionId ?? null,
-      Date.now(),
-    );
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)`,
+      )
+      .run(
+        input.id,
+        input.specialist,
+        input.severity,
+        input.title,
+        input.detail,
+        input.file ?? null,
+        input.line ?? null,
+        input.suggestion ?? null,
+        input.repo,
+        input.confidence,
+        input.commitHash ?? null,
+        input.sourceActionId ?? null,
+        Date.now(),
+      );
   }
 
   getFindings(opts?: GetFindingsOptions): { findings: FindingRow[]; total: number } {
@@ -231,8 +233,12 @@ export class SpecialistStore {
     const limit = opts?.limit ?? 50;
     const offset = opts?.offset ?? 0;
 
-    const countRow = this.db.query(`SELECT COUNT(*) as count FROM specialist_findings ${where}`).get(...params) as { count: number };
-    const findings = this.db.query(`SELECT * FROM specialist_findings ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).all(...params, limit, offset) as FindingRow[];
+    const countRow = this.db.query(`SELECT COUNT(*) as count FROM specialist_findings ${where}`).get(...params) as {
+      count: number;
+    };
+    const findings = this.db
+      .query(`SELECT * FROM specialist_findings ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`)
+      .all(...params, limit, offset) as FindingRow[];
 
     return { findings, total: countRow.count };
   }
@@ -242,21 +248,25 @@ export class SpecialistStore {
   }
 
   getRecentFindings(repo: string, specialist: string, limit = 10): FindingRow[] {
-    return this.db.query(
-      "SELECT * FROM specialist_findings WHERE repo = ? AND specialist = ? AND dismissed = 0 ORDER BY created_at DESC LIMIT ?"
-    ).all(repo, specialist, limit) as FindingRow[];
+    return this.db
+      .query(
+        "SELECT * FROM specialist_findings WHERE repo = ? AND specialist = ? AND dismissed = 0 ORDER BY created_at DESC LIMIT ?",
+      )
+      .all(repo, specialist, limit) as FindingRow[];
   }
 
   dismissFinding(id: string, ignorePattern?: string): void {
-    this.db.query(
-      "UPDATE specialist_findings SET dismissed = 1, dismissed_at = ?1, ignore_pattern = ?2 WHERE id = ?3"
-    ).run(Date.now(), ignorePattern ?? null, id);
+    this.db
+      .query("UPDATE specialist_findings SET dismissed = 1, dismissed_at = ?1, ignore_pattern = ?2 WHERE id = ?3")
+      .run(Date.now(), ignorePattern ?? null, id);
   }
 
   getIgnorePatterns(specialist: string): string[] {
-    const rows = this.db.query(
-      "SELECT DISTINCT ignore_pattern FROM specialist_findings WHERE specialist = ? AND ignore_pattern IS NOT NULL"
-    ).all(specialist) as { ignore_pattern: string }[];
+    const rows = this.db
+      .query(
+        "SELECT DISTINCT ignore_pattern FROM specialist_findings WHERE specialist = ? AND ignore_pattern IS NOT NULL",
+      )
+      .all(specialist) as { ignore_pattern: string }[];
     return rows.map((r) => r.ignore_pattern);
   }
 
@@ -270,25 +280,27 @@ export class SpecialistStore {
 
   upsertSpecialistConfig(input: UpsertConfigInput): void {
     const now = Date.now();
-    this.db.query(
-      `INSERT INTO specialist_configs (name, class, description, trigger_events, watch_patterns, is_builtin, created_at, updated_at)
+    this.db
+      .query(
+        `INSERT INTO specialist_configs (name, class, description, trigger_events, watch_patterns, is_builtin, created_at, updated_at)
        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
        ON CONFLICT(name) DO UPDATE SET
          class = excluded.class,
          description = excluded.description,
          trigger_events = excluded.trigger_events,
          watch_patterns = excluded.watch_patterns,
-         updated_at = excluded.updated_at`
-    ).run(
-      input.name,
-      input.class,
-      input.description,
-      JSON.stringify(input.triggerEvents),
-      JSON.stringify(input.watchPatterns ?? []),
-      input.isBuiltin ? 1 : 0,
-      now,
-      now,
-    );
+         updated_at = excluded.updated_at`,
+      )
+      .run(
+        input.name,
+        input.class,
+        input.description,
+        JSON.stringify(input.triggerEvents),
+        JSON.stringify(input.watchPatterns ?? []),
+        input.isBuiltin ? 1 : 0,
+        now,
+        now,
+      );
   }
 
   deleteSpecialistConfig(name: string): void {
@@ -296,21 +308,25 @@ export class SpecialistStore {
   }
 
   toggleSpecialist(name: string, enabled: boolean): void {
-    this.db.query("UPDATE specialist_configs SET enabled = ?1, updated_at = ?2 WHERE name = ?3").run(enabled ? 1 : 0, Date.now(), name);
+    this.db
+      .query("UPDATE specialist_configs SET enabled = ?1, updated_at = ?2 WHERE name = ?3")
+      .run(enabled ? 1 : 0, Date.now(), name);
   }
 
   getSpecialistStats(name: string): SpecialistStats {
-    const total = this.db.query("SELECT COUNT(*) as count FROM specialist_findings WHERE specialist = ?").get(name) as { count: number };
-    const bySeverity = this.db.query(
-      "SELECT severity, COUNT(*) as count FROM specialist_findings WHERE specialist = ? GROUP BY severity"
-    ).all(name) as { severity: string; count: number }[];
-    const avgConf = this.db.query(
-      "SELECT AVG(confidence) as avg FROM specialist_findings WHERE specialist = ?"
-    ).get(name) as { avg: number | null };
+    const total = this.db.query("SELECT COUNT(*) as count FROM specialist_findings WHERE specialist = ?").get(name) as {
+      count: number;
+    };
+    const bySeverity = this.db
+      .query("SELECT severity, COUNT(*) as count FROM specialist_findings WHERE specialist = ? GROUP BY severity")
+      .all(name) as { severity: string; count: number }[];
+    const avgConf = this.db
+      .query("SELECT AVG(confidence) as avg FROM specialist_findings WHERE specialist = ?")
+      .get(name) as { avg: number | null };
     const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    const lastWeek = this.db.query(
-      "SELECT COUNT(*) as count FROM specialist_findings WHERE specialist = ? AND created_at > ?"
-    ).get(name, weekAgo) as { count: number };
+    const lastWeek = this.db
+      .query("SELECT COUNT(*) as count FROM specialist_findings WHERE specialist = ? AND created_at > ?")
+      .get(name, weekAgo) as { count: number };
 
     return {
       total: total.count,
@@ -321,22 +337,35 @@ export class SpecialistStore {
   }
 
   storeTestRun(input: StoreTestRunInput): void {
-    this.db.query(
-      `INSERT INTO test_runs (id, repo, commit_hash, branch, test_name, test_file, passed, created_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`
-    ).run(input.id, input.repo, input.commitHash, input.branch, input.testName, input.testFile, input.passed ? 1 : 0, Date.now());
+    this.db
+      .query(
+        `INSERT INTO test_runs (id, repo, commit_hash, branch, test_name, test_file, passed, created_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
+      )
+      .run(
+        input.id,
+        input.repo,
+        input.commitHash,
+        input.branch,
+        input.testName,
+        input.testFile,
+        input.passed ? 1 : 0,
+        Date.now(),
+      );
   }
 
   updateFlakiness(repo: string, testName: string, testFile: string, passed: boolean, commitHash: string): void {
-    const existing = this.db.query(
-      "SELECT * FROM test_flakiness WHERE repo = ? AND test_name = ?"
-    ).get(repo, testName) as FlakinessRow | null;
+    const existing = this.db
+      .query("SELECT * FROM test_flakiness WHERE repo = ? AND test_name = ?")
+      .get(repo, testName) as FlakinessRow | null;
 
     if (!existing) {
-      this.db.query(
-        `INSERT INTO test_flakiness (repo, test_name, test_file, total_runs, total_passes, total_failures, flaky_commits, last_seen_commit, last_seen_passed, updated_at)
-         VALUES (?1, ?2, ?3, 1, ?4, ?5, 0, ?6, ?7, ?8)`
-      ).run(repo, testName, testFile, passed ? 1 : 0, passed ? 0 : 1, commitHash, passed ? 1 : 0, Date.now());
+      this.db
+        .query(
+          `INSERT INTO test_flakiness (repo, test_name, test_file, total_runs, total_passes, total_failures, flaky_commits, last_seen_commit, last_seen_passed, updated_at)
+         VALUES (?1, ?2, ?3, 1, ?4, ?5, 0, ?6, ?7, ?8)`,
+        )
+        .run(repo, testName, testFile, passed ? 1 : 0, passed ? 0 : 1, commitHash, passed ? 1 : 0, Date.now());
       return;
     }
 
@@ -345,8 +374,9 @@ export class SpecialistStore {
     const differentResult = sameCommit && (existing.last_seen_passed === 1) !== passed;
     const flakyIncrement = differentResult ? 1 : 0;
 
-    this.db.query(
-      `UPDATE test_flakiness SET
+    this.db
+      .query(
+        `UPDATE test_flakiness SET
          total_runs = total_runs + 1,
          total_passes = total_passes + ?1,
          total_failures = total_failures + ?2,
@@ -354,28 +384,20 @@ export class SpecialistStore {
          last_seen_commit = ?4,
          last_seen_passed = ?5,
          updated_at = ?6
-       WHERE repo = ?7 AND test_name = ?8`
-    ).run(
-      passed ? 1 : 0,
-      passed ? 0 : 1,
-      flakyIncrement,
-      commitHash,
-      passed ? 1 : 0,
-      Date.now(),
-      repo,
-      testName,
-    );
+       WHERE repo = ?7 AND test_name = ?8`,
+      )
+      .run(passed ? 1 : 0, passed ? 0 : 1, flakyIncrement, commitHash, passed ? 1 : 0, Date.now(), repo, testName);
   }
 
   getFlakyTests(repo?: string): FlakinessRow[] {
     if (repo) {
-      return this.db.query(
-        "SELECT * FROM test_flakiness WHERE repo = ? AND flaky_commits > 0 ORDER BY flaky_commits DESC"
-      ).all(repo) as FlakinessRow[];
+      return this.db
+        .query("SELECT * FROM test_flakiness WHERE repo = ? AND flaky_commits > 0 ORDER BY flaky_commits DESC")
+        .all(repo) as FlakinessRow[];
     }
-    return this.db.query(
-      "SELECT * FROM test_flakiness WHERE flaky_commits > 0 ORDER BY flaky_commits DESC"
-    ).all() as FlakinessRow[];
+    return this.db
+      .query("SELECT * FROM test_flakiness WHERE flaky_commits > 0 ORDER BY flaky_commits DESC")
+      .all() as FlakinessRow[];
   }
 
   resetFlakyTest(repo: string, testName: string): void {
@@ -383,13 +405,18 @@ export class SpecialistStore {
   }
 
   pruneTestHistory(maxPerTest: number): void {
-    const tests = this.db.query("SELECT DISTINCT repo, test_name FROM test_runs").all() as { repo: string; test_name: string }[];
+    const tests = this.db.query("SELECT DISTINCT repo, test_name FROM test_runs").all() as {
+      repo: string;
+      test_name: string;
+    }[];
     for (const t of tests) {
-      this.db.query(
-        `DELETE FROM test_runs WHERE id IN (
+      this.db
+        .query(
+          `DELETE FROM test_runs WHERE id IN (
            SELECT id FROM test_runs WHERE repo = ?1 AND test_name = ?2 ORDER BY created_at DESC LIMIT -1 OFFSET ?3
-         )`
-      ).run(t.repo, t.test_name, maxPerTest);
+         )`,
+        )
+        .run(t.repo, t.test_name, maxPerTest);
     }
   }
 

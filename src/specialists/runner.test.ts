@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { SpecialistRunner } from "./runner.ts";
 import type { VigilConfig } from "../core/config.ts";
+import { SpecialistRunner } from "./runner.ts";
 import type { SpecialistConfig, SpecialistContext } from "./types.ts";
 
 const mockConfig = {
@@ -103,10 +103,7 @@ describe("SpecialistRunner", () => {
       },
     });
 
-    await runner.runAll(
-      [makeSpec("a"), makeSpec("b"), makeSpec("c")],
-      mockContext,
-    );
+    await runner.runAll([makeSpec("a"), makeSpec("b"), makeSpec("c")], mockContext);
     expect(maxConcurrent).toBe(1);
   });
 });

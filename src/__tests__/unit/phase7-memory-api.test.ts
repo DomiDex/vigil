@@ -1,10 +1,10 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { VectorStore } from "../../memory/store.ts";
-import type { MemoryEntry } from "../../memory/store.ts";
 import { z } from "zod";
+import type { MemoryEntry } from "../../memory/store.ts";
+import { VectorStore } from "../../memory/store.ts";
 
 let tmpDir: string;
 let store: VectorStore;

@@ -22,17 +22,11 @@ export class SpecialistRouter {
       if (!s.triggerEvents.includes(eventType)) return false;
       // If watch patterns defined, at least one file must match after exclusions
       if (s.watchPatterns && s.watchPatterns.length > 0) {
-        const positivePatterns = s.watchPatterns.filter(
-          (p) => !p.startsWith("!"),
-        );
-        const negativePatterns = s.watchPatterns
-          .filter((p) => p.startsWith("!"))
-          .map((p) => p.slice(1));
+        const positivePatterns = s.watchPatterns.filter((p) => !p.startsWith("!"));
+        const negativePatterns = s.watchPatterns.filter((p) => p.startsWith("!")).map((p) => p.slice(1));
 
         const matchedFiles = changedFiles.filter((f) => {
-          const included =
-            positivePatterns.length === 0 ||
-            positivePatterns.some((p) => minimatch(f, p));
+          const included = positivePatterns.length === 0 || positivePatterns.some((p) => minimatch(f, p));
           if (!included) return false;
           const excluded = negativePatterns.some((p) => minimatch(f, p));
           return !excluded;

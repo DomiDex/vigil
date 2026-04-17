@@ -1,11 +1,11 @@
 // src/__tests__/unit/phase10-format-payload.test.ts
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 
 // ---- Pure helper mirroring WebhooksPage.tsx formatPayload ----
 
 function formatPayload(payload: Record<string, unknown>): string {
   const json = JSON.stringify(payload, null, 2);
-  if (json.length > 50_000) return json.slice(0, 50_000) + "\n\n// ... payload truncated";
+  if (json.length > 50_000) return `${json.slice(0, 50_000)}\n\n// ... payload truncated`;
   return json;
 }
 

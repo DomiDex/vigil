@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { BUILD_FEATURES, feature } from "../../build/features.ts";
 
 describe("VIGIL_SPECIALISTS build flag", () => {
