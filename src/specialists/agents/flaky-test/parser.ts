@@ -10,19 +10,33 @@ export interface ParsedTestResult {
 
 export function parseJUnitXML(xml: string): ParsedTestResult[] {
   const results: ParsedTestResult[] = [];
-  const testcaseRegex =
-    /<testcase\s+name="([^"]+)"\s+classname="([^"]*)"(?:\s+time="([^"]*)")?[^>]*>([\s\S]*?)<\/testcase>/g;
-  const failureRegex = /<failure[^>]*>([\s\S]*?)<\/failure>/;
+  // Matches both self-closing <testcase ... /> and <testcase ...>...</testcase>.
+  // Group 1 captures the attribute blob; group 3 captures the body (empty for self-closing).
+  const testcaseRegex = /<testcase\b([^>]*?)(\/>|>([\s\S]*?)<\/testcase>)/g;
+  const attrRegex = /(\w+)="([^"]*)"/g;
+  const failureRegex = /<(?:failure|error)\b[^>]*>([\s\S]*?)<\/(?:failure|error)>/;
 
   let match: RegExpExecArray | null;
   while ((match = testcaseRegex.exec(xml)) !== null) {
-    const [, name, classname, time, body] = match;
-    const failMatch = failureRegex.exec(body);
+    const attrStr = match[1];
+    const body = match[3] ?? "";
+
+    const attrs: Record<string, string> = {};
+    let a: RegExpExecArray | null;
+    attrRegex.lastIndex = 0;
+    while ((a = attrRegex.exec(attrStr)) !== null) attrs[a[1]] = a[2];
+
+    const name = attrs.name;
+    if (!name) continue;
+    const classname = attrs.classname ?? "";
+    const file = attrs.file || classname;
+    const failMatch = body ? failureRegex.exec(body) : null;
+
     results.push({
       name: classname ? `${classname} > ${name}` : name,
-      file: classname || "",
+      file,
       passed: !failMatch,
-      durationMs: time ? Number.parseFloat(time) * 1000 : undefined,
+      durationMs: attrs.time ? Number.parseFloat(attrs.time) * 1000 : undefined,
       error: failMatch ? failMatch[1].trim() : undefined,
     });
   }

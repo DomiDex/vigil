@@ -400,6 +400,14 @@ export class SpecialistStore {
       .all() as FlakinessRow[];
   }
 
+  /** All tracked tests for a repo, regardless of same-commit variance. Needed so the
+   * scorer can evaluate statistical flakiness (low pass rate without `flaky_commits > 0`). */
+  getTrackedTests(repo: string): FlakinessRow[] {
+    return this.db
+      .query("SELECT * FROM test_flakiness WHERE repo = ? ORDER BY updated_at DESC")
+      .all(repo) as FlakinessRow[];
+  }
+
   resetFlakyTest(repo: string, testName: string): void {
     this.db.query("DELETE FROM test_flakiness WHERE repo = ? AND test_name = ?").run(repo, testName);
   }

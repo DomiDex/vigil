@@ -82,20 +82,30 @@ describe("computeFlakiness", () => {
     expect(report!.passRate).toBeCloseTo(0.4, 1);
   });
 
-  test("respects custom threshold", () => {
-    const stats: FlakinessStats = {
+  test("respects custom threshold — both sides of the boundary", () => {
+    const base: Omit<FlakinessStats, "total_passes" | "total_failures"> = {
       test_name: "test > marginal",
       test_file: "marginal.test.ts",
       total_runs: 10,
-      total_passes: 8,
-      total_failures: 2,
       flaky_commits: 0,
       last_flaky_at: null,
     };
-    // With default 0.5 threshold: passRate 0.8 > (1 - 0.5) = 0.5 -- not flaky
-    expect(computeFlakiness(stats, defaultConfig)).toBeNull();
 
-    // With stricter threshold 0.9: passRate 0.8 > (1 - 0.9) = 0.1 -- still not flaky
-    expect(computeFlakiness(stats, { minRunsToJudge: 3, flakyThreshold: 0.9 })).toBeNull();
+    // passRate 0.8 with threshold 0.5 → 0.8 > (1 - 0.5) → not flaky
+    expect(computeFlakiness({ ...base, total_passes: 8, total_failures: 2 }, defaultConfig)).toBeNull();
+
+    // passRate 0.2 with threshold 0.5 → 0.2 < (1 - 0.5) → flaky
+    const flaky = computeFlakiness({ ...base, total_passes: 2, total_failures: 8 }, defaultConfig);
+    expect(flaky).not.toBeNull();
+    expect(flaky!.isFlakyStatistical).toBe(true);
+
+    // passRate 0.4 with strict threshold 0.3 → 0.4 > (1 - 0.3) = 0.7 is false, 0.4 < 0.7 true → flaky
+    // (Tightening the threshold flips marginal cases into flaky territory.)
+    const strict = computeFlakiness({ ...base, total_passes: 4, total_failures: 6 }, {
+      minRunsToJudge: 3,
+      flakyThreshold: 0.3,
+    });
+    expect(strict).not.toBeNull();
+    expect(strict!.isFlakyStatistical).toBe(true);
   });
 });

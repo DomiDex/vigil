@@ -1,14 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { unlinkSync } from "node:fs";
 import type { VigilConfig } from "../../../core/config.ts";
-import type { FlakinessRow, SpecialistStore } from "../../store.ts";
-import type {
-  Finding,
-  SpecialistConfig,
-  SpecialistContext,
-  SpecialistResult,
-  TestRunResult,
-} from "../../types.ts";
+import type { SpecialistStore } from "../../store.ts";
+import type { Finding, SpecialistConfig, SpecialistContext, SpecialistResult, TestRunResult } from "../../types.ts";
 import { getParser, parseJUnitXML, type ParsedTestResult } from "./parser.ts";
 import { computeFlakiness } from "./scorer.ts";
 
@@ -25,13 +19,15 @@ export function createFlakyTestAgent(store: SpecialistStore, config: VigilConfig
     async execute(context: SpecialistContext): Promise<SpecialistResult> {
       const flakyConfig = config.specialists.flakyTest;
 
+      let testResult = context.testRunResult as TestRunResultWithJunit | undefined;
+
       // Mode 1: Active — run tests on new_commit if enabled
-      if (flakyConfig.runOnCommit && !context.testRunResult) {
-        context.testRunResult = await runTests(context.repoPath, flakyConfig.testCommand, 60_000);
+      if (flakyConfig.runOnCommit && !testResult) {
+        testResult = await runTests(context.repoPath, flakyConfig.testCommand, 60_000);
       }
 
-      // Mode 2: Passive — use existing test results
-      if (!context.testRunResult) {
+      // Mode 2: Passive — require existing test results
+      if (!testResult) {
         return {
           specialist: "flaky-test",
           findings: [],
@@ -41,7 +37,6 @@ export function createFlakyTestAgent(store: SpecialistStore, config: VigilConfig
       }
 
       // Parse test output — prefer JUnit XML, fall back to console
-      const testResult = context.testRunResult as TestRunResultWithJunit;
       let results: ParsedTestResult[];
       if (testResult.junitXml) {
         results = parseJUnitXML(testResult.junitXml);
@@ -61,7 +56,6 @@ export function createFlakyTestAgent(store: SpecialistStore, config: VigilConfig
 
       const commitHash = await getCommitHash(context.repoPath);
 
-      // Record each test result in the store
       for (const result of results) {
         store.storeTestRun({
           id: randomUUID(),
@@ -75,11 +69,11 @@ export function createFlakyTestAgent(store: SpecialistStore, config: VigilConfig
         store.updateFlakiness(context.repoName, result.name, result.file, result.passed, commitHash);
       }
 
-      // Check all tracked flaky tests for this repo
+      // Evaluate every tracked test — the scorer decides definitive vs statistical vs stable.
       const findings: Finding[] = [];
-      const flakyTests = store.getFlakyTests(context.repoName);
-      for (const test of flakyTests) {
-        const report = computeFlakiness(rowToStats(test), flakyConfig);
+      const tracked = store.getTrackedTests(context.repoName);
+      for (const test of tracked) {
+        const report = computeFlakiness(test, flakyConfig);
         if (!report) continue;
 
         findings.push({
@@ -99,17 +93,6 @@ export function createFlakyTestAgent(store: SpecialistStore, config: VigilConfig
 
       return { specialist: "flaky-test", findings, confidence: 0.9 };
     },
-  };
-}
-
-function rowToStats(row: FlakinessRow) {
-  return {
-    test_name: row.test_name,
-    test_file: row.test_file,
-    total_runs: row.total_runs,
-    total_passes: row.total_passes,
-    total_failures: row.total_failures,
-    flaky_commits: row.flaky_commits,
   };
 }
 
