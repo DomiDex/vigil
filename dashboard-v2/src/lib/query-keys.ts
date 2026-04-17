@@ -30,6 +30,14 @@ export const vigilKeys = {
     all: ["agents"],
     current: ["agents", "current"],
   },
+  specialists: {
+    all: ["specialists"] as const,
+    detail: (name: string) => ["specialists", name] as const,
+    findings: (filters?: Record<string, string | number | undefined>) =>
+      ["specialists", "findings", filters ?? {}] as const,
+    findingDetail: (id: string) => ["specialists", "findings", id] as const,
+    flaky: (repo?: string) => ["specialists", "flaky", repo] as const,
+  },
   health: ["health"],
   webhooks: {
     all: ["webhooks"],

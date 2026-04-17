@@ -85,6 +85,7 @@ export default function ActionsPage({ activeRepo }: Partial<WidgetProps> = {}) {
   const [sortBy, setSortBy] = useState<"date" | "status" | "tier" | "command">("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState("all");
   const [page, setPage] = useState(0);
 
   const { data, isLoading, isError, error } = useQuery({
@@ -125,10 +126,14 @@ export default function ActionsPage({ activeRepo }: Partial<WidgetProps> = {}) {
 
   // Filter + Sort (memoized)
   const sortedHistory = useMemo(() => {
-    const filtered =
+    let filtered =
       statusFilter === "all"
         ? allHistory
         : allHistory.filter((a) => a.status === statusFilter);
+
+    if (sourceFilter !== "all") {
+      filtered = filtered.filter((a) => (a.source ?? "llm") === sourceFilter);
+    }
 
     return [...filtered].sort((a, b) => {
       let cmp = 0;
@@ -148,7 +153,7 @@ export default function ActionsPage({ activeRepo }: Partial<WidgetProps> = {}) {
       }
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [allHistory, statusFilter, sortBy, sortDir]);
+  }, [allHistory, statusFilter, sourceFilter, sortBy, sortDir]);
 
   // Paginate
   const startIndex = page * PER_PAGE;
@@ -235,6 +240,17 @@ export default function ActionsPage({ activeRepo }: Partial<WidgetProps> = {}) {
                   <SelectItem value="failed">Failed</SelectItem>
                 </SelectContent>
               </Select>
+              <Select value={sourceFilter} onValueChange={(v) => { setSourceFilter(v); setPage(0); }}>
+                <SelectTrigger className="w-[140px] h-8 text-xs">
+                  <SelectValue placeholder="Source" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Sources</SelectItem>
+                  <SelectItem value="specialist">Specialist</SelectItem>
+                  <SelectItem value="llm">LLM</SelectItem>
+                  <SelectItem value="manual">Manual</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {sortedHistory.length > 0 ? (
@@ -246,6 +262,7 @@ export default function ActionsPage({ activeRepo }: Partial<WidgetProps> = {}) {
                         <SortHeader col="date" onSort={handleSort}>Date</SortHeader>
                         <SortHeader col="command" onSort={handleSort}>Command</SortHeader>
                         <SortHeader col="tier" onSort={handleSort}>Tier</SortHeader>
+                        <TableHead>Source</TableHead>
                         <SortHeader col="status" onSort={handleSort}>Status</SortHeader>
                         <TableHead>Confidence</TableHead>
                         <TableHead>Reason</TableHead>
@@ -269,6 +286,11 @@ export default function ActionsPage({ activeRepo }: Partial<WidgetProps> = {}) {
                               >
                                 {action.tier}
                               </Badge>
+                            </TableCell>
+                            <TableCell className="text-xs">
+                              <span className="text-muted-foreground">
+                                {action.sourceSpecialist ?? (action.source ?? "llm")}
+                              </span>
                             </TableCell>
                             <TableCell>
                               <Badge

@@ -22,6 +22,9 @@ export interface ActionRequest {
   gateResults?: Record<string, boolean>;
   createdAt: number;
   updatedAt: number;
+  source?: "llm" | "specialist" | "manual";
+  sourceSpecialist?: string;
+  sourceFindingId?: string;
 }
 
 export interface GateCheckResult {

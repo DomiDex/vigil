@@ -80,7 +80,7 @@ describe("SSE_EVENT_MAP", () => {
     expect(keys.length).toBe(1);
   });
 
-  it("contains all 16 expected event types", () => {
+  it("contains all 19 expected event types", () => {
     const expectedEvents = [
       "tick",
       "message",
@@ -98,6 +98,9 @@ describe("SSE_EVENT_MAP", () => {
       "webhook",
       "channel",
       "health",
+      "specialist_finding",
+      "specialist_run",
+      "flaky_update",
     ];
     for (const event of expectedEvents) {
       expect(SSE_EVENT_MAP[event as keyof typeof SSE_EVENT_MAP]).toBeDefined();

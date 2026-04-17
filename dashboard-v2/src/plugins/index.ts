@@ -121,7 +121,8 @@ export const corePlugins: PluginWidget[] = [
     slot: "tab",
     order: 80,
     component: () => import("./agents/AgentsPage"),
-    queryKeys: [["agents"]],
+    sseEvents: ["specialist_finding", "specialist_run", "tick"],
+    queryKeys: [["agents"], ["specialists"]],
     featureGate: "VIGIL_AGENT_IDENTITY",
   },
   {

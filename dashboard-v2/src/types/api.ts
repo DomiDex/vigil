@@ -158,6 +158,9 @@ export interface ActionRequest {
   updatedAt: number;
   timeFormatted?: string;
   timeRelative?: string;
+  source?: "llm" | "specialist" | "manual";
+  sourceSpecialist?: string;
+  sourceFindingId?: string;
 }
 
 export interface ActionPreview {
@@ -180,6 +183,7 @@ export interface ActionsData {
     pending: number;
   };
   byTier: { safe: number; moderate: number; dangerous: number };
+  bySource?: { llm: number; specialist: number; manual: number };
   gateConfig: Record<string, unknown>;
   isOptedIn: boolean;
 }
@@ -306,4 +310,95 @@ export interface SchedulerHistory {
 export interface SchedulerData {
   entries: ScheduleEntry[];
   history: SchedulerHistory[];
+}
+
+// Specialist types
+export type SpecialistClass = "deterministic" | "analytical";
+export type FindingSeverity = "info" | "warning" | "critical";
+
+export interface SpecialistSummary {
+  name: string;
+  class: SpecialistClass;
+  description: string;
+  enabled: boolean;
+  model?: string;
+  triggerEvents: string[];
+  watchPatterns: string[];
+  findingCount: number;
+  lastRunAt: string | null;
+  lastRunRepo: string | null;
+  cooldownRemaining: number;
+}
+
+export interface SpecialistsListResponse {
+  specialists: SpecialistSummary[];
+  globalConfig: {
+    enabled: boolean;
+    maxParallel: number;
+    cooldownSeconds: number;
+    severityThreshold: FindingSeverity;
+  };
+}
+
+export interface SpecialistDetailResponse {
+  config: SpecialistSummary & {
+    systemPrompt?: string;
+    cooldownSeconds: number;
+    severityThreshold: FindingSeverity;
+  };
+  recentFindings: FindingItem[];
+  stats: {
+    totalFindings: number;
+    bySeverity: Record<FindingSeverity, number>;
+    avgConfidence: number;
+    lastWeekFindings: number;
+  };
+}
+
+export interface FindingItem {
+  id: string;
+  specialist: string;
+  severity: FindingSeverity;
+  title: string;
+  file?: string;
+  line?: number;
+  repo: string;
+  createdAt: string;
+  dismissed: boolean;
+}
+
+export interface FindingDetailResponse extends FindingItem {
+  detail: string;
+  suggestion?: string;
+  confidence: number;
+  diff?: string;
+}
+
+export interface FindingsListResponse {
+  findings: FindingItem[];
+  total: number;
+  page: number;
+  hasMore: boolean;
+}
+
+export interface FlakyTestItem {
+  testName: string;
+  testFile: string;
+  repo: string;
+  totalRuns: number;
+  passRate: number;
+  flakyCommits: number;
+  isDefinitive: boolean;
+  lastFlakyAt: string | null;
+  status: "flaky" | "stable" | "insufficient_data";
+}
+
+export interface FlakyTestsResponse {
+  tests: FlakyTestItem[];
+  summary: {
+    totalTracked: number;
+    flakyCount: number;
+    stableCount: number;
+    insufficientData: number;
+  };
 }

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { CheckCircle, XCircle, Clock, Shield, Eye } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
@@ -86,6 +87,24 @@ export function ActionApproval({ action, onApprove, onReject }: ActionApprovalPr
           <span className="font-medium">Repo:</span>{" "}
           <span className="text-muted-foreground">{action.repo}</span>
         </div>
+        {action.source === "specialist" && (
+          <div className="text-xs">
+            <span className="font-medium">Source:</span>{" "}
+            <span className="text-muted-foreground">
+              {action.sourceSpecialist ?? "specialist"}
+            </span>
+            {action.sourceFindingId && (
+              <Link
+                to="/agents"
+                search={{ tab: "findings", id: action.sourceFindingId }}
+                className="ml-2 text-vigil hover:underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                Finding #{action.sourceFindingId.slice(0, 4)}
+              </Link>
+            )}
+          </div>
+        )}
         <div className="text-xs">
           <span className="font-medium">Confidence:</span>{" "}
           <span className="text-muted-foreground">
