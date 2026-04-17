@@ -158,6 +158,9 @@ export interface ActionRequest {
   updatedAt: number;
   timeFormatted?: string;
   timeRelative?: string;
+  source?: "llm" | "specialist" | "manual";
+  sourceSpecialist?: string;
+  sourceFindingId?: string;
 }
 
 export interface ActionPreview {
@@ -180,6 +183,7 @@ export interface ActionsData {
     pending: number;
   };
   byTier: { safe: number; moderate: number; dangerous: number };
+  bySource?: { llm: number; specialist: number; manual: number };
   gateConfig: Record<string, unknown>;
   isOptedIn: boolean;
 }
