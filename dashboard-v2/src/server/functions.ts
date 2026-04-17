@@ -449,6 +449,137 @@ export async function pruneEvents({ data }: { data: { olderThanDays: number } })
   });
 }
 
+// --- Specialists ---
+
+export async function getSpecialists() {
+  return api("/api/specialists");
+}
+
+export async function getSpecialistDetail({ data }: { data: { name: string } }) {
+  return api(`/api/specialists/${encodeURIComponent(data.name)}`);
+}
+
+export async function getSpecialistFindings({
+  data,
+}: {
+  data: { specialist?: string; severity?: string; repo?: string; page?: number };
+}) {
+  const params = new URLSearchParams();
+  if (data.specialist) params.set("specialist", data.specialist);
+  if (data.severity) params.set("severity", data.severity);
+  if (data.repo) params.set("repo", data.repo);
+  if (data.page) params.set("page", String(data.page));
+  const qs = params.toString();
+  return api(`/api/specialists/findings${qs ? `?${qs}` : ""}`);
+}
+
+export async function getSpecialistFindingDetail({ data }: { data: { id: string } }) {
+  return api(`/api/specialists/findings/${encodeURIComponent(data.id)}`);
+}
+
+export async function getFlakyTests({ data }: { data: { repo?: string } } = { data: {} }) {
+  const params = data.repo ? `?repo=${encodeURIComponent(data.repo)}` : "";
+  return api(`/api/specialists/flaky${params}`);
+}
+
+export async function createSpecialist({
+  data,
+}: {
+  data: {
+    name: string;
+    class: "deterministic" | "analytical";
+    description: string;
+    model?: string;
+    triggerEvents: string[];
+    watchPatterns?: string[];
+    systemPrompt?: string;
+    cooldownSeconds?: number;
+    severityThreshold?: string;
+  };
+}) {
+  return api("/api/specialists", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateSpecialist({
+  data,
+}: {
+  data: {
+    name: string;
+    description?: string;
+    model?: string;
+    triggerEvents?: string[];
+    watchPatterns?: string[];
+    systemPrompt?: string;
+    cooldownSeconds?: number;
+    severityThreshold?: string;
+  };
+}) {
+  const { name, ...body } = data;
+  return api(`/api/specialists/${encodeURIComponent(name)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function deleteSpecialist({ data }: { data: { name: string } }) {
+  return apiMutate(`/api/specialists/${encodeURIComponent(data.name)}`, { method: "DELETE" });
+}
+
+export async function toggleSpecialist({ data }: { data: { name: string; enabled: boolean } }) {
+  return apiMutate(`/api/specialists/${encodeURIComponent(data.name)}/toggle`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled: data.enabled }),
+  });
+}
+
+export async function runSpecialist({ data }: { data: { name: string; repo?: string } }) {
+  return api(`/api/specialists/${encodeURIComponent(data.name)}/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repo: data.repo }),
+  });
+}
+
+export async function dismissFinding({ data }: { data: { id: string; ignorePattern?: string } }) {
+  return apiMutate(`/api/specialists/findings/${encodeURIComponent(data.id)}/dismiss`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ignorePattern: data.ignorePattern }),
+  });
+}
+
+export async function createActionFromFinding({
+  data,
+}: {
+  data: { id: string; command?: string; args?: string[]; reason?: string };
+}) {
+  const { id, ...body } = data;
+  return api(`/api/specialists/findings/${encodeURIComponent(id)}/action`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function runFlakyTests({ data }: { data: { repo: string } }) {
+  return api("/api/specialists/flaky/run", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function resetFlakyTest({ data }: { data: { testName: string; repo?: string } }) {
+  const qs = data.repo ? `?repo=${encodeURIComponent(data.repo)}` : "";
+  return apiMutate(`/api/specialists/flaky/${encodeURIComponent(data.testName)}${qs}`, { method: "DELETE" });
+}
+
 // --- A2A ---
 
 export async function getA2AStatus() {
