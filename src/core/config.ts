@@ -164,6 +164,29 @@ export function getLogsDir(): string {
   return dir;
 }
 
+function deepMerge(defaults: Record<string, unknown>, overrides: Record<string, unknown>): Record<string, unknown> {
+  const result = { ...defaults };
+  for (const key of Object.keys(overrides)) {
+    const val = overrides[key];
+    const def = defaults[key];
+    if (
+      val !== null &&
+      val !== undefined &&
+      typeof val === "object" &&
+      !Array.isArray(val) &&
+      def !== null &&
+      def !== undefined &&
+      typeof def === "object" &&
+      !Array.isArray(def)
+    ) {
+      result[key] = deepMerge(def as Record<string, unknown>, val as Record<string, unknown>);
+    } else if (val !== undefined) {
+      result[key] = val;
+    }
+  }
+  return result;
+}
+
 export function loadConfig(): VigilConfig {
   const configPath = join(getConfigDir(), "config.json");
   if (!existsSync(configPath)) {
@@ -172,7 +195,10 @@ export function loadConfig(): VigilConfig {
   }
   try {
     const raw = readFileSync(configPath, "utf-8");
-    return { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
+    return deepMerge(
+      DEFAULT_CONFIG as unknown as Record<string, unknown>,
+      JSON.parse(raw),
+    ) as unknown as VigilConfig;
   } catch {
     return { ...DEFAULT_CONFIG };
   }

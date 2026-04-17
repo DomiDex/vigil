@@ -150,6 +150,70 @@ describe("config", () => {
     }
   });
 
+  it("partial nested override preserves sibling defaults (specialists)", async () => {
+    const { getConfigDir, loadConfig } = await import("../../core/config.ts");
+    const dir = getConfigDir();
+    writeFileSync(
+      join(dir, "config.json"),
+      JSON.stringify({ specialists: { enabled: false } }),
+    );
+    const config = loadConfig();
+    // User override applied
+    expect(config.specialists.enabled).toBe(false);
+    // Sibling defaults preserved
+    expect(config.specialists.agents).toEqual(["code-review", "security", "test-drift", "flaky-test"]);
+    expect(config.specialists.maxParallel).toBe(2);
+    expect(config.specialists.cooldownSeconds).toBe(300);
+    // Nested sub-objects preserved
+    expect(config.specialists.flakyTest.testCommand).toBe("bun test");
+    expect(config.specialists.autoAction.enabled).toBe(false);
+  });
+
+  it("deeply nested override preserves sibling defaults (specialists.flakyTest)", async () => {
+    const { getConfigDir, loadConfig } = await import("../../core/config.ts");
+    const dir = getConfigDir();
+    writeFileSync(
+      join(dir, "config.json"),
+      JSON.stringify({ specialists: { flakyTest: { testCommand: "npm test" } } }),
+    );
+    const config = loadConfig();
+    // Deep override applied
+    expect(config.specialists.flakyTest.testCommand).toBe("npm test");
+    // Sibling defaults within flakyTest preserved
+    expect(config.specialists.flakyTest.runOnCommit).toBe(true);
+    expect(config.specialists.flakyTest.minRunsToJudge).toBe(3);
+    // Parent-level siblings preserved
+    expect(config.specialists.enabled).toBe(true);
+    expect(config.specialists.agents).toEqual(["code-review", "security", "test-drift", "flaky-test"]);
+  });
+
+  it("partial nested override preserves sibling defaults (push)", async () => {
+    const { getConfigDir, loadConfig } = await import("../../core/config.ts");
+    const dir = getConfigDir();
+    writeFileSync(
+      join(dir, "config.json"),
+      JSON.stringify({ push: { enabled: true } }),
+    );
+    const config = loadConfig();
+    expect(config.push.enabled).toBe(true);
+    expect(config.push.minSeverity).toBe("warning");
+    expect(config.push.maxPerHour).toBe(10);
+    expect(config.push.statuses).toEqual(["alert", "proactive"]);
+  });
+
+  it("array overrides replace entirely (not merged)", async () => {
+    const { getConfigDir, loadConfig } = await import("../../core/config.ts");
+    const dir = getConfigDir();
+    writeFileSync(
+      join(dir, "config.json"),
+      JSON.stringify({ specialists: { agents: ["code-review"] } }),
+    );
+    const config = loadConfig();
+    expect(config.specialists.agents).toEqual(["code-review"]);
+    // Other defaults still present
+    expect(config.specialists.enabled).toBe(true);
+  });
+
   it("getApiKey returns undefined when unset", async () => {
     const originalKey = process.env.ANTHROPIC_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
