@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Play, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -65,7 +65,10 @@ export default function FlakyTestsTab() {
   const tests = response?.tests ?? [];
   const summary = response?.summary;
 
-  const repos = [...new Set(tests.map((t) => t.repo))];
+  const repos = useMemo(
+    () => [...new Set(tests.map((t) => t.repo))],
+    [tests],
+  );
 
   const runMut = useMutation({
     mutationFn: (repo: string) => runFlakyTests({ data: { repo } }),
@@ -142,7 +145,16 @@ export default function FlakyTestsTab() {
             const repo = repoFilter !== "all" ? repoFilter : repos[0];
             if (repo) runMut.mutate(repo);
           }}
-          disabled={runMut.isPending || repos.length === 0}
+          disabled={
+            runMut.isPending ||
+            repos.length === 0 ||
+            (repoFilter === "all" && repos.length > 1)
+          }
+          title={
+            repoFilter === "all" && repos.length > 1
+              ? "Pick a repo to run"
+              : undefined
+          }
         >
           {runMut.isPending ? (
             <Loader2 className="size-3 mr-1 animate-spin" />
@@ -170,7 +182,7 @@ export default function FlakyTestsTab() {
               {tests.map((t) => {
                 const status = getStatusBadge(t);
                 return (
-                  <TableRow key={`${t.repo}-${t.testName}`}>
+                  <TableRow key={`${t.repo}-${t.testFile}-${t.testName}`}>
                     <TableCell
                       className="text-xs font-mono max-w-[300px] truncate"
                       title={t.testName}
@@ -202,7 +214,10 @@ export default function FlakyTestsTab() {
                         className="size-6"
                         title="Reset flaky data"
                         onClick={() => resetMut.mutate(t.testName)}
-                        disabled={resetMut.isPending}
+                        disabled={
+                          resetMut.isPending &&
+                          resetMut.variables === t.testName
+                        }
                       >
                         <Trash2 className="size-3 text-muted-foreground" />
                       </Button>
