@@ -101,10 +101,13 @@ describe("computeFlakiness", () => {
 
     // passRate 0.4 with strict threshold 0.3 → 0.4 > (1 - 0.3) = 0.7 is false, 0.4 < 0.7 true → flaky
     // (Tightening the threshold flips marginal cases into flaky territory.)
-    const strict = computeFlakiness({ ...base, total_passes: 4, total_failures: 6 }, {
-      minRunsToJudge: 3,
-      flakyThreshold: 0.3,
-    });
+    const strict = computeFlakiness(
+      { ...base, total_passes: 4, total_failures: 6 },
+      {
+        minRunsToJudge: 3,
+        flakyThreshold: 0.3,
+      },
+    );
     expect(strict).not.toBeNull();
     expect(strict!.isFlakyStatistical).toBe(true);
   });

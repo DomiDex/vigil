@@ -8,33 +8,32 @@ export interface ParsedTestResult {
 
 // ── JUnit XML Parser (primary) ──
 
+// Matches both self-closing <testcase ... /> and <testcase ...>...</testcase>.
+// Group 1 = attributes blob, group 3 = body (empty for self-closing).
+const TESTCASE_REGEX = /<testcase\b([^>]*?)(\/>|>([\s\S]*?)<\/testcase>)/g;
+const ATTR_REGEX = /(\w+)="([^"]*)"/g;
+const FAILURE_REGEX = /<(?:failure|error)\b[^>]*>([\s\S]*?)<\/(?:failure|error)>/;
+
+function parseAttrs(attrStr: string): Record<string, string> {
+  const attrs: Record<string, string> = {};
+  for (const m of attrStr.matchAll(ATTR_REGEX)) attrs[m[1]] = m[2];
+  return attrs;
+}
+
 export function parseJUnitXML(xml: string): ParsedTestResult[] {
   const results: ParsedTestResult[] = [];
-  // Matches both self-closing <testcase ... /> and <testcase ...>...</testcase>.
-  // Group 1 captures the attribute blob; group 3 captures the body (empty for self-closing).
-  const testcaseRegex = /<testcase\b([^>]*?)(\/>|>([\s\S]*?)<\/testcase>)/g;
-  const attrRegex = /(\w+)="([^"]*)"/g;
-  const failureRegex = /<(?:failure|error)\b[^>]*>([\s\S]*?)<\/(?:failure|error)>/;
-
-  let match: RegExpExecArray | null;
-  while ((match = testcaseRegex.exec(xml)) !== null) {
-    const attrStr = match[1];
-    const body = match[3] ?? "";
-
-    const attrs: Record<string, string> = {};
-    let a: RegExpExecArray | null;
-    attrRegex.lastIndex = 0;
-    while ((a = attrRegex.exec(attrStr)) !== null) attrs[a[1]] = a[2];
-
+  for (const match of xml.matchAll(TESTCASE_REGEX)) {
+    const attrs = parseAttrs(match[1]);
     const name = attrs.name;
     if (!name) continue;
+
     const classname = attrs.classname ?? "";
-    const file = attrs.file || classname;
-    const failMatch = body ? failureRegex.exec(body) : null;
+    const body = match[3] ?? "";
+    const failMatch = body ? FAILURE_REGEX.exec(body) : null;
 
     results.push({
       name: classname ? `${classname} > ${name}` : name,
-      file,
+      file: attrs.file || classname,
       passed: !failMatch,
       durationMs: attrs.time ? Number.parseFloat(attrs.time) * 1000 : undefined,
       error: failMatch ? failMatch[1].trim() : undefined,
@@ -45,7 +44,8 @@ export function parseJUnitXML(xml: string): ParsedTestResult[] {
 
 // ── Console Output Parser (fallback) ──
 
-const ANSI_REGEX = /\u001b\[[0-9;]*m/g;
+// Biome flags \u001b literally in a regex (noControlCharactersInRegex). Build at runtime instead.
+const ANSI_REGEX = new RegExp(`${String.fromCharCode(0x1b)}\\[[0-9;]*m`, "g");
 
 export function parseBunTestOutput(output: string): ParsedTestResult[] {
   const results: ParsedTestResult[] = [];

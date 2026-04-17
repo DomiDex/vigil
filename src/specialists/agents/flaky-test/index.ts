@@ -3,7 +3,7 @@ import { unlinkSync } from "node:fs";
 import type { VigilConfig } from "../../../core/config.ts";
 import type { SpecialistStore } from "../../store.ts";
 import type { Finding, SpecialistConfig, SpecialistContext, SpecialistResult, TestRunResult } from "../../types.ts";
-import { getParser, parseJUnitXML, type ParsedTestResult } from "./parser.ts";
+import { getParser, type ParsedTestResult, parseJUnitXML } from "./parser.ts";
 import { computeFlakiness } from "./scorer.ts";
 
 type TestRunResultWithJunit = TestRunResult & { junitXml?: string };
@@ -97,11 +97,7 @@ export function createFlakyTestAgent(store: SpecialistStore, config: VigilConfig
 }
 
 /** Run tests with JUnit reporter for structured output */
-async function runTests(
-  repoPath: string,
-  testCommand: string,
-  timeout: number,
-): Promise<TestRunResultWithJunit> {
+async function runTests(repoPath: string, testCommand: string, timeout: number): Promise<TestRunResultWithJunit> {
   const junitPath = `/tmp/vigil-test-${randomUUID()}.xml`;
   const parts = testCommand.split(" ");
   const fullArgs = [...parts, "--reporter=junit", `--reporter-outfile=${junitPath}`];
@@ -115,10 +111,7 @@ async function runTests(
   });
 
   const timer = setTimeout(() => proc.kill(), timeout);
-  const [stdout, stderr] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-  ]);
+  const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
   clearTimeout(timer);
   const exitCode = await proc.exited;
 
