@@ -41,6 +41,22 @@ import {
   handleSchedulerDelete,
   handleSchedulerTrigger,
 } from "./api/scheduler.ts";
+import {
+  getFlakyTestsJSON,
+  getSpecialistDetailJSON,
+  getSpecialistFindingDetailJSON,
+  getSpecialistFindingsJSON,
+  getSpecialistsJSON,
+  handleFindingCreateAction,
+  handleFindingDismiss,
+  handleFlakyTestReset,
+  handleFlakyTestRun,
+  handleSpecialistCreate,
+  handleSpecialistDelete,
+  handleSpecialistRun,
+  handleSpecialistToggle,
+  handleSpecialistUpdate,
+} from "./api/specialists.ts";
 import { SSEManager, wireSSE } from "./api/sse.ts";
 import {
   getTasksJSON,
@@ -461,6 +477,99 @@ export async function startDashboard(daemon: Daemon, port = 7480): Promise<Retur
       }
       if (path === "/api/agents" && req.method === "GET") {
         return json(await getAgentsJSON(ctx));
+      }
+
+      // --- Specialists API ---
+      // IMPORTANT: Specific paths must be checked before parameterized /:name catch-all
+
+      // Findings sub-routes (before /:name)
+      const findingDismissMatch = path.match(/^\/api\/specialists\/findings\/([^/]+)\/dismiss$/);
+      if (findingDismissMatch && req.method === "POST") {
+        const body = await req.json().catch(() => null);
+        const result = handleFindingDismiss(ctx, decodeURIComponent(findingDismissMatch[1]), body);
+        return json(result, result.error ? 404 : 200);
+      }
+      const findingActionMatch = path.match(/^\/api\/specialists\/findings\/([^/]+)\/action$/);
+      if (findingActionMatch && req.method === "POST") {
+        const body = await req.json().catch(() => null);
+        const result = await handleFindingCreateAction(ctx, decodeURIComponent(findingActionMatch[1]), body);
+        return json(result, result.error ? 404 : 200);
+      }
+      const findingDetailMatch = path.match(/^\/api\/specialists\/findings\/([^/]+)$/);
+      if (findingDetailMatch && req.method === "GET") {
+        const detail = getSpecialistFindingDetailJSON(ctx, decodeURIComponent(findingDetailMatch[1]));
+        if (!detail) return json({ error: "Finding not found" }, 404);
+        return json(detail);
+      }
+      if (path === "/api/specialists/findings" && req.method === "GET") {
+        return json(getSpecialistFindingsJSON(ctx, url));
+      }
+
+      // Flaky test sub-routes (before /:name)
+      if (path === "/api/specialists/flaky/run" && req.method === "POST") {
+        const body = await req.json().catch(() => null);
+        if (!body) return json({ error: "Invalid JSON body" }, 400);
+        const result = await handleFlakyTestRun(ctx, body);
+        return json(result, result.error ? 400 : 200);
+      }
+      const flakyResetMatch = path.match(/^\/api\/specialists\/flaky\/([^/]+)$/);
+      if (flakyResetMatch && req.method === "DELETE") {
+        const repo = url.searchParams.get("repo") || undefined;
+        const result = handleFlakyTestReset(ctx, decodeURIComponent(flakyResetMatch[1]), repo);
+        if (result.error === "Flaky test not found") return json(result, 404);
+        return json(result, result.error ? 400 : 200);
+      }
+      if (path === "/api/specialists/flaky" && req.method === "GET") {
+        return json(getFlakyTestsJSON(ctx, url));
+      }
+
+      // Parameterized /:name sub-routes
+      const specialistToggleMatch = path.match(/^\/api\/specialists\/([^/]+)\/toggle$/);
+      if (specialistToggleMatch && req.method === "POST") {
+        const body = await req.json().catch(() => null);
+        const result = handleSpecialistToggle(ctx, decodeURIComponent(specialistToggleMatch[1]), body);
+        if (!result) return json({ error: "Specialist not found" }, 404);
+        return json(result);
+      }
+      const specialistRunMatch = path.match(/^\/api\/specialists\/([^/]+)\/run$/);
+      if (specialistRunMatch && req.method === "POST") {
+        const body = await req.json().catch(() => null);
+        const result = await handleSpecialistRun(ctx, decodeURIComponent(specialistRunMatch[1]), body);
+        if (!result) return json({ error: "Specialist not found" }, 404);
+        return json(result, (result as { error?: string }).error ? 400 : 200);
+      }
+
+      // /:name catch-all (GET detail, PUT update, DELETE remove)
+      const specialistNameMatch = path.match(/^\/api\/specialists\/([^/]+)$/);
+      if (specialistNameMatch) {
+        const name = decodeURIComponent(specialistNameMatch[1]);
+        if (req.method === "GET") {
+          const detail = getSpecialistDetailJSON(ctx, name);
+          if (!detail) return json({ error: "Specialist not found" }, 404);
+          return json(detail);
+        }
+        if (req.method === "PUT") {
+          const body = await req.json().catch(() => null);
+          if (!body) return json({ error: "Invalid JSON body" }, 400);
+          const result = handleSpecialistUpdate(ctx, name, body);
+          if (!result) return json({ error: "Specialist not found" }, 404);
+          return json(result);
+        }
+        if (req.method === "DELETE") {
+          const result = handleSpecialistDelete(ctx, name);
+          return json(result, result.error ? 400 : 200);
+        }
+      }
+
+      // Collection root (GET list, POST create)
+      if (path === "/api/specialists" && req.method === "GET") {
+        return json(getSpecialistsJSON(ctx));
+      }
+      if (path === "/api/specialists" && req.method === "POST") {
+        const body = await req.json().catch(() => null);
+        if (!body) return json({ error: "Invalid JSON body" }, 400);
+        const result = handleSpecialistCreate(ctx, body);
+        return json(result, result.error ? 400 : 200);
       }
 
       // --- Health API ---
