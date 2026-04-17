@@ -195,10 +195,7 @@ export function loadConfig(): VigilConfig {
   }
   try {
     const raw = readFileSync(configPath, "utf-8");
-    return deepMerge(
-      DEFAULT_CONFIG as unknown as Record<string, unknown>,
-      JSON.parse(raw),
-    ) as unknown as VigilConfig;
+    return deepMerge(DEFAULT_CONFIG as unknown as Record<string, unknown>, JSON.parse(raw)) as unknown as VigilConfig;
   } catch {
     return { ...DEFAULT_CONFIG };
   }
