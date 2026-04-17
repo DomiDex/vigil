@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 
 // These will be imported from the actual implementation once created
 // For now, inline them to validate the test structure works
@@ -11,13 +11,9 @@ const RANGE_MS: Record<string, number> = {
   "30d": 2_592_000_000,
 };
 
-function metricsToCSV(
-  data: { time: string; SILENT: number; OBSERVE: number; NOTIFY: number; ACT: number }[]
-): string {
+function metricsToCSV(data: { time: string; SILENT: number; OBSERVE: number; NOTIFY: number; ACT: number }[]): string {
   const header = "time,SILENT,OBSERVE,NOTIFY,ACT";
-  const rows = data.map(
-    (d) => `${d.time},${d.SILENT},${d.OBSERVE},${d.NOTIFY},${d.ACT}`
-  );
+  const rows = data.map((d) => `${d.time},${d.SILENT},${d.OBSERVE},${d.NOTIFY},${d.ACT}`);
   return [header, ...rows].join("\n");
 }
 
@@ -26,7 +22,7 @@ function formatBytes(bytes: number): string {
   const k = 1024;
   const sizes = ["Bytes", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+  return `${parseFloat((bytes / k ** i).toFixed(2))} ${sizes[i]}`;
 }
 
 describe("Phase 8: RANGE_MS mapping", () => {
@@ -75,18 +71,14 @@ describe("Phase 8: metricsToCSV", () => {
   });
 
   test("handles single row", () => {
-    const csv = metricsToCSV([
-      { time: "2026-04-10T14:00:00Z", SILENT: 1, OBSERVE: 0, NOTIFY: 0, ACT: 0 },
-    ]);
+    const csv = metricsToCSV([{ time: "2026-04-10T14:00:00Z", SILENT: 1, OBSERVE: 0, NOTIFY: 0, ACT: 0 }]);
 
     const lines = csv.split("\n");
     expect(lines.length).toBe(2);
   });
 
   test("handles zero values in all columns", () => {
-    const csv = metricsToCSV([
-      { time: "2026-04-10T14:00:00Z", SILENT: 0, OBSERVE: 0, NOTIFY: 0, ACT: 0 },
-    ]);
+    const csv = metricsToCSV([{ time: "2026-04-10T14:00:00Z", SILENT: 0, OBSERVE: 0, NOTIFY: 0, ACT: 0 }]);
 
     expect(csv).toContain(",0,0,0,0");
   });
@@ -129,7 +121,7 @@ describe("Phase 8: formatBytes", () => {
 describe("Phase 8: Date range filter button state", () => {
   test("active range returns 'default' variant", () => {
     const selectedRange = "24h";
-    const getVariant = (range: string) => range === selectedRange ? "default" : "outline";
+    const getVariant = (range: string) => (range === selectedRange ? "default" : "outline");
 
     expect(getVariant("24h")).toBe("default");
     expect(getVariant("1h")).toBe("outline");

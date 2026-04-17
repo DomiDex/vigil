@@ -78,19 +78,29 @@ export function handleChannelTest(
   return result;
 }
 
-const permissionsUpdateSchema = z.object({
-  read: z.boolean(),
-  write: z.boolean(),
-  execute: z.boolean(),
-  admin: z.boolean(),
-  subscribe: z.boolean(),
-}).strict();
+const permissionsUpdateSchema = z
+  .object({
+    read: z.boolean(),
+    write: z.boolean(),
+    execute: z.boolean(),
+    admin: z.boolean(),
+    subscribe: z.boolean(),
+  })
+  .strict();
 
 export function handleChannelPermissionsUpdate(
   ctx: DashboardContext,
   channelId: string,
   body: unknown,
-): { channelId?: string; error?: string; read?: boolean; write?: boolean; execute?: boolean; admin?: boolean; subscribe?: boolean } | null {
+): {
+  channelId?: string;
+  error?: string;
+  read?: boolean;
+  write?: boolean;
+  execute?: boolean;
+  admin?: boolean;
+  subscribe?: boolean;
+} | null {
   const parsed = permissionsUpdateSchema.safeParse(body);
   if (!parsed.success) {
     return { error: parsed.error.issues.map((i) => i.message).join("; ") };

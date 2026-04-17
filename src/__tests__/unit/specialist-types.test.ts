@@ -1,12 +1,9 @@
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type {
-  SpecialistName,
-  SpecialistClass,
-  FindingSeverity,
-  SpecialistConfig,
-  SpecialistContext,
-  TestRunResult,
   Finding,
+  FindingSeverity,
+  SpecialistContext,
+  SpecialistName,
   SpecialistResult,
 } from "../../specialists/types.ts";
 

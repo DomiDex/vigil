@@ -1,7 +1,7 @@
 // src/__tests__/integration/phase9-preview-api.test.ts
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { createFakeDashboardContext } from "../helpers/fake-dashboard-context";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { startDashboard } from "../../dashboard/server";
+import { createFakeDashboardContext } from "../helpers/fake-dashboard-context";
 
 let server: ReturnType<typeof Bun.serve>;
 let port: number;

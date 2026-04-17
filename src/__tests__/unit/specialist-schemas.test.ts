@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { FindingSchema, SpecialistResponseSchema } from "../../specialists/schemas.ts";
 
 describe("FindingSchema", () => {
@@ -43,7 +43,7 @@ describe("FindingSchema", () => {
         severity: "extreme",
         title: "Test",
         detail: "Detail",
-      })
+      }),
     ).toThrow();
   });
 
@@ -51,7 +51,7 @@ describe("FindingSchema", () => {
     expect(() =>
       FindingSchema.parse({
         severity: "info",
-      })
+      }),
     ).toThrow();
   });
 });
@@ -59,9 +59,7 @@ describe("FindingSchema", () => {
 describe("SpecialistResponseSchema", () => {
   test("parses valid response with findings", () => {
     const result = SpecialistResponseSchema.parse({
-      findings: [
-        { severity: "warning", title: "Issue", detail: "Details" },
-      ],
+      findings: [{ severity: "warning", title: "Issue", detail: "Details" }],
       confidence: 0.85,
     });
     expect(result.findings).toHaveLength(1);
@@ -83,14 +81,14 @@ describe("SpecialistResponseSchema", () => {
       SpecialistResponseSchema.parse({
         findings: [],
         confidence: 1.5,
-      })
+      }),
     ).toThrow();
 
     expect(() =>
       SpecialistResponseSchema.parse({
         findings: [],
         confidence: -0.1,
-      })
+      }),
     ).toThrow();
   });
 
@@ -99,7 +97,7 @@ describe("SpecialistResponseSchema", () => {
       SpecialistResponseSchema.parse({
         findings: "not an array",
         confidence: 0.5,
-      })
+      }),
     ).toThrow();
   });
 });

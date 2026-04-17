@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { z } from "zod";
 
 const metricsQuerySchema = z.object({
@@ -67,7 +67,7 @@ describe("Phase 8: Metrics filtering logic", () => {
 
     const from = 2000;
     const to = 3000;
-    const filtered = events.filter(e => e.timestamp >= from && e.timestamp <= to);
+    const filtered = events.filter((e) => e.timestamp >= from && e.timestamp <= to);
 
     expect(filtered.length).toBe(2);
     expect(filtered[0].decision).toBe("OBSERVE");
@@ -82,9 +82,8 @@ describe("Phase 8: Metrics filtering logic", () => {
 
     const from = undefined;
     const to = undefined;
-    const filtered = events.filter(e =>
-      (from === undefined || e.timestamp >= from) &&
-      (to === undefined || e.timestamp <= to)
+    const filtered = events.filter(
+      (e) => (from === undefined || e.timestamp >= from) && (to === undefined || e.timestamp <= to),
     );
 
     expect(filtered.length).toBe(2);

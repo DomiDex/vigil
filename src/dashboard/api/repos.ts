@@ -214,10 +214,7 @@ export async function getRepoDetailJSON(ctx: DashboardContext, repoName: string)
 
 // ── API: POST /api/repos ────────────────────────
 
-export async function addRepoJSON(
-  ctx: DashboardContext,
-  path: string,
-): Promise<{ success: boolean; error?: string }> {
+export async function addRepoJSON(ctx: DashboardContext, path: string): Promise<{ success: boolean; error?: string }> {
   const absPath = resolve(path);
 
   if (!existsSync(absPath)) {
@@ -246,10 +243,7 @@ export async function addRepoJSON(
 
 // ── API: DELETE /api/repos/:name ────────────────
 
-export function removeRepoJSON(
-  ctx: DashboardContext,
-  repoName: string,
-): { success: boolean; error?: string } {
+export function removeRepoJSON(ctx: DashboardContext, repoName: string): { success: boolean; error?: string } {
   const repoPath = ctx.daemon.repoPaths.find((p) => repoNameFromPath(p) === repoName);
   if (!repoPath) {
     return { success: false, error: `Repo not found: ${repoName}` };

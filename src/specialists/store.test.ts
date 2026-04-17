@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { describe, test, expect, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { SpecialistStore } from "./store.ts";
 
 function makeFinding(overrides?: Record<string, unknown>) {

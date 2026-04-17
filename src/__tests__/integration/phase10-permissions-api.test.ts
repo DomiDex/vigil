@@ -1,7 +1,7 @@
 // src/__tests__/integration/phase10-permissions-api.test.ts
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { createFakeDashboardContext } from "../helpers/fake-dashboard-context";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { startDashboard } from "../../dashboard/server";
+import { createFakeDashboardContext } from "../helpers/fake-dashboard-context";
 
 let server: ReturnType<typeof Bun.serve>;
 let port: number;
@@ -103,7 +103,11 @@ describe("Phase 10: channel permissions PATCH endpoint", () => {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        read: true, write: true, execute: false, admin: false, subscribe: true,
+        read: true,
+        write: true,
+        execute: false,
+        admin: false,
+        subscribe: true,
       }),
     });
     expect(res.status).toBe(404);

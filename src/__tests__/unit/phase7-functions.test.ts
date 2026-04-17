@@ -1,18 +1,26 @@
-import { describe, test, expect, beforeEach, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-// Mock fetch before importing functions
-const mockFetch = mock(() =>
-  Promise.resolve(
-    new Response(JSON.stringify({ id: 1, success: true }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    })
-  )
-);
+// Intercept only localhost:7480 API calls, letting real fetch pass through.
+const origFetch = globalThis.fetch;
+let calls: [string, RequestInit | undefined][];
 
 beforeEach(() => {
-  globalThis.fetch = mockFetch as any;
-  mockFetch.mockClear();
+  calls = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input.toString();
+    if (url.startsWith("http://localhost:7480/")) {
+      calls.push([url, init]);
+      return new Response(JSON.stringify({ id: 1, success: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    return origFetch(input, init);
+  }) as typeof fetch;
+});
+
+afterEach(() => {
+  globalThis.fetch = origFetch;
 });
 
 describe("Phase 7: createMemory wrapper", () => {
@@ -24,11 +32,11 @@ describe("Phase 7: createMemory wrapper", () => {
 
     await createMemory({ data });
 
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(calls).toHaveLength(1);
+    const [url, init] = calls[0];
     expect(url).toContain("/api/memory");
-    expect(init.method).toBe("POST");
-    expect(init.body).toBeInstanceOf(FormData);
+    expect(init?.method).toBe("POST");
+    expect(init?.body).toBeInstanceOf(FormData);
   });
 });
 
@@ -38,10 +46,10 @@ describe("Phase 7: deleteMemory wrapper", () => {
 
     await deleteMemory({ id: 42 });
 
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(calls).toHaveLength(1);
+    const [url, init] = calls[0];
     expect(url).toContain("/api/memory/42");
-    expect(init.method).toBe("DELETE");
+    expect(init?.method).toBe("DELETE");
   });
 });
 
@@ -51,13 +59,13 @@ describe("Phase 7: updateMemoryRelevance wrapper", () => {
 
     await updateMemoryRelevance({ id: 7, data: { relevant: true } });
 
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(calls).toHaveLength(1);
+    const [url, init] = calls[0];
     expect(url).toContain("/api/memory/7");
-    expect(init.method).toBe("PATCH");
-    expect(init.headers).toEqual(expect.objectContaining({ "Content-Type": "application/json" }));
+    expect(init?.method).toBe("PATCH");
+    expect(init?.headers).toEqual(expect.objectContaining({ "Content-Type": "application/json" }));
 
-    const body = JSON.parse(init.body as string);
+    const body = JSON.parse(init?.body as string);
     expect(body.relevant).toBe(true);
   });
 
@@ -66,8 +74,8 @@ describe("Phase 7: updateMemoryRelevance wrapper", () => {
 
     await updateMemoryRelevance({ id: 7, data: { relevant: false } });
 
-    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
-    const body = JSON.parse(init.body as string);
+    const [, init] = calls[0];
+    const body = JSON.parse(init?.body as string);
     expect(body.relevant).toBe(false);
   });
 });

@@ -137,7 +137,7 @@ export function resetCircuitBreaker(): void {
   llmBreaker.reset();
 }
 
-async function callClaude(prompt: string, systemPrompt: string, model?: string): Promise<string> {
+export async function callClaude(prompt: string, systemPrompt: string, model?: string): Promise<string> {
   if (!llmBreaker.canCall()) {
     console.warn(
       `[circuit-breaker] LLM calls suspended (${llmBreaker.getFailureCount()} failures, state=${llmBreaker.getState()}). Retrying after cooldown.`,

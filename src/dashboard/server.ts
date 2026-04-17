@@ -2,20 +2,26 @@ import { corePlugins } from "../../dashboard-v2/src/plugins/index.ts";
 import { setVigilContext } from "../../dashboard-v2/src/server/vigil-context.ts";
 import type { Daemon } from "../core/daemon.ts";
 import { getA2AHistoryJSON, getA2ASkillsJSON, getA2AStatusJSON } from "./api/a2a-status.ts";
-import { getActionsJSON, getActionsPendingJSON, getActionPreviewJSON, handleApprove, handleReject } from "./api/actions.ts";
+import {
+  getActionPreviewJSON,
+  getActionsJSON,
+  getActionsPendingJSON,
+  handleApprove,
+  handleReject,
+} from "./api/actions.ts";
 import { getAgentsJSON, getCurrentAgentJSON, handleAgentSwitch } from "./api/agents.ts";
 import {
   getChannelPermissionsJSON,
   getChannelQueueJSON,
   getChannelsJSON,
   handleChannelDelete,
+  handleChannelPermissionsUpdate,
   handleChannelRegister,
   handleChannelTest,
-  handleChannelPermissionsUpdate,
 } from "./api/channels.ts";
 import { getConfigJSON, getFeatureGatesJSON, handleConfigUpdate, handleFeatureToggle } from "./api/config.ts";
 import { getDreamPatternsJSON, getDreamsJSON, handleDreamTrigger } from "./api/dreams.ts";
-import { getHealthJSON, handleVacuum, handlePrune } from "./api/health.ts";
+import { getHealthJSON, handlePrune, handleVacuum } from "./api/health.ts";
 import {
   getMemoryJSON,
   getMemorySearchJSON,
@@ -27,8 +33,8 @@ import {
 import { getMetricsJSON } from "./api/metrics.ts";
 import { getNotificationsJSON, handleNotificationRulesUpdate, handleTestNotification } from "./api/notifications.ts";
 import { getOverviewJSON } from "./api/overview.ts";
-import { getRepoDiffJSON } from "./api/repos-diff.ts";
 import { addRepoJSON, getRepoDetailJSON, getReposJSON, removeRepoJSON } from "./api/repos.ts";
+import { getRepoDiffJSON } from "./api/repos-diff.ts";
 import {
   getSchedulerJSON,
   handleSchedulerCreate,
@@ -47,8 +53,8 @@ import {
 } from "./api/tasks.ts";
 import { getTimelineJSON, handleReply } from "./api/timeline.ts";
 import {
-  getWebhookEventsJSON,
   getWebhookEventDetailJSON,
+  getWebhookEventsJSON,
   getWebhookStatusJSON,
   getWebhookSubscriptionsJSON,
   handleSubscriptionCreate,
@@ -132,8 +138,14 @@ export async function startDashboard(daemon: Daemon, port = 7480): Promise<Retur
         const fromParam = url.searchParams.get("from");
         const toParam = url.searchParams.get("to");
         const opts: { from?: number; to?: number } = {};
-        if (fromParam) { const n = Number(fromParam); if (!Number.isNaN(n)) opts.from = n; }
-        if (toParam) { const n = Number(toParam); if (!Number.isNaN(n)) opts.to = n; }
+        if (fromParam) {
+          const n = Number(fromParam);
+          if (!Number.isNaN(n)) opts.from = n;
+        }
+        if (toParam) {
+          const n = Number(toParam);
+          if (!Number.isNaN(n)) opts.to = n;
+        }
         return json(getMetricsJSON(ctx, Object.keys(opts).length > 0 ? opts : undefined));
       }
 
@@ -197,7 +209,12 @@ export async function startDashboard(daemon: Daemon, port = 7480): Promise<Retur
         const content = body.get("content")?.toString() || "";
         const repo = body.get("repo")?.toString() || undefined;
         const tagsRaw = body.get("tags")?.toString();
-        const tags = tagsRaw ? tagsRaw.split(",").map((t) => t.trim()).filter(Boolean) : undefined;
+        const tags = tagsRaw
+          ? tagsRaw
+              .split(",")
+              .map((t) => t.trim())
+              .filter(Boolean)
+          : undefined;
         const result = handleMemoryCreate(ctx, { content, repo, tags });
         return json(result, result.error ? 400 : 201);
       }

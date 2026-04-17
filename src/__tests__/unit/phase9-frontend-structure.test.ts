@@ -1,5 +1,5 @@
 // src/__tests__/unit/phase9-frontend-structure.test.ts
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 
 const DASHBOARD_V2 = join(import.meta.dir, "../../../dashboard-v2");
