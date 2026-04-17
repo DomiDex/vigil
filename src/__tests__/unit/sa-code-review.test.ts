@@ -1,6 +1,6 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { CODE_REVIEW_AGENT } from "../../specialists/agents/code-review.ts";
-import type { SpecialistContext, Finding } from "../../specialists/types.ts";
+import type { Finding, SpecialistContext } from "../../specialists/types.ts";
 
 function createMockContext(overrides: Partial<SpecialistContext> = {}): SpecialistContext {
   return {
@@ -30,11 +30,7 @@ describe("CODE_REVIEW_AGENT", () => {
     });
 
     it("watches src/**/*.ts excluding test and spec files", () => {
-      expect(CODE_REVIEW_AGENT.watchPatterns).toEqual([
-        "src/**/*.ts",
-        "!src/**/*.test.ts",
-        "!src/**/*.spec.ts",
-      ]);
+      expect(CODE_REVIEW_AGENT.watchPatterns).toEqual(["src/**/*.ts", "!src/**/*.test.ts", "!src/**/*.spec.ts"]);
     });
 
     it("has a buildPrompt method", () => {

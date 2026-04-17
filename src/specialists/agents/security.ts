@@ -8,8 +8,7 @@ export const SECURITY_AGENT: SpecialistConfig = {
   watchPatterns: ["**/*.ts", "**/*.json", "**/*.env*", "**/*.yaml", "**/*.yml"],
 
   buildPrompt(context: SpecialistContext): string {
-    const recentTitles = context.recentFindings
-      .map(f => `- ${f.title}`).join("\n") || "(none)";
+    const recentTitles = context.recentFindings.map((f) => `- ${f.title}`).join("\n") || "(none)";
 
     return `You are a security auditor. Scan the git diff for vulnerabilities.
 

@@ -8,8 +8,7 @@ export const CODE_REVIEW_AGENT: SpecialistConfig = {
   watchPatterns: ["src/**/*.ts", "!src/**/*.test.ts", "!src/**/*.spec.ts"],
 
   buildPrompt(context: SpecialistContext): string {
-    const recentTitles = context.recentFindings
-      .map(f => `- ${f.title}`).join("\n") || "(none)";
+    const recentTitles = context.recentFindings.map((f) => `- ${f.title}`).join("\n") || "(none)";
 
     return `You are a senior code reviewer. Analyze the git diff below and report findings.
 

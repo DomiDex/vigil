@@ -34,29 +34,26 @@ export const TEST_DRIFT_AGENT: SpecialistConfig = {
   triggerEvents: ["new_commit", "file_change"],
 
   buildPrompt(context: SpecialistContext): string {
-    const sourceFiles = context.changedFiles.filter(f =>
-      f.endsWith(".ts") &&
-      !f.includes(".test.") &&
-      !f.includes(".spec.") &&
-      !f.includes("__tests__")
+    const sourceFiles = context.changedFiles.filter(
+      (f) => f.endsWith(".ts") && !f.includes(".test.") && !f.includes(".spec.") && !f.includes("__tests__"),
     );
 
-    const mapping = sourceFiles.map(f => {
+    const mapping = sourceFiles.map((f) => {
       const testFile = findTestFile(f, context.repoPath);
-      const testChanged = testFile
-        ? context.changedFiles.includes(testFile)
-        : false;
+      const testChanged = testFile ? context.changedFiles.includes(testFile) : false;
       return { source: f, test: testFile, testChanged };
     });
 
-    const mappingText = mapping.map(m =>
-      `- ${m.source} -> ${m.test ?? "(no test file found)"} ${
-        m.test ? (m.testChanged ? "(UPDATED)" : "(NOT updated)") : ""
-      }`
-    ).join("\n");
+    const mappingText = mapping
+      .map(
+        (m) =>
+          `- ${m.source} -> ${m.test ?? "(no test file found)"} ${
+            m.test ? (m.testChanged ? "(UPDATED)" : "(NOT updated)") : ""
+          }`,
+      )
+      .join("\n");
 
-    const recentTitles = context.recentFindings
-      .map(f => `- ${f.title}`).join("\n") || "(none)";
+    const recentTitles = context.recentFindings.map((f) => `- ${f.title}`).join("\n") || "(none)";
 
     return `You are a test coverage analyst. Given the changed source files and their corresponding test files, identify test drift.
 

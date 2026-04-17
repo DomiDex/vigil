@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TEST_DRIFT_AGENT, findTestFile } from "../../specialists/agents/test-drift.ts";
-import type { SpecialistContext, Finding } from "../../specialists/types.ts";
+import { findTestFile, TEST_DRIFT_AGENT } from "../../specialists/agents/test-drift.ts";
+import type { Finding, SpecialistContext } from "../../specialists/types.ts";
 
 function createMockContext(overrides: Partial<SpecialistContext> = {}): SpecialistContext {
   return {
@@ -135,8 +135,7 @@ describe("TEST_DRIFT_AGENT", () => {
     });
 
     it("shows (NOT updated) for source files whose tests did not change", () => {
-      let tempRepo: string;
-      tempRepo = mkdtempSync(join(tmpdir(), "vigil-prompt-"));
+      const tempRepo = mkdtempSync(join(tmpdir(), "vigil-prompt-"));
       mkdirSync(join(tempRepo, "src", "core"), { recursive: true });
       writeFileSync(join(tempRepo, "src", "core", "config.test.ts"), "");
 
@@ -151,8 +150,7 @@ describe("TEST_DRIFT_AGENT", () => {
     });
 
     it("shows (UPDATED) when test file is in changedFiles", () => {
-      let tempRepo: string;
-      tempRepo = mkdtempSync(join(tmpdir(), "vigil-prompt-"));
+      const tempRepo = mkdtempSync(join(tmpdir(), "vigil-prompt-"));
       mkdirSync(join(tempRepo, "src", "core"), { recursive: true });
       writeFileSync(join(tempRepo, "src", "core", "config.test.ts"), "");
 

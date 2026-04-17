@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import {
   BUILTIN_SPECIALISTS,
   CODE_REVIEW_AGENT,
@@ -12,7 +12,7 @@ describe("BUILTIN_SPECIALISTS registry", () => {
   });
 
   it("has correct agent names in order", () => {
-    const names = BUILTIN_SPECIALISTS.map(a => a.name);
+    const names = BUILTIN_SPECIALISTS.map((a) => a.name);
     expect(names).toEqual(["code-review", "security", "test-drift"]);
   });
 

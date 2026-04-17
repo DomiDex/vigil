@@ -1,6 +1,6 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { SECURITY_AGENT } from "../../specialists/agents/security.ts";
-import type { SpecialistContext, Finding } from "../../specialists/types.ts";
+import type { Finding, SpecialistContext } from "../../specialists/types.ts";
 
 function createMockContext(overrides: Partial<SpecialistContext> = {}): SpecialistContext {
   return {
@@ -30,13 +30,7 @@ describe("SECURITY_AGENT", () => {
     });
 
     it("watches broad file patterns including config and env files", () => {
-      expect(SECURITY_AGENT.watchPatterns).toEqual([
-        "**/*.ts",
-        "**/*.json",
-        "**/*.env*",
-        "**/*.yaml",
-        "**/*.yml",
-      ]);
+      expect(SECURITY_AGENT.watchPatterns).toEqual(["**/*.ts", "**/*.json", "**/*.env*", "**/*.yaml", "**/*.yml"]);
     });
 
     it("has a buildPrompt method", () => {
