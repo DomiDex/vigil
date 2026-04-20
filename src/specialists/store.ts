@@ -261,6 +261,21 @@ export class SpecialistStore {
       .run(Date.now(), ignorePattern ?? null, id);
   }
 
+  /**
+   * Soft-dismiss every non-dismissed finding authored by a specialist.
+   * Used when a specialist is deleted so its findings stop appearing in
+   * default ("not dismissed") queries, without losing the audit trail.
+   * Returns the number of rows marked dismissed.
+   */
+  dismissFindingsBySpecialist(specialist: string, reason = "specialist_deleted"): number {
+    const result = this.db
+      .query(
+        "UPDATE specialist_findings SET dismissed = 1, dismissed_at = ?1, ignore_pattern = COALESCE(ignore_pattern, ?2) WHERE specialist = ?3 AND dismissed = 0",
+      )
+      .run(Date.now(), `__${reason}__`, specialist);
+    return result.changes;
+  }
+
   getIgnorePatterns(specialist: string): string[] {
     const rows = this.db
       .query(
@@ -311,6 +326,28 @@ export class SpecialistStore {
     this.db
       .query("UPDATE specialist_configs SET enabled = ?1, updated_at = ?2 WHERE name = ?3")
       .run(enabled ? 1 : 0, Date.now(), name);
+  }
+
+  /**
+   * Batched per-specialist rollup used by the dashboard list view.
+   * One query returns total + last-run metadata for every specialist that
+   * has at least one finding, avoiding the N+1 fan-out of calling
+   * getSpecialistStats in a loop.
+   */
+  getSpecialistSummaries(): Map<string, { total: number; lastAt: number | null; lastRepo: string | null }> {
+    const rows = this.db
+      .query(
+        `SELECT f.specialist,
+                COUNT(*) as total,
+                MAX(f.created_at) as last_at,
+                (SELECT repo FROM specialist_findings f2
+                   WHERE f2.specialist = f.specialist
+                   ORDER BY created_at DESC LIMIT 1) as last_repo
+           FROM specialist_findings f
+          GROUP BY f.specialist`,
+      )
+      .all() as { specialist: string; total: number; last_at: number | null; last_repo: string | null }[];
+    return new Map(rows.map((r) => [r.specialist, { total: r.total, lastAt: r.last_at, lastRepo: r.last_repo }]));
   }
 
   getSpecialistStats(name: string): SpecialistStats {
@@ -408,8 +445,24 @@ export class SpecialistStore {
       .all(repo) as FlakinessRow[];
   }
 
-  resetFlakyTest(repo: string, testName: string): void {
-    this.db.query("DELETE FROM test_flakiness WHERE repo = ? AND test_name = ?").run(repo, testName);
+  /** All tracked tests, optionally filtered by repo. Unlike getFlakyTests, this
+   * includes stable + insufficient-data rows so the dashboard can render a full
+   * tracked-tests view and compute summary counts. */
+  getAllTrackedTests(repo?: string): FlakinessRow[] {
+    if (repo) {
+      return this.db
+        .query("SELECT * FROM test_flakiness WHERE repo = ? ORDER BY updated_at DESC")
+        .all(repo) as FlakinessRow[];
+    }
+    return this.db
+      .query("SELECT * FROM test_flakiness ORDER BY updated_at DESC")
+      .all() as FlakinessRow[];
+  }
+
+  /** Returns true if a row was deleted, false if no matching test existed. */
+  resetFlakyTest(repo: string, testName: string): boolean {
+    const result = this.db.query("DELETE FROM test_flakiness WHERE repo = ? AND test_name = ?").run(repo, testName);
+    return result.changes > 0;
   }
 
   pruneTestHistory(maxPerTest: number): void {

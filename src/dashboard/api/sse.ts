@@ -83,6 +83,24 @@ export function wireSSE(sse: SSEManager, ctx: DashboardContext): void {
     });
   });
 
+  // --- Specialist events (SA Phase 6) ---
+  // Daemon emits these when specialists produce findings / runs / flaky updates.
+  // Guarded via typeof check so tests with daemon stubs without .on() don't crash.
+  const daemonEmitter = daemon as unknown as {
+    on?: (event: string, cb: (data: unknown) => void) => void;
+  };
+  if (typeof daemonEmitter.on === "function") {
+    daemonEmitter.on("specialist_finding", (data: unknown) => {
+      sse.broadcast("specialist_finding", data);
+    });
+    daemonEmitter.on("specialist_run", (data: unknown) => {
+      sse.broadcast("specialist_run", data);
+    });
+    daemonEmitter.on("specialist_flaky_update", (data: unknown) => {
+      sse.broadcast("flaky_update", data);
+    });
+  }
+
   // Broadcast new messages via MessageRouter
   daemon.messageRouter.on("delivered", ({ message }: { message: any }) => {
     sse.broadcast("message", {

@@ -113,6 +113,9 @@ function createMockDaemon() {
           },
         ];
       },
+      getConsolidatedHistory(_options?: { repo?: string; limit?: number }) {
+        return [];
+      },
       // Expose mock db for pipeline stats
       db: {
         query(sql: string) {

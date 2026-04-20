@@ -1,68 +1,64 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { getDataDir } from "../../core/config.ts";
 import type { DashboardContext } from "../types.ts";
 
-// ── Helpers ──
+// A dream that has been "running" longer than this is treated as stale
+// (dreams complete in seconds; anything past an hour means the worker crashed
+// without cleaning up its lock).
+const DREAM_MAX_AGE_MS = 60 * 60 * 1000;
 
-interface DreamResult {
-  repo: string;
-  result: {
-    summary?: string;
-    insights?: string[];
-    patterns?: string[];
-    confidence?: number;
-  };
-  sourceIds: string[];
-  completedAt: number;
-}
-
-function loadDreamResults(): DreamResult[] {
-  const dataDir = getDataDir();
-  if (!existsSync(dataDir)) return [];
-
-  const files = readdirSync(dataDir).filter((f) => f.startsWith("dream-result-") && f.endsWith(".json"));
-  const results: DreamResult[] = [];
-
-  for (const file of files) {
-    try {
-      const content = readFileSync(join(dataDir, file), "utf-8");
-      results.push(JSON.parse(content));
-    } catch {
-      // Skip malformed files
-    }
+function isPidAlive(pid: number): boolean {
+  try {
+    // POSIX: signal 0 performs error checking without sending a signal.
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
   }
-
-  return results.sort((a, b) => b.completedAt - a.completedAt);
 }
 
 function isDreamRunning(): { running: boolean; repo?: string; pid?: number } {
   const lockPath = join(getDataDir(), "dream.lock");
   if (!existsSync(lockPath)) return { running: false };
 
+  let lock: { pid?: number; repo?: string; started?: number };
   try {
-    const lock = JSON.parse(readFileSync(lockPath, "utf-8"));
-    return { running: true, repo: lock.repo, pid: lock.pid };
+    lock = JSON.parse(readFileSync(lockPath, "utf-8"));
   } catch {
+    // Malformed lock — treat as stale and remove it.
+    try { unlinkSync(lockPath); } catch { /* concurrent cleanup is fine */ }
     return { running: false };
   }
+
+  const pidAlive = typeof lock.pid === "number" && isPidAlive(lock.pid);
+  const fresh = typeof lock.started === "number" && Date.now() - lock.started < DREAM_MAX_AGE_MS;
+
+  if (pidAlive && fresh) {
+    return { running: true, repo: lock.repo, pid: lock.pid };
+  }
+
+  // Stale: process is gone or the lock is too old. Clean up so the next
+  // trigger can start a fresh dream.
+  try { unlinkSync(lockPath); } catch { /* concurrent cleanup is fine */ }
+  return { running: false };
 }
 
 // ── GET /api/dreams ──
 
-export function getDreamsJSON(_ctx: DashboardContext) {
-  const dreams = loadDreamResults();
+export function getDreamsJSON(ctx: DashboardContext) {
+  const dreams = ctx.daemon.vectorStore.getConsolidatedHistory({ limit: 100 });
   const lockStatus = isDreamRunning();
 
   return {
     dreams: dreams.map((d) => ({
-      timestamp: new Date(d.completedAt).toISOString(),
+      timestamp: new Date(d.createdAt).toISOString(),
       repo: d.repo,
       observationsConsolidated: d.sourceIds.length,
-      summary: d.result.summary ?? "",
-      patterns: d.result.patterns ?? [],
-      insights: d.result.insights ?? [],
-      confidence: d.result.confidence ?? 0,
+      summary: d.content,
+      patterns: d.patterns,
+      insights: d.insights,
+      confidence: d.confidence,
     })),
     status: lockStatus,
   };

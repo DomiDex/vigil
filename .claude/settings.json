@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /home/domidex/projects/vigil/.claude/hooks/wiki-review.sh",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}

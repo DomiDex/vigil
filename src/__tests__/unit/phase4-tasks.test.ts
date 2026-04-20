@@ -99,7 +99,7 @@ describe("Tasks plugin", () => {
     it("maps status to allowed actions", () => {
       const { getTaskActions } = require("../../../dashboard-v2/src/plugins/tasks/TasksPage");
       expect(getTaskActions("pending")).toEqual(["activate", "cancel"]);
-      expect(getTaskActions("active")).toEqual(["complete", "fail"]);
+      expect(getTaskActions("active")).toEqual(["complete", "cancel"]);
       expect(getTaskActions("waiting")).toEqual(["activate", "cancel"]);
     });
 
@@ -108,43 +108,6 @@ describe("Tasks plugin", () => {
       expect(getTaskActions("completed")).toEqual([]);
       expect(getTaskActions("failed")).toEqual([]);
       expect(getTaskActions("cancelled")).toEqual([]);
-    });
-  });
-
-  describe("parent-child indentation", () => {
-    it("tasks with parentId are identified as children", () => {
-      const children = mockTasks.tasks.filter((t: any) => t.parentId !== undefined);
-      expect(children).toHaveLength(1);
-      expect(children[0].id).toBe("t4");
-    });
-
-    it("sorting groups children under parents", () => {
-      const { sortTasksWithChildren } = require("../../../dashboard-v2/src/plugins/tasks/TasksPage");
-      const sorted = sortTasksWithChildren(mockTasks.tasks);
-      const t1Index = sorted.findIndex((t: any) => t.id === "t1");
-      const t4Index = sorted.findIndex((t: any) => t.id === "t4");
-      expect(t4Index).toBeGreaterThan(t1Index);
-      // Child should immediately follow parent
-      expect(t4Index).toBe(t1Index + 1);
-    });
-
-    it("orphan children (missing parent) still render", () => {
-      const tasksWithOrphan = [
-        ...mockTasks.tasks,
-        {
-          id: "t8",
-          title: "Orphan",
-          status: "pending",
-          repo: "vigil",
-          createdAt: "2026-04-14T10:00:00Z",
-          updatedAt: "2026-04-14T10:00:00Z",
-          waitCondition: null,
-          parentId: "t-missing",
-        },
-      ];
-      const { sortTasksWithChildren } = require("../../../dashboard-v2/src/plugins/tasks/TasksPage");
-      const sorted = sortTasksWithChildren(tasksWithOrphan);
-      expect(sorted.find((t: any) => t.id === "t8")).toBeDefined();
     });
   });
 
@@ -167,12 +130,6 @@ describe("Tasks plugin", () => {
       expect(completeTask).toHaveBeenCalledWith({ data: { id: "t2" } });
     });
 
-    it("failTask sends task id", async () => {
-      const failTask = mock(() => Promise.resolve({ success: true }));
-      await failTask({ data: { id: "t2" } });
-      expect(failTask).toHaveBeenCalledWith({ data: { id: "t2" } });
-    });
-
     it("cancelTask sends task id", async () => {
       const cancelTask = mock(() => Promise.resolve({ success: true }));
       await cancelTask({ data: { id: "t1" } });
@@ -182,12 +139,6 @@ describe("Tasks plugin", () => {
     it("all task mutations would invalidate tasks query key", () => {
       const { vigilKeys } = require("../../../dashboard-v2/src/lib/query-keys");
       expect(vigilKeys.tasks).toEqual(["tasks"]);
-    });
-  });
-
-  describe("completion rate", () => {
-    it("completionRate comes from server data", () => {
-      expect(mockTasks.completionRate).toBe(14);
     });
   });
 });

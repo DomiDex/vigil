@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import {
   getTaskActions,
-  sortTasksWithChildren,
+  describeWaitCondition,
 } from "../../../src/plugins/tasks/TasksPage";
 
 describe("getTaskActions", () => {
@@ -9,8 +9,8 @@ describe("getTaskActions", () => {
     expect(getTaskActions("pending")).toEqual(["activate", "cancel"]);
   });
 
-  test("active tasks can be completed or failed", () => {
-    expect(getTaskActions("active")).toEqual(["complete", "fail"]);
+  test("active tasks can be completed or cancelled", () => {
+    expect(getTaskActions("active")).toEqual(["complete", "cancel"]);
   });
 
   test("waiting tasks can be activated or cancelled", () => {
@@ -30,39 +30,32 @@ describe("getTaskActions", () => {
   });
 });
 
-describe("sortTasksWithChildren", () => {
-  test("parents come before their children", () => {
-    const tasks = [
-      { id: "child-1", parentId: "parent-1", title: "Child" },
-      { id: "parent-1", parentId: null, title: "Parent" },
-    ];
-    const sorted = sortTasksWithChildren(tasks);
-    expect(sorted[0].id).toBe("parent-1");
-    expect(sorted[1].id).toBe("child-1");
+describe("describeWaitCondition", () => {
+  test("null condition returns null", () => {
+    expect(describeWaitCondition(null)).toBeNull();
   });
 
-  test("orphan children are appended at the end", () => {
-    const tasks = [
-      { id: "orphan-1", parentId: "missing-parent", title: "Orphan" },
-      { id: "parent-1", parentId: null, title: "Parent" },
-    ];
-    const sorted = sortTasksWithChildren(tasks);
-    expect(sorted[0].id).toBe("parent-1");
-    expect(sorted[1].id).toBe("orphan-1");
+  test("event type shows event name", () => {
+    expect(
+      describeWaitCondition({ type: "event", eventType: "new_commit" }),
+    ).toBe("waiting on new_commit");
   });
 
-  test("empty array returns empty", () => {
-    expect(sortTasksWithChildren([])).toEqual([]);
+  test("event type with filter shows both", () => {
+    expect(
+      describeWaitCondition({ type: "event", eventType: "new_commit", filter: "main" }),
+    ).toBe("waiting on new_commit (main)");
   });
 
-  test("multiple children grouped under correct parent", () => {
-    const tasks = [
-      { id: "c2", parentId: "p1", title: "Child 2" },
-      { id: "p1", parentId: null, title: "Parent 1" },
-      { id: "c1", parentId: "p1", title: "Child 1" },
-      { id: "p2", parentId: null, title: "Parent 2" },
-    ];
-    const sorted = sortTasksWithChildren(tasks);
-    expect(sorted.map((t) => t.id)).toEqual(["p1", "c2", "c1", "p2"]);
+  test("task dependency shows short id", () => {
+    expect(
+      describeWaitCondition({ type: "task", taskId: "12345678-abcd-efef-1111-222222222222" }),
+    ).toBe("waiting on task 12345678");
+  });
+
+  test("schedule shows cron", () => {
+    expect(describeWaitCondition({ type: "schedule", cron: "0 * * * *" })).toBe(
+      "waiting on schedule 0 * * * *",
+    );
   });
 });

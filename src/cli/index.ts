@@ -14,13 +14,43 @@ import { GitWatcher } from "../git/watcher.ts";
 import { DecisionEngine } from "../llm/decision-max.ts";
 import { EventLog, VectorStore } from "../memory/store.ts";
 import { NotificationRouter } from "../notify/push.ts";
+import type { Finding, FindingSeverity, SpecialistName } from "../specialists/types.ts";
+import { classifyFlakyStatus } from "../specialists/agents/flaky-test/scorer.ts";
 
 // Build-time gated: webhook subscriptions (Phase 12)
 /* eslint-disable @typescript-eslint/no-require-imports */
 const webhookSubMod = feature("VIGIL_WEBHOOKS")
   ? (require("../webhooks/subscriptions.ts") as typeof import("../webhooks/subscriptions.ts"))
   : null;
+
+const specialistStoreMod = feature("VIGIL_SPECIALISTS")
+  ? (require("../specialists/store.ts") as typeof import("../specialists/store.ts"))
+  : null;
+const specialistRunnerMod = feature("VIGIL_SPECIALISTS")
+  ? (require("../specialists/runner.ts") as typeof import("../specialists/runner.ts"))
+  : null;
+const specialistAgentsMod = feature("VIGIL_SPECIALISTS")
+  ? (require("../specialists/agents/index.ts") as typeof import("../specialists/agents/index.ts"))
+  : null;
 /* eslint-enable @typescript-eslint/no-require-imports */
+
+async function runGit(args: string[], cwd: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  try {
+    const proc = Bun.spawn(["git", ...args], { cwd, stdout: "pipe", stderr: "pipe" });
+    const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
+    await proc.exited;
+    return { stdout, stderr, exitCode: proc.exitCode ?? 0 };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { stdout: "", stderr: message, exitCode: 127 };
+  }
+}
+
+const DIFF_CAP_BYTES = 60_000;
+function capWithMarker(text: string, limit = DIFF_CAP_BYTES): string {
+  if (text.length <= limit) return text;
+  return `${text.slice(0, limit)}\n\n[…truncated ${text.length - limit} chars]`;
+}
 
 const program = new Command();
 
@@ -68,14 +98,20 @@ program
   .description("View event log")
   .option("-r, --repo <name>", "Filter by repo name")
   .option("-t, --type <type>", "Filter by event type")
+  .option("-s, --specialist [name]", "Filter to specialist events (optionally by name)")
   .option("-l, --limit <n>", "Max entries to show", parseInt, 20)
   .action((opts) => {
     const eventLog = new EventLog();
-    const entries = eventLog.query({
+    let entries = eventLog.query({
       repo: opts.repo,
-      type: opts.type,
+      type: opts.specialist !== undefined ? "specialist" : opts.type,
       limit: opts.limit,
     });
+
+    if (typeof opts.specialist === "string") {
+      const tag = `[${opts.specialist}]`;
+      entries = entries.filter((e) => (e.detail as string).includes(tag));
+    }
 
     if (entries.length === 0) {
       console.log(chalk.gray("\n  No log entries found.\n"));
@@ -91,6 +127,7 @@ program
       notify: "🔔",
       act: "⚡",
       user_reply: "💬",
+      specialist: "\u{1F50D}",
     };
 
     console.log(chalk.cyan("\n  Event Log\n"));
@@ -108,7 +145,113 @@ program
   .description("Ask Vigil a question about a repo")
   .argument("<question...>", "Your question")
   .option("-r, --repo <path>", "Repo path", ".")
+  .option("-s, --specialist <name>", "Force run a specialist instead of asking")
   .action(async (questionParts: string[], opts) => {
+    if (opts.specialist) {
+      if (!specialistStoreMod || !specialistRunnerMod || !specialistAgentsMod) {
+        console.error(chalk.red("\n  Specialists feature is not enabled.\n"));
+        process.exitCode = 1;
+        return;
+      }
+
+      const config = loadConfig();
+      const store = new specialistStoreMod.SpecialistStore();
+      try {
+        const flakyAgent = specialistAgentsMod.createFlakyTestAgent(store, config);
+        const allSpecialists = [...specialistAgentsMod.BUILTIN_SPECIALISTS, flakyAgent];
+
+        const target = allSpecialists.find((s) => s.name === opts.specialist);
+        if (!target) {
+          console.error(chalk.red(`\n  Unknown specialist: ${opts.specialist}`));
+          console.error(chalk.gray(`  Available: ${allSpecialists.map((s) => s.name).join(", ")}\n`));
+          process.exitCode = 1;
+          return;
+        }
+
+        const repoPath = resolve(opts.repo);
+        const repoName = repoPath.split("/").pop() || "unknown";
+
+        console.log(chalk.gray(`\n  Running ${opts.specialist} on ${repoName}...\n`));
+
+        const gitDir = await runGit(["rev-parse", "--git-dir"], repoPath);
+        if (gitDir.exitCode !== 0) {
+          console.error(chalk.red(`  Not a git repository: ${repoPath}\n`));
+          process.exitCode = 1;
+          return;
+        }
+
+        const branchResult = await runGit(["rev-parse", "--abbrev-ref", "HEAD"], repoPath);
+        if (branchResult.exitCode !== 0) {
+          console.error(chalk.red(`  Failed to read branch: ${branchResult.stderr.trim()}\n`));
+          process.exitCode = 1;
+          return;
+        }
+
+        const diffResult = await runGit(["diff", "HEAD~1", "--stat", "-p"], repoPath);
+        const filesResult = await runGit(["diff", "HEAD~1", "--name-only"], repoPath);
+        const commitsResult = await runGit(
+          ["log", "-n", "10", "--pretty=format:%h %s"],
+          repoPath,
+        );
+        if (diffResult.exitCode !== 0 || filesResult.exitCode !== 0) {
+          console.error(
+            chalk.yellow("  Warning: could not diff against HEAD~1 (single-commit repo?). Running with empty diff.\n"),
+          );
+        }
+
+        const recentFindings: Finding[] = store.getRecentFindings(repoName, opts.specialist, 10).map((row) => ({
+          id: row.id,
+          specialist: row.specialist as SpecialistName,
+          severity: row.severity as FindingSeverity,
+          title: row.title,
+          detail: row.detail,
+          file: row.file ?? undefined,
+          line: row.line ?? undefined,
+          suggestion: row.suggestion ?? undefined,
+        }));
+
+        const context = {
+          repoName,
+          repoPath,
+          branch: branchResult.stdout.trim(),
+          diff: diffResult.exitCode === 0 ? capWithMarker(diffResult.stdout) : "",
+          changedFiles: filesResult.exitCode === 0 ? filesResult.stdout.trim().split("\n").filter(Boolean) : [],
+          recentCommits:
+            commitsResult.exitCode === 0
+              ? commitsResult.stdout.trim().split("\n").filter(Boolean)
+              : [],
+          recentFindings,
+        };
+
+        const runner = new specialistRunnerMod.SpecialistRunner(config);
+        const result = await runner.run(target, context);
+
+        if (result.skippedReason) {
+          console.log(chalk.gray(`  Skipped: ${result.skippedReason}\n`));
+        } else if (result.findings.length === 0) {
+          console.log(chalk.green(`  No findings. Confidence: ${(result.confidence * 100).toFixed(0)}%\n`));
+        } else {
+          console.log(
+            chalk.cyan(
+              `  ${result.findings.length} finding(s) (confidence: ${(result.confidence * 100).toFixed(0)}%)\n`,
+            ),
+          );
+          for (const f of result.findings) {
+            const sevColor =
+              f.severity === "critical" ? chalk.red : f.severity === "warning" ? chalk.yellow : chalk.gray;
+            console.log(`  ${sevColor(`[${f.severity.toUpperCase()}]`)} ${chalk.white(f.title)}`);
+            console.log(chalk.gray(`    ${f.detail}`));
+            if (f.file) console.log(chalk.gray(`    File: ${f.file}${f.line ? `:${f.line}` : ""}`));
+            if (f.suggestion) console.log(chalk.cyan(`    Suggestion: ${f.suggestion}`));
+            console.log();
+          }
+        }
+      } finally {
+        store.close();
+      }
+      return;
+    }
+
     const question = questionParts.join(" ");
     const config = loadConfig();
     const engine = new DecisionEngine(config);
@@ -157,6 +300,11 @@ program
       repoName,
       result.summary,
       memories.map((m) => m.id),
+      {
+        patterns: result.patterns,
+        insights: result.insights,
+        confidence: result.confidence,
+      },
     );
     store.saveRepoProfile({
       repo: repoName,
@@ -522,5 +670,77 @@ function resolveFeatureName(input: string): FeatureName | null {
 
   return null;
 }
+
+// ── flaky ──
+program
+  .command("flaky")
+  .description("Show flaky tests across watched repos")
+  .argument("[repo]", "Filter by repo name")
+  .option("--reset <test-name>", "Clear flakiness history for a test")
+  .action((repo: string | undefined, opts: { reset?: string }) => {
+    if (!specialistStoreMod) {
+      console.error(chalk.red("\n  Specialists feature is not enabled.\n"));
+      process.exitCode = 1;
+      return;
+    }
+
+    const store = new specialistStoreMod.SpecialistStore();
+
+    try {
+      if (opts.reset) {
+        if (!repo) {
+          console.error(
+            chalk.red("\n  Repo name required with --reset. Usage: vigil flaky <repo> --reset <test-name>\n"),
+          );
+          process.exitCode = 1;
+          return;
+        }
+        const removed = store.resetFlakyTest(repo, opts.reset);
+        if (removed) {
+          console.log(chalk.green(`\n  Reset flakiness history for: ${opts.reset}\n`));
+        } else {
+          console.log(chalk.gray(`\n  No flakiness data found for: ${opts.reset}\n`));
+        }
+        return;
+      }
+
+      const tests = store.getFlakyTests(repo);
+      if (tests.length === 0) {
+        console.log(chalk.gray("\n  No test data recorded yet. Run the daemon to collect test results.\n"));
+        return;
+      }
+
+      console.log(chalk.cyan("\n  Flaky Test Report\n"));
+      console.log(
+        `${
+          chalk.gray("  ") + "Test Name".padEnd(50) + "Pass Rate".padEnd(12) + "Runs".padEnd(8) + "Flaky".padEnd(8)
+        }Status`,
+      );
+      console.log(chalk.gray(`  ${"\u2500".repeat(84)}`));
+
+      const colorFor: Record<string, typeof chalk.red> = {
+        "FLAKY (definitive)": chalk.red,
+        "FLAKY (statistical)": chalk.yellow,
+        STABLE: chalk.green,
+      };
+      for (const t of tests) {
+        const rate = t.total_runs > 0 ? `${((t.total_passes / t.total_runs) * 100).toFixed(0)}%` : "N/A";
+        const status = classifyFlakyStatus(t);
+        const statusColor = colorFor[status] ?? chalk.gray;
+
+        const name = t.test_name.length > 48 ? `${t.test_name.slice(0, 45)}...` : t.test_name;
+        console.log(
+          `  ${chalk.white(name.padEnd(50))}${chalk.cyan(rate.padEnd(12))}${chalk.gray(
+            String(t.total_runs).padEnd(8),
+          )}${chalk.gray(String(t.flaky_commits).padEnd(8))}${statusColor(status)}`,
+        );
+      }
+
+      const flakyCount = tests.filter((t) => classifyFlakyStatus(t) !== "STABLE").length;
+      console.log(chalk.gray(`\n  ${tests.length} test(s) tracked, ${flakyCount} flaky\n`));
+    } finally {
+      store.close();
+    }
+  });
 
 program.parse();

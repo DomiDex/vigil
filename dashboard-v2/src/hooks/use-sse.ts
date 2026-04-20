@@ -19,6 +19,9 @@ export const SSE_EVENT_MAP = {
   webhook: [vigilKeys.webhooks.all],
   channel: [vigilKeys.channels.all],
   health: [vigilKeys.health],
+  specialist_finding: [vigilKeys.specialists.all],
+  specialist_run: [vigilKeys.specialists.all],
+  flaky_update: [vigilKeys.specialists.flaky.root],
 } as const satisfies Record<string, readonly (readonly unknown[])[]>;
 
 export function useSSE() {

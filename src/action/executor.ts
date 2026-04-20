@@ -22,6 +22,9 @@ export interface ActionRequest {
   gateResults?: Record<string, boolean>;
   createdAt: number;
   updatedAt: number;
+  source?: "llm" | "specialist" | "manual";
+  sourceSpecialist?: string;
+  sourceFindingId?: string;
 }
 
 export interface GateCheckResult {
@@ -125,6 +128,18 @@ export class ActionExecutor {
         updated_at INTEGER NOT NULL
       )
     `);
+    // Additive columns — wrapped in try/catch since SQLite has no IF NOT EXISTS for ADD COLUMN.
+    for (const ddl of [
+      "ALTER TABLE action_queue ADD COLUMN source TEXT",
+      "ALTER TABLE action_queue ADD COLUMN source_specialist TEXT",
+      "ALTER TABLE action_queue ADD COLUMN source_finding_id TEXT",
+    ]) {
+      try {
+        this.db.run(ddl);
+      } catch {
+        // Column already exists — fine.
+      }
+    }
   }
 
   /** Update gate config at runtime (e.g. from config hot-reload) */
@@ -248,7 +263,13 @@ export class ActionExecutor {
     reason: string,
     repo: string,
     repoPath: string,
-    opts?: { actionType?: ActionType; confidence?: number },
+    opts?: {
+      actionType?: ActionType;
+      confidence?: number;
+      source?: "llm" | "specialist" | "manual";
+      sourceSpecialist?: string;
+      sourceFindingId?: string;
+    },
   ): Promise<ActionRequest> {
     const tier = ActionExecutor.classifyTier(command);
     const args = ActionExecutor.parseCommand(command);
@@ -267,6 +288,9 @@ export class ActionExecutor {
       status: "pending",
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      source: opts?.source,
+      sourceSpecialist: opts?.sourceSpecialist,
+      sourceFindingId: opts?.sourceFindingId,
     };
 
     // If an actionType is declared, run gate checks
@@ -390,8 +414,8 @@ export class ActionExecutor {
 
   private save(action: ActionRequest): void {
     this.db.run(
-      `INSERT OR REPLACE INTO action_queue (id, repo, command, args, tier, action_type, reason, confidence, status, result, error, gate_results, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO action_queue (id, repo, command, args, tier, action_type, reason, confidence, status, result, error, gate_results, created_at, updated_at, source, source_specialist, source_finding_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         action.id,
         action.repo,
@@ -407,6 +431,9 @@ export class ActionExecutor {
         action.gateResults ? JSON.stringify(action.gateResults) : null,
         action.createdAt,
         action.updatedAt,
+        action.source ?? null,
+        action.sourceSpecialist ?? null,
+        action.sourceFindingId ?? null,
       ],
     );
   }
@@ -427,6 +454,9 @@ export class ActionExecutor {
       gateResults: row.gate_results ? JSON.parse(row.gate_results) : undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      source: row.source ?? undefined,
+      sourceSpecialist: row.source_specialist ?? undefined,
+      sourceFindingId: row.source_finding_id ?? undefined,
     };
   }
 

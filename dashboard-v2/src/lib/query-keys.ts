@@ -5,7 +5,7 @@ export const vigilKeys = {
     detail: (name: string) => ["repos", name] as const,
     diff: (name: string) => ["repos", name, "diff"] as const,
   },
-  timeline: (filters?: { status?: string; repo?: string; q?: string; page?: number }) =>
+  timeline: (filters?: { decision?: string; repo?: string; q?: string; page?: number }) =>
     ["timeline", filters ?? {}] as const,
   dreams: ["dreams"],
   dreamPatterns: (repo: string) => ["dreams", "patterns", repo] as const,
@@ -29,6 +29,20 @@ export const vigilKeys = {
   agents: {
     all: ["agents"],
     current: ["agents", "current"],
+  },
+  specialists: {
+    all: ["specialists"] as const,
+    detail: (name: string) => ["specialists", name] as const,
+    findings: {
+      root: ["specialists", "findings"] as const,
+      list: (filters?: Record<string, string | number | undefined>) =>
+        ["specialists", "findings", "list", filters ?? {}] as const,
+      detail: (id: string) => ["specialists", "findings", "detail", id] as const,
+    },
+    flaky: {
+      root: ["specialists", "flaky"] as const,
+      list: (repo?: string) => ["specialists", "flaky", "list", repo] as const,
+    },
   },
   health: ["health"],
   webhooks: {

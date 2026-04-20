@@ -2,6 +2,13 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { Button } from "../../components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
 import { vigilKeys } from "../../lib/query-keys";
 import { getTimeline, getRepos } from "../../server/functions";
 import { TimelineEntry } from "../../components/vigil/timeline-entry";
@@ -12,7 +19,7 @@ import type { RepoListItem, TimelineMessage } from "../../types/api";
 const PAGE_SIZE = 20;
 
 interface Filters {
-  status?: string;
+  decision?: string;
   repo?: string;
   q?: string;
   page?: number;
@@ -78,29 +85,33 @@ export default function TimelinePage({ activeRepo }: Partial<WidgetProps> = {}) 
           />
         </div>
 
-        <select
-          className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-          value={filters.repo ?? ""}
-          onChange={(e) =>
+        <Select
+          value={filters.repo ?? "__all__"}
+          onValueChange={(value) =>
             setFilters((f) => ({
               ...f,
-              repo: e.target.value || undefined,
+              repo: value === "__all__" ? undefined : value,
               page: 1,
             }))
           }
         >
-          <option value="">All repos</option>
-          {repos?.map((r: RepoListItem) => (
-            <option key={r.name} value={r.name}>
-              {r.name}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger className="h-9 w-[180px] text-sm">
+            <SelectValue placeholder="All repos" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All repos</SelectItem>
+            {repos?.map((r: RepoListItem) => (
+              <SelectItem key={r.name} value={r.name}>
+                {r.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <DecisionFilter
-        value={filters.status}
-        onChange={(status) => setFilters((f) => ({ ...f, status, page: 1 }))}
+        value={filters.decision}
+        onChange={(decision) => setFilters((f) => ({ ...f, decision, page: 1 }))}
       />
 
       <div className="space-y-2">

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import chalk from "chalk";
 import { ActionExecutor } from "../action/executor.ts";
@@ -8,6 +9,7 @@ import { DecisionEngine } from "../llm/decision-max.ts";
 import { CrossRepoAnalyzer } from "../memory/cross-repo.ts";
 import { EventLog, type MemoryEntry, VectorStore } from "../memory/store.ts";
 import { ConsoleChannel, createMessage, DisplayFilter, JsonlChannel, MessageRouter } from "../messaging/index.ts";
+import type { VigilMessage } from "../messaging/schema.ts";
 import { NotificationRouter } from "../notify/push.ts";
 import type { ActionType } from "./config.ts";
 import { getConfigDir, getLogsDir, loadConfig, stopWatchingConfig, type VigilConfig, watchConfig } from "./config.ts";
@@ -95,6 +97,31 @@ const BANNER = `
 /** Format text for console display — preserve newlines, indent continuation lines */
 function formatTick(text: string): string {
   return text.trim().replace(/\n/g, "\n    ");
+}
+
+/**
+ * Read the tail of the JSONL message log and parse each line into a VigilMessage.
+ * Used to seed MessageRouter history on startup so the dashboard timeline
+ * is populated before the first tick after a restart. Missing file / parse
+ * errors are swallowed (returns []), since this is a best-effort warm-up.
+ */
+function readMessagesJsonl(path: string, limit: number): VigilMessage[] {
+  if (!existsSync(path)) return [];
+  try {
+    const lines = readFileSync(path, "utf-8").split("\n");
+    const parsed: VigilMessage[] = [];
+    for (const line of lines.slice(-limit)) {
+      if (!line.trim()) continue;
+      try {
+        parsed.push(JSON.parse(line) as VigilMessage);
+      } catch {
+        // skip corrupt line
+      }
+    }
+    return parsed;
+  } catch {
+    return [];
+  }
 }
 
 /** Narrow a FindingRow from the store into a Finding (null → undefined) */
@@ -245,7 +272,11 @@ export class Daemon {
     this.messageRouter = deps?.messageRouter ?? new MessageRouter();
     // In brief mode, ConsoleChannel filters what's shown; JSONL always logs everything
     this.messageRouter.registerChannel(new ConsoleChannel(this.briefMode ? this.displayFilter : undefined));
-    this.messageRouter.registerChannel(new JsonlChannel(join(getLogsDir(), "messages.jsonl")));
+    const messagesJsonlPath = join(getLogsDir(), "messages.jsonl");
+    this.messageRouter.registerChannel(new JsonlChannel(messagesJsonlPath));
+    // Hydrate history from the persisted JSONL so the timeline isn't empty
+    // after a daemon restart. Bounded to the router's in-memory tail (~1000).
+    this.messageRouter.seedHistory(readMessagesJsonl(messagesJsonlPath, 1000));
 
     // Push notifications channel (Phase 13) — gated by build-time feature flag
     if (pushMod && this.config.push?.enabled) {
@@ -395,6 +426,12 @@ export class Daemon {
         type: event.type,
         detail: event.detail,
       });
+      const activated = this.taskManager.checkWaitConditions([
+        { type: event.type, detail: event.detail },
+      ]);
+      for (const task of activated) {
+        console.log(chalk.cyan(`  ▶ Task activated by ${event.type}: ${task.title}`));
+      }
       console.log(chalk.yellow(`  ⚡ ${event.repo}: ${event.detail}`));
     });
 
@@ -815,6 +852,61 @@ export class Daemon {
     return this.specialistStore.getRecentFindings(repoName, specialist, 10).map(rowToFinding);
   }
 
+  /** Plant a task for a critical finding, unless an open task for it already exists. */
+  private planTaskForFinding(repoName: string, finding: Finding): void {
+    const open = this.taskManager
+      .list({ repo: repoName })
+      .filter((t) => t.status === "pending" || t.status === "active" || t.status === "waiting");
+    if (open.some((t) => (t.metadata as { findingId?: string })?.findingId === finding.id)) return;
+
+    const task = this.taskManager.create({
+      repo: repoName,
+      title: `[${finding.specialist}] ${finding.title}`,
+      description: finding.suggestion
+        ? `${finding.detail}\n\nSuggestion: ${finding.suggestion}`
+        : finding.detail,
+      metadata: {
+        source: "specialist",
+        specialist: finding.specialist,
+        findingId: finding.id,
+        severity: finding.severity,
+      },
+    });
+    console.log(chalk.cyan(`  ▶ Task planted from ${finding.specialist} finding: ${task.title}`));
+  }
+
+  /** Plant tasks for recurring dream patterns that carried over from the previous profile. */
+  private planTasksForDreamPatterns(
+    repoName: string,
+    patterns: string[],
+    previousPatterns: string[],
+    confidence: number,
+  ): void {
+    if (confidence < 0.6) return;
+    const prior = new Set(previousPatterns);
+    const open = this.taskManager
+      .list({ repo: repoName })
+      .filter((t) => t.status === "pending" || t.status === "active" || t.status === "waiting");
+
+    for (const pattern of patterns) {
+      if (!prior.has(pattern)) continue;
+      const title = `Investigate recurring pattern: ${pattern}`;
+      if (open.some((t) => t.title === title)) continue;
+
+      const task = this.taskManager.create({
+        repo: repoName,
+        title,
+        description: `Dream consolidation flagged this pattern as recurring across recent observations.`,
+        metadata: {
+          source: "dream",
+          pattern,
+          confidence,
+        },
+      });
+      console.log(chalk.cyan(`  ▶ Task planted from recurring dream pattern: ${task.title}`));
+    }
+  }
+
   /** Get changed files from the last commit */
   private async getSpecialistChangedFiles(repoPath: string): Promise<string[]> {
     try {
@@ -880,6 +972,7 @@ export class Daemon {
             `CRITICAL: ${finding.title}\n${finding.detail}`,
             "warning",
           );
+          this.planTaskForFinding(repoName, finding);
         }
       }
 
@@ -943,6 +1036,19 @@ export class Daemon {
         repoName,
         result.summary,
         memories.map((m) => m.id),
+        {
+          patterns: result.patterns,
+          insights: result.insights,
+          confidence: result.confidence,
+        },
+      );
+
+      // Plant tasks for patterns that carry over from the previous profile
+      this.planTasksForDreamPatterns(
+        repoName,
+        result.patterns,
+        profile?.patterns ?? [],
+        result.confidence,
       );
 
       // Update repo profile

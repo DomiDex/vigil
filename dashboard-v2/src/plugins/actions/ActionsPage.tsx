@@ -85,6 +85,7 @@ export default function ActionsPage({ activeRepo }: Partial<WidgetProps> = {}) {
   const [sortBy, setSortBy] = useState<"date" | "status" | "tier" | "command">("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState("all");
   const [page, setPage] = useState(0);
 
   const { data, isLoading, isError, error } = useQuery({
@@ -102,6 +103,9 @@ export default function ActionsPage({ activeRepo }: Partial<WidgetProps> = {}) {
     failed: 0,
     pending: 0,
   };
+  const gateEnabled = Boolean((actionsData?.gateConfig as { enabled?: boolean } | undefined)?.enabled);
+  const isOptedIn = actionsData?.isOptedIn ?? false;
+  const gateBlocked = !gateEnabled || !isOptedIn;
 
   const approve = useMutation({
     mutationFn: (id: string) => approveAction({ data: { id } }),
@@ -125,10 +129,14 @@ export default function ActionsPage({ activeRepo }: Partial<WidgetProps> = {}) {
 
   // Filter + Sort (memoized)
   const sortedHistory = useMemo(() => {
-    const filtered =
+    let filtered =
       statusFilter === "all"
         ? allHistory
         : allHistory.filter((a) => a.status === statusFilter);
+
+    if (sourceFilter !== "all") {
+      filtered = filtered.filter((a) => (a.source ?? "llm") === sourceFilter);
+    }
 
     return [...filtered].sort((a, b) => {
       let cmp = 0;
@@ -148,7 +156,7 @@ export default function ActionsPage({ activeRepo }: Partial<WidgetProps> = {}) {
       }
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [allHistory, statusFilter, sortBy, sortDir]);
+  }, [allHistory, statusFilter, sourceFilter, sortBy, sortDir]);
 
   // Paginate
   const startIndex = page * PER_PAGE;
@@ -190,6 +198,22 @@ export default function ActionsPage({ activeRepo }: Partial<WidgetProps> = {}) {
       {isError && (
         <div className="text-sm text-destructive p-4">
           Failed to load data: {error?.message}
+        </div>
+      )}
+
+      {!isLoading && !isError && gateBlocked && actions.length === 0 && pending.length === 0 && (
+        <div className="text-sm text-muted-foreground border border-dashed rounded-md p-4 space-y-1">
+          <div className="font-medium text-foreground">No actions yet — action gate is disabled.</div>
+          <div>
+            Vigil only queues actions when the safety gate is turned on and the session is opted in.
+            Current status:{" "}
+            <span className="font-mono">config.enabled={String(gateEnabled)}</span>,{" "}
+            <span className="font-mono">optedIn={String(isOptedIn)}</span>.
+          </div>
+          <div>
+            Enable in <span className="font-mono">~/.vigil/config.json</span> (<span className="font-mono">actions.enabled</span>,{" "}
+            <span className="font-mono">actions.allowedRepos</span>) and opt in via the CLI to start seeing proposals here.
+          </div>
         </div>
       )}
 
@@ -235,6 +259,17 @@ export default function ActionsPage({ activeRepo }: Partial<WidgetProps> = {}) {
                   <SelectItem value="failed">Failed</SelectItem>
                 </SelectContent>
               </Select>
+              <Select value={sourceFilter} onValueChange={(v) => { setSourceFilter(v); setPage(0); }}>
+                <SelectTrigger className="w-[140px] h-8 text-xs">
+                  <SelectValue placeholder="Source" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Sources</SelectItem>
+                  <SelectItem value="specialist">Specialist</SelectItem>
+                  <SelectItem value="llm">LLM</SelectItem>
+                  <SelectItem value="manual">Manual</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {sortedHistory.length > 0 ? (
@@ -246,6 +281,7 @@ export default function ActionsPage({ activeRepo }: Partial<WidgetProps> = {}) {
                         <SortHeader col="date" onSort={handleSort}>Date</SortHeader>
                         <SortHeader col="command" onSort={handleSort}>Command</SortHeader>
                         <SortHeader col="tier" onSort={handleSort}>Tier</SortHeader>
+                        <TableHead>Source</TableHead>
                         <SortHeader col="status" onSort={handleSort}>Status</SortHeader>
                         <TableHead>Confidence</TableHead>
                         <TableHead>Reason</TableHead>
@@ -269,6 +305,11 @@ export default function ActionsPage({ activeRepo }: Partial<WidgetProps> = {}) {
                               >
                                 {action.tier}
                               </Badge>
+                            </TableCell>
+                            <TableCell className="text-xs">
+                              <span className="text-muted-foreground">
+                                {action.sourceSpecialist ?? (action.source ?? "llm")}
+                              </span>
                             </TableCell>
                             <TableCell>
                               <Badge

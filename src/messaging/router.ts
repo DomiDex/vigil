@@ -79,6 +79,16 @@ export class MessageRouter extends EventEmitter {
     return msgs;
   }
 
+  /**
+   * Seed history from a persisted source (e.g. JSONL log) on daemon startup
+   * so the dashboard timeline isn't empty after a restart. Only the tail is
+   * retained (respecting maxHistory); seeding does not re-emit delivery events.
+   */
+  seedHistory(messages: VigilMessage[]): void {
+    const tail = messages.slice(-this.maxHistory);
+    this.history = [...tail, ...this.history].slice(-this.maxHistory);
+  }
+
   getChannelCount(): number {
     return this.channels.length;
   }

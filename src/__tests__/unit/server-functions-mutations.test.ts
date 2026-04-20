@@ -13,7 +13,10 @@ describe("server functions -- mutations", () => {
       const url = typeof input === "string" ? input : input.toString();
       if (url.startsWith("http://localhost:7480/")) {
         calls.push([url, init]);
-        return new Response("<div>ok</div>", { status: 200 });
+        return new Response(JSON.stringify({ ok: true, status: "started" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
       }
       return origFetch(input, init);
     }) as typeof fetch;
@@ -27,7 +30,7 @@ describe("server functions -- mutations", () => {
     it("POSTs to /api/dreams/trigger with repo in FormData", async () => {
       const { triggerDream } = await import("../../../dashboard-v2/src/server/functions.ts");
       const result = await triggerDream({ data: { repo: "vigil" } });
-      expect(result).toEqual({ success: true });
+      expect(result).toEqual({ ok: true, status: "started" });
       expect(calls).toHaveLength(1);
       const [url, init] = calls[0];
       expect(url).toContain("/api/dreams/trigger");

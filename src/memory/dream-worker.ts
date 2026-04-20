@@ -5,15 +5,14 @@
  *
  * Usage: bun run src/memory/dream-worker.ts <repoName>
  *
- * Reads from SQLite in read-only mode (WAL allows concurrent readers),
- * calls the LLM to consolidate, writes results to a temp JSON file
- * for the main daemon to pick up.
+ * Writes results directly to the `consolidated` table (and repo profile)
+ * so the dashboard's /api/dreams history reflects every run.
  */
-import { Database } from "bun:sqlite";
-import { existsSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getDataDir, loadConfig } from "../core/config.ts";
 import { DecisionEngine } from "../llm/decision-max.ts";
+import { VectorStore } from "./store.ts";
 
 const repoName = process.argv[2];
 if (!repoName) {
@@ -22,10 +21,32 @@ if (!repoName) {
 }
 
 const lockPath = join(getDataDir(), "dream.lock");
+const DREAM_MAX_AGE_MS = 60 * 60 * 1000;
 
-// Prevent concurrent dreams
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Prevent concurrent dreams, but treat locks from dead/stale workers as removable
+// so a crashed previous run can't jam the pipeline forever.
 if (existsSync(lockPath)) {
-  process.exit(2);
+  let existing: { pid?: number; started?: number } = {};
+  try {
+    existing = JSON.parse(readFileSync(lockPath, "utf-8"));
+  } catch {
+    // Malformed lock — fall through and overwrite.
+  }
+  const pidAlive = typeof existing.pid === "number" && isPidAlive(existing.pid);
+  const fresh = typeof existing.started === "number" && Date.now() - existing.started < DREAM_MAX_AGE_MS;
+  if (pidAlive && fresh) {
+    process.exit(2);
+  }
+  try { unlinkSync(lockPath); } catch { /* concurrent cleanup is fine */ }
 }
 
 writeFileSync(lockPath, JSON.stringify({ pid: process.pid, repo: repoName, started: Date.now() }));
@@ -34,43 +55,45 @@ try {
   const config = loadConfig();
   const engine = new DecisionEngine(config);
 
-  // Open DB read-only (WAL mode allows concurrent readers)
   const dbPath = join(getDataDir(), "vigil.db");
   if (!existsSync(dbPath)) {
     process.exit(0);
   }
 
-  const db = new Database(dbPath, { readonly: true });
+  const store = new VectorStore(dbPath);
+  store.init();
 
-  const rows = db
-    .query("SELECT * FROM memories WHERE repo = ? ORDER BY updated_at DESC LIMIT 50")
-    .all(repoName) as any[];
-
-  if (rows.length === 0) {
-    db.close();
+  const memories = store.getByRepo(repoName, 50);
+  if (memories.length === 0) {
+    store.close();
     process.exit(0);
   }
 
-  const observations = rows.map((r: any) => r.content as string);
-  const profileRow = db.query("SELECT * FROM repo_profiles WHERE repo = ?").get(repoName) as any;
-
-  const profileStr = profileRow ? `${profileRow.summary}\nPatterns: ${JSON.parse(profileRow.patterns).join(", ")}` : "";
-
-  db.close();
+  const observations = memories.map((m) => m.content);
+  const profile = store.getRepoProfile(repoName);
+  const profileStr = profile ? `${profile.summary}\nPatterns: ${profile.patterns.join(", ")}` : "";
 
   const result = await engine.consolidate(observations, profileStr);
 
-  // Write results to temp file for main daemon to pick up
-  const resultPath = join(getDataDir(), `dream-result-${repoName}.json`);
-  writeFileSync(
-    resultPath,
-    JSON.stringify({
-      repo: repoName,
-      result,
-      sourceIds: rows.map((r: any) => r.id),
-      completedAt: Date.now(),
-    }),
+  store.storeConsolidated(
+    crypto.randomUUID(),
+    repoName,
+    result.summary,
+    memories.map((m) => m.id),
+    {
+      patterns: result.patterns,
+      insights: result.insights,
+      confidence: result.confidence,
+    },
   );
+  store.saveRepoProfile({
+    repo: repoName,
+    summary: result.summary,
+    patterns: result.patterns,
+    lastUpdated: Date.now(),
+  });
+
+  store.close();
 } finally {
   if (existsSync(lockPath)) {
     unlinkSync(lockPath);

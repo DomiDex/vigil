@@ -56,11 +56,11 @@ describe("server functions -- reads", () => {
   describe("getTimeline", () => {
     it("fetches from /api/timeline with query params", async () => {
       const { getTimeline } = await import("../../../dashboard-v2/src/server/functions.ts");
-      await getTimeline({ data: { status: "OBSERVE", repo: "vigil", page: 2 } });
+      await getTimeline({ data: { decision: "OBSERVE", repo: "vigil", page: 2 } });
       expect(calls).toHaveLength(1);
       const url = calls[0][0];
       expect(url).toContain("/api/timeline");
-      expect(url).toContain("status=OBSERVE");
+      expect(url).toContain("decision=OBSERVE");
       expect(url).toContain("repo=vigil");
       expect(url).toContain("page=2");
     });

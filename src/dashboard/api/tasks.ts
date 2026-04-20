@@ -54,14 +54,16 @@ export function getTasksJSON(ctx: DashboardContext, opts?: { status?: string; re
 
 // ── POST /api/tasks ──
 
-export function handleTaskCreate(ctx: DashboardContext, formData: FormData): { ok: boolean; id?: string } {
+export function handleTaskCreate(
+  ctx: DashboardContext,
+  formData: FormData,
+): { ok: boolean; id?: string; error?: string } {
   const title = formData.get("title")?.toString() || "";
   const repo = formData.get("repo")?.toString() || "";
   const description = formData.get("description")?.toString() || "";
 
-  if (!title || !repo) {
-    return { ok: false };
-  }
+  if (!title) return { ok: false, error: "Title is required" };
+  if (!repo) return { ok: false, error: "Repository is required" };
 
   const task = ctx.daemon.taskManager.create({ repo, title, description });
   return { ok: true, id: task?.id };
