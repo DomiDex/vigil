@@ -103,6 +103,9 @@ export default function ActionsPage({ activeRepo }: Partial<WidgetProps> = {}) {
     failed: 0,
     pending: 0,
   };
+  const gateEnabled = Boolean((actionsData?.gateConfig as { enabled?: boolean } | undefined)?.enabled);
+  const isOptedIn = actionsData?.isOptedIn ?? false;
+  const gateBlocked = !gateEnabled || !isOptedIn;
 
   const approve = useMutation({
     mutationFn: (id: string) => approveAction({ data: { id } }),
@@ -195,6 +198,22 @@ export default function ActionsPage({ activeRepo }: Partial<WidgetProps> = {}) {
       {isError && (
         <div className="text-sm text-destructive p-4">
           Failed to load data: {error?.message}
+        </div>
+      )}
+
+      {!isLoading && !isError && gateBlocked && actions.length === 0 && pending.length === 0 && (
+        <div className="text-sm text-muted-foreground border border-dashed rounded-md p-4 space-y-1">
+          <div className="font-medium text-foreground">No actions yet — action gate is disabled.</div>
+          <div>
+            Vigil only queues actions when the safety gate is turned on and the session is opted in.
+            Current status:{" "}
+            <span className="font-mono">config.enabled={String(gateEnabled)}</span>,{" "}
+            <span className="font-mono">optedIn={String(isOptedIn)}</span>.
+          </div>
+          <div>
+            Enable in <span className="font-mono">~/.vigil/config.json</span> (<span className="font-mono">actions.enabled</span>,{" "}
+            <span className="font-mono">actions.allowedRepos</span>) and opt in via the CLI to start seeing proposals here.
+          </div>
         </div>
       )}
 

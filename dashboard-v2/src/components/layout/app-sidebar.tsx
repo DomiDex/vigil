@@ -33,7 +33,7 @@ function RepoStateIndicator({
 }) {
   return (
     <span className="flex items-center gap-1.5">
-      {dirty && <span className="size-1.5 rounded-full bg-warning animate-pulse" />}
+      {dirty && <span className="size-1.5 rounded-full bg-warning" />}
       {state === "active" && (
         <Circle className="size-2.5 fill-success text-success" />
       )}
@@ -88,12 +88,12 @@ export function AppSidebar({ plugins }: AppSidebarProps) {
         </SidebarMenu>
       </SidebarHeader>
 
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-[10px] uppercase tracking-[0.08em] text-text-dimmed font-semibold">
+      <SidebarContent className="overflow-hidden gap-1">
+        <SidebarGroup className="py-1 gap-1">
+          <SidebarGroupLabel className="text-[10px] uppercase tracking-[0.08em] text-text-dimmed font-semibold h-6">
             Navigation
           </SidebarGroupLabel>
-          <SidebarMenu>
+          <SidebarMenu className="gap-0.5">
             {tabs.map((tab) => {
               const Icon = (LucideIcons as Record<string, any>)[tab.icon];
               const path = tab.path;
@@ -102,13 +102,18 @@ export function AppSidebar({ plugins }: AppSidebarProps) {
                 <SidebarMenuItem key={tab.id}>
                   <SidebarMenuButton
                     asChild
+                    size="sm"
                     isActive={isActive}
                     tooltip={tab.label}
-                    className={isActive ? "text-vigil" : "text-text-muted hover:text-text"}
+                    className={
+                      isActive
+                        ? "relative text-vigil before:absolute before:left-0 before:top-1 before:bottom-1 before:w-0.5 before:rounded-full before:bg-vigil"
+                        : "text-text-muted hover:text-text"
+                    }
                   >
                     <Link to={path}>
-                      {Icon && <Icon className="size-4" />}
-                      <span className="text-sm font-medium">{tab.label}</span>
+                      {Icon && <Icon className="size-3.5" />}
+                      <span className="text-xs font-medium">{tab.label}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -117,16 +122,20 @@ export function AppSidebar({ plugins }: AppSidebarProps) {
           </SidebarMenu>
         </SidebarGroup>
 
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-[10px] uppercase tracking-[0.08em] text-text-dimmed font-semibold">
+        <SidebarGroup className="flex-1 min-h-0 py-1 gap-1">
+          <SidebarGroupLabel className="text-[10px] uppercase tracking-[0.08em] text-text-dimmed font-semibold h-6">
             Repositories
           </SidebarGroupLabel>
-          <SidebarMenu>
+          <SidebarMenu className="gap-0.5 overflow-y-auto">
             {repos?.map((repo: RepoListItem) => (
               <SidebarMenuItem key={repo.name}>
-                <SidebarMenuButton tooltip={repo.name} className="text-text-muted hover:text-text">
+                <SidebarMenuButton
+                  size="sm"
+                  tooltip={repo.name}
+                  className="text-text-muted hover:text-text"
+                >
                   <GitBranch className="size-3.5" />
-                  <span className="text-sm">{repo.name}</span>
+                  <span className="text-xs">{repo.name}</span>
                 </SidebarMenuButton>
                 <SidebarMenuBadge>
                   <RepoStateIndicator

@@ -15,13 +15,6 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../components/ui/select";
-import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -29,6 +22,17 @@ import {
   SheetHeader,
   SheetTitle,
 } from "../../components/ui/sheet";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "../../components/ui/alert-dialog";
 import type {
   FindingSeverity,
   SpecialistClass,
@@ -60,7 +64,7 @@ interface FormState {
 
 const EMPTY_FORM: FormState = {
   name: "",
-  class: "analytical",
+  class: "deterministic",
   description: "",
   model: "",
   triggerEvents: [],
@@ -224,8 +228,6 @@ export function SpecialistEditSheet({
     }));
   }
 
-  const showAnalyticalFields = form.class === "analytical";
-
   return (
     <Sheet
       open={open}
@@ -262,7 +264,9 @@ export function SpecialistEditSheet({
             <Input
               id="sp-name"
               value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, name: e.target.value }))
+              }
               disabled={isEdit}
               placeholder="my-specialist"
             />
@@ -279,7 +283,7 @@ export function SpecialistEditSheet({
               id="sp-desc"
               value={form.description}
               onChange={(e) =>
-                setForm({ ...form, description: e.target.value })
+                setForm((prev) => ({ ...prev, description: e.target.value }))
               }
               placeholder="Short description"
             />
@@ -296,37 +300,27 @@ export function SpecialistEditSheet({
               <Button
                 type="button"
                 size="sm"
-                variant={form.class === "analytical" ? "default" : "secondary"}
-                onClick={() => setForm({ ...form, class: "analytical" })}
+                variant={
+                  form.class === "deterministic" ? "default" : "secondary"
+                }
+                onClick={() =>
+                  setForm((prev) => ({ ...prev, class: "deterministic" }))
+                }
+                disabled={isEdit}
               >
-                analytical
+                deterministic
               </Button>
               <Button
                 type="button"
                 size="sm"
-                variant={
-                  form.class === "deterministic" ? "default" : "secondary"
-                }
-                onClick={() => setForm({ ...form, class: "deterministic" })}
+                variant="secondary"
+                disabled
+                title="Analytical specialists are not yet supported by the backend (Phase 3 gap)."
               >
-                deterministic
+                analytical (coming soon)
               </Button>
             </div>
           </div>
-
-          {showAnalyticalFields && (
-            <div className="space-y-1.5">
-              <Label htmlFor="sp-model" className="text-xs">
-                Model
-              </Label>
-              <Input
-                id="sp-model"
-                value={form.model}
-                onChange={(e) => setForm({ ...form, model: e.target.value })}
-                placeholder="sonnet, haiku, opus..."
-              />
-            </div>
-          )}
 
           <div className="space-y-1.5">
             <Label className="text-xs">Trigger Events</Label>
@@ -361,92 +355,58 @@ export function SpecialistEditSheet({
               id="sp-patterns"
               value={form.watchPatterns}
               onChange={(e) =>
-                setForm({ ...form, watchPatterns: e.target.value })
+                setForm((prev) => ({ ...prev, watchPatterns: e.target.value }))
               }
               rows={3}
               placeholder="*.ts&#10;src/**/*.tsx"
             />
           </div>
 
-          {showAnalyticalFields && (
-            <div className="space-y-1.5">
-              <Label htmlFor="sp-prompt" className="text-xs">
-                System Prompt
-              </Label>
-              <Textarea
-                id="sp-prompt"
-                value={form.systemPrompt}
-                onChange={(e) =>
-                  setForm({ ...form, systemPrompt: e.target.value })
-                }
-                rows={5}
-                placeholder="You are a..."
-              />
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="sp-cd" className="text-xs">
-                Cooldown (seconds)
-              </Label>
-              <Input
-                id="sp-cd"
-                type="number"
-                min="0"
-                value={form.cooldownSeconds}
-                onChange={(e) =>
-                  setForm({ ...form, cooldownSeconds: e.target.value })
-                }
-                placeholder="0"
-              />
-              {errors.cooldownSeconds && (
-                <p className="text-[11px] text-destructive">
-                  {errors.cooldownSeconds}
-                </p>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Severity Threshold</Label>
-              <Select
-                value={form.severityThreshold === "" ? undefined : form.severityThreshold}
-                onValueChange={(v) =>
-                  setForm({
-                    ...form,
-                    severityThreshold: v as FindingSeverity,
-                  })
-                }
-              >
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="default" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="info">info</SelectItem>
-                  <SelectItem value="warning">warning</SelectItem>
-                  <SelectItem value="critical">critical</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Note: model, system prompt, cooldown, and severity threshold are
+            not yet configurable from the dashboard (Phase 3 gap). They're
+            controlled globally in <code>~/.vigil/config.json</code> for now.
+          </p>
         </div>
 
         <SheetFooter>
           <div className="flex w-full items-center justify-between gap-2">
             {isEdit ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => deleteMut.mutate()}
-                disabled={deleteMut.isPending}
-                className="text-destructive"
-              >
-                {deleteMut.isPending ? (
-                  <Loader2 className="size-3 animate-spin mr-1" />
-                ) : (
-                  <Trash2 className="size-3 mr-1" />
-                )}
-                Delete
-              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={deleteMut.isPending}
+                    className="text-destructive"
+                  >
+                    {deleteMut.isPending ? (
+                      <Loader2 className="size-3 animate-spin mr-1" />
+                    ) : (
+                      <Trash2 className="size-3 mr-1" />
+                    )}
+                    Delete
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete {name}?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This removes the specialist configuration. Existing
+                      findings are kept but the specialist will no longer run.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => deleteMut.mutate()}
+                      className="bg-destructive hover:bg-destructive/90"
+                    >
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             ) : (
               <span />
             )}

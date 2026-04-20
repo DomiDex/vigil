@@ -3,6 +3,7 @@ import { Card, CardContent } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import type { SpecialistSummary } from "../../types/api";
+import { formatRelativeTime } from "./time";
 
 interface SpecialistCardProps {
   specialist: SpecialistSummary;
@@ -65,7 +66,7 @@ export function SpecialistCard({
 
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
           <span>{s.findingCount} findings</span>
-          {s.lastRunAt && <span>last: {s.lastRunAt}</span>}
+          {s.lastRunAt && <span>last: {formatRelativeTime(s.lastRunAt)}</span>}
           {s.cooldownRemaining > 0 && (
             <span>cooldown: {s.cooldownRemaining}s</span>
           )}

@@ -13,7 +13,16 @@ async function api(path: string, init?: RequestInit) {
 
 async function apiMutate(path: string, init?: RequestInit) {
   const res = await fetch(`${BASE}${path}`, init);
-  if (!res.ok) throw new Error(`API ${path}: ${res.status}`);
+  if (!res.ok) {
+    let message = `API ${path}: ${res.status}`;
+    try {
+      const body = await res.json();
+      if (body?.error) message = body.error;
+    } catch {
+      // Non-JSON body — keep default message.
+    }
+    throw new Error(message);
+  }
   return { success: true };
 }
 
@@ -55,10 +64,10 @@ export async function removeRepo({ data }: { data: { name: string } }) {
 export async function getTimeline({
   data,
 }: {
-  data: { status?: string; repo?: string; q?: string; page?: number };
+  data: { decision?: string; repo?: string; q?: string; page?: number };
 }) {
   const params = new URLSearchParams();
-  if (data.status) params.set("status", data.status);
+  if (data.decision) params.set("decision", data.decision);
   if (data.repo) params.set("repo", data.repo);
   if (data.q) params.set("q", data.q);
   if (data.page) params.set("page", String(data.page));
@@ -156,10 +165,14 @@ export async function getScheduler() {
 
 // --- Mutations ---
 
-export async function triggerDream({ data }: { data: { repo?: string } }) {
+export async function triggerDream({
+  data,
+}: {
+  data: { repo?: string };
+}): Promise<{ ok: boolean; status: string }> {
   const body = new FormData();
   if (data.repo) body.set("dreamrepo", data.repo);
-  return apiMutate("/api/dreams/trigger", { method: "POST", body });
+  return api("/api/dreams/trigger", { method: "POST", body });
 }
 
 export async function createTask({
@@ -195,11 +208,12 @@ export async function failTask({ data }: { data: { id: string } }) {
 export async function updateTask({
   data,
 }: {
-  data: { id: string; title?: string; description?: string };
+  data: { id: string; title?: string; description?: string; repo?: string };
 }) {
   const body = new FormData();
-  if (data.title) body.set("title", data.title);
-  if (data.description) body.set("description", data.description);
+  if (data.title !== undefined) body.set("title", data.title);
+  if (data.description !== undefined) body.set("description", data.description);
+  if (data.repo !== undefined) body.set("repo", data.repo);
   return apiMutate(`/api/tasks/${encodeURIComponent(data.id)}`, {
     method: "PUT",
     body,

@@ -275,6 +275,40 @@ describe("VectorStore", () => {
 
       expect(JSON.parse(row.source_ids)).toEqual(sourceIds);
     });
+
+    test("storeConsolidated persists patterns, insights, confidence", () => {
+      store.storeConsolidated("c-3", "repo", "summary", ["s1"], {
+        patterns: ["p1", "p2"],
+        insights: ["i1"],
+        confidence: 0.85,
+      });
+
+      const entries = store.getConsolidatedHistory({ repo: "repo" });
+      expect(entries).toHaveLength(1);
+      expect(entries[0]).toMatchObject({
+        id: "c-3",
+        repo: "repo",
+        content: "summary",
+        patterns: ["p1", "p2"],
+        insights: ["i1"],
+        confidence: 0.85,
+      });
+    });
+
+    test("getConsolidatedHistory returns newest first and respects repo filter", async () => {
+      store.storeConsolidated("c-old", "repo-a", "old", []);
+      // storeConsolidated uses Date.now(); force ordering by sleeping a tick.
+      await new Promise((r) => setTimeout(r, 5));
+      store.storeConsolidated("c-new", "repo-a", "new", []);
+      await new Promise((r) => setTimeout(r, 5));
+      store.storeConsolidated("c-b", "repo-b", "other repo", []);
+
+      const aHistory = store.getConsolidatedHistory({ repo: "repo-a" });
+      expect(aHistory.map((e) => e.id)).toEqual(["c-new", "c-old"]);
+
+      const all = store.getConsolidatedHistory();
+      expect(all.map((e) => e.id)).toEqual(["c-b", "c-new", "c-old"]);
+    });
   });
 
   describe("rowToEntry()", () => {

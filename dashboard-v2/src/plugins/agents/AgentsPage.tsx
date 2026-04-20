@@ -7,7 +7,12 @@ import {
   TabsList,
   TabsTrigger,
 } from "../../components/ui/tabs";
-import { Route } from "../../routes/agents";
+import {
+  Route,
+  type AgentsSearch,
+  type AgentsSearchInput,
+  type AgentTab,
+} from "../../routes/agents";
 import type { WidgetProps } from "../../types/plugin";
 
 const PersonaTab = lazy(() => import("./PersonaTab"));
@@ -37,9 +42,9 @@ export default function AgentsPage(_props: Partial<WidgetProps> = {}) {
         onValueChange={(value) =>
           navigate({
             to: "/agents",
-            search: (prev: any) => ({
+            search: (prev: AgentsSearchInput): AgentsSearch => ({
               ...prev,
-              tab: value,
+              tab: value as AgentTab,
               id: undefined,
             }),
           })

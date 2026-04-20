@@ -22,6 +22,17 @@ export interface RepoProfile {
   lastUpdated: number;
 }
 
+export interface ConsolidatedEntry {
+  id: string;
+  repo: string;
+  content: string;
+  sourceIds: string[];
+  createdAt: number;
+  patterns: string[];
+  insights: string[];
+  confidence: number;
+}
+
 // ── EventLog (JSONL) ──
 
 export class EventLog {
@@ -144,9 +155,26 @@ export class VectorStore {
         repo TEXT NOT NULL,
         content TEXT NOT NULL,
         source_ids TEXT DEFAULT '[]',
-        created_at INTEGER NOT NULL
+        created_at INTEGER NOT NULL,
+        patterns TEXT DEFAULT '[]',
+        insights TEXT DEFAULT '[]',
+        confidence REAL DEFAULT 0
       )
     `);
+
+    // Backfill columns for DBs created before dream-history fields were added.
+    // SQLite has no `ADD COLUMN IF NOT EXISTS`, so swallow the duplicate-column error.
+    for (const col of [
+      "patterns TEXT DEFAULT '[]'",
+      "insights TEXT DEFAULT '[]'",
+      "confidence REAL DEFAULT 0",
+    ]) {
+      try {
+        this.db.run(`ALTER TABLE consolidated ADD COLUMN ${col}`);
+      } catch {
+        /* column already exists */
+      }
+    }
   }
 
   store(entry: MemoryEntry): void {
@@ -208,12 +236,55 @@ export class VectorStore {
     );
   }
 
-  storeConsolidated(id: string, repo: string, content: string, sourceIds: string[]): void {
+  storeConsolidated(
+    id: string,
+    repo: string,
+    content: string,
+    sourceIds: string[],
+    extras?: { patterns?: string[]; insights?: string[]; confidence?: number },
+  ): void {
     this.db.run(
-      `INSERT OR REPLACE INTO consolidated (id, repo, content, source_ids, created_at)
-       VALUES (?, ?, ?, ?, ?)`,
-      [id, repo, content, JSON.stringify(sourceIds), Date.now()],
+      `INSERT OR REPLACE INTO consolidated (id, repo, content, source_ids, created_at, patterns, insights, confidence)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        repo,
+        content,
+        JSON.stringify(sourceIds),
+        Date.now(),
+        JSON.stringify(extras?.patterns ?? []),
+        JSON.stringify(extras?.insights ?? []),
+        extras?.confidence ?? 0,
+      ],
     );
+  }
+
+  getConsolidatedHistory(options?: { repo?: string; limit?: number }): ConsolidatedEntry[] {
+    const limit = options?.limit ?? 100;
+    const rows = options?.repo
+      ? (this.db
+          .query(
+            `SELECT id, repo, content, source_ids, created_at, patterns, insights, confidence
+             FROM consolidated WHERE repo = ? ORDER BY created_at DESC LIMIT ?`,
+          )
+          .all(options.repo, limit) as any[])
+      : (this.db
+          .query(
+            `SELECT id, repo, content, source_ids, created_at, patterns, insights, confidence
+             FROM consolidated ORDER BY created_at DESC LIMIT ?`,
+          )
+          .all(limit) as any[]);
+
+    return rows.map((r) => ({
+      id: r.id,
+      repo: r.repo,
+      content: r.content,
+      sourceIds: JSON.parse(r.source_ids || "[]"),
+      createdAt: r.created_at,
+      patterns: JSON.parse(r.patterns || "[]"),
+      insights: JSON.parse(r.insights || "[]"),
+      confidence: typeof r.confidence === "number" ? r.confidence : 0,
+    }));
   }
 
   /**

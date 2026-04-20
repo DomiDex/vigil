@@ -209,12 +209,23 @@ describe("Route order: specific paths before /:name", () => {
     const res = await fetch(`${base}/api/specialists/findings/f_001/action`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ command: "bun run lint:fix" }),
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as any;
     expect(body.success).toBe(true);
     expect(body.actionId).toBeDefined();
+  });
+
+  it("POST /api/specialists/findings/f_001/action without command returns 400", async () => {
+    const res = await fetch(`${base}/api/specialists/findings/f_001/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as any;
+    expect(body.error).toContain("command");
   });
 
   it("POST /api/specialists/flaky/run hits flaky run route", async () => {

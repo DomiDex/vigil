@@ -10,13 +10,13 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { Badge } from "@/components/ui/badge";
 import { NextTickCountdown } from "./next-tick-countdown";
 import { getOverview } from "../../server/functions";
 import { vigilKeys } from "../../lib/query-keys";
 
 export const routeLabels: Record<string, string> = {
-  "/": "Timeline",
+  "/": "Overview",
+  "/timeline": "Timeline",
   "/repos": "Repos",
   "/dreams": "Dreams",
   "/tasks": "Tasks",
@@ -67,12 +67,6 @@ export function SiteHeader() {
       {overview && (
         <div className="flex items-center gap-4">
           <NextTickCountdown nextTickIn={overview.nextTickIn} />
-          <Badge
-            variant="outline"
-            className="border-white/[0.08] text-text-muted text-xs font-mono"
-          >
-            {overview.repoCount} repos
-          </Badge>
         </div>
       )}
     </header>

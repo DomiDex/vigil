@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { AlertTriangle, Info, Loader2, Shield, Zap } from "lucide-react";
@@ -21,17 +21,12 @@ import {
   SheetTitle,
 } from "../../components/ui/sheet";
 import type { FindingDetailResponse, FindingSeverity } from "../../types/api";
+import { severityClasses } from "./severity";
 
 interface FindingDetailSheetProps {
   findingId: string | null;
   open: boolean;
   onClose: () => void;
-}
-
-function severityClasses(sev: FindingSeverity): string {
-  if (sev === "critical") return "text-red-400 bg-red-400/10 border-0";
-  if (sev === "warning") return "text-yellow-400 bg-yellow-400/10 border-0";
-  return "text-blue-400 bg-blue-400/10 border-0";
 }
 
 function SeverityIcon({ sev }: { sev: FindingSeverity }) {
@@ -48,13 +43,20 @@ export function FindingDetailSheet({
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [ignorePattern, setIgnorePattern] = useState("");
+  const [commandDraft, setCommandDraft] = useState("");
 
   const { data, isLoading } = useQuery({
-    queryKey: vigilKeys.specialists.findingDetail(findingId ?? ""),
+    queryKey: vigilKeys.specialists.findings.detail(findingId ?? ""),
     queryFn: () => getSpecialistFindingDetail({ data: { id: findingId! } }),
     enabled: !!findingId && open,
   });
   const finding = data as FindingDetailResponse | undefined;
+
+  // Reset per-finding state when switching between findings.
+  useEffect(() => {
+    setIgnorePattern("");
+    setCommandDraft("");
+  }, [findingId]);
 
   const dismissMut = useMutation({
     mutationFn: (pattern?: string) =>
@@ -62,7 +64,10 @@ export function FindingDetailSheet({
         data: { id: findingId!, ignorePattern: pattern || undefined },
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["specialists", "findings"] });
+      // Root key invalidates both list and detail subkeys.
+      queryClient.invalidateQueries({
+        queryKey: vigilKeys.specialists.findings.root,
+      });
       queryClient.invalidateQueries({ queryKey: vigilKeys.specialists.all });
       toast.success("Finding dismissed");
       setIgnorePattern("");
@@ -72,8 +77,8 @@ export function FindingDetailSheet({
   });
 
   const actionMut = useMutation({
-    mutationFn: () =>
-      createActionFromFinding({ data: { id: findingId! } }),
+    mutationFn: (command: string) =>
+      createActionFromFinding({ data: { id: findingId!, command } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: vigilKeys.actions.all });
       toast.success("Action created");
@@ -159,6 +164,25 @@ export function FindingDetailSheet({
 
               <section className="space-y-2">
                 <h4 className="text-xs font-medium text-muted-foreground uppercase">
+                  Action Command
+                </h4>
+                <Input
+                  value={commandDraft}
+                  onChange={(e) => setCommandDraft(e.target.value)}
+                  placeholder={
+                    finding.suggestion
+                      ? `hint: ${finding.suggestion}`
+                      : "e.g. bun run lint:fix"
+                  }
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  The suggestion is a hint, not an executable command. Enter an
+                  exact shell command to queue as an action.
+                </p>
+              </section>
+
+              <section className="space-y-2">
+                <h4 className="text-xs font-medium text-muted-foreground uppercase">
                   Ignore Pattern (optional)
                 </h4>
                 <Input
@@ -201,8 +225,13 @@ export function FindingDetailSheet({
             </Button>
             <Button
               size="sm"
-              onClick={() => actionMut.mutate()}
-              disabled={actionMut.isPending || !finding}
+              onClick={() => actionMut.mutate(commandDraft.trim())}
+              disabled={
+                actionMut.isPending || !finding || !commandDraft.trim()
+              }
+              title={
+                !commandDraft.trim() ? "Enter a command above first" : undefined
+              }
             >
               {actionMut.isPending ? (
                 <Loader2 className="size-3 animate-spin mr-1" />

@@ -34,9 +34,12 @@ export function getActionsJSON(ctx: DashboardContext, opts?: { status?: string }
   // Compute stats
   const stats = { approved: 0, rejected: 0, executed: 0, failed: 0, pending: 0 };
   const byTier = { safe: 0, moderate: 0, dangerous: 0 };
+  const bySource = { llm: 0, specialist: 0, manual: 0 };
   for (const a of recent) {
     stats[a.status as keyof typeof stats] = (stats[a.status as keyof typeof stats] || 0) + 1;
     byTier[a.tier] = (byTier[a.tier] || 0) + 1;
+    const src = (a.source ?? "llm") as keyof typeof bySource;
+    if (src in bySource) bySource[src] += 1;
   }
 
   return {
@@ -52,6 +55,7 @@ export function getActionsJSON(ctx: DashboardContext, opts?: { status?: string }
     })),
     stats,
     byTier,
+    bySource,
     gateConfig: executor.getGateConfig(),
     isOptedIn: executor.isOptedIn,
   };

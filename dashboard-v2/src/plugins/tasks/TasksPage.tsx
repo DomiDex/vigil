@@ -1,12 +1,11 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { CheckSquare, Pencil, Plus } from "lucide-react";
+import { CheckSquare, Pencil, Plus, Clock } from "lucide-react";
 import { vigilKeys } from "../../lib/query-keys";
 import {
   getTasks,
   activateTask,
   completeTask,
-  failTask,
   cancelTask,
   createTask,
   updateTask,
@@ -44,7 +43,7 @@ export function getTaskActions(status: string): string[] {
     case "pending":
       return ["activate", "cancel"];
     case "active":
-      return ["complete", "fail"];
+      return ["complete", "cancel"];
     case "waiting":
       return ["activate", "cancel"];
     case "completed":
@@ -56,23 +55,26 @@ export function getTaskActions(status: string): string[] {
   }
 }
 
-export function sortTasksWithChildren(tasks: any[]): any[] {
-  const parentIds = new Set(tasks.filter((t) => !t.parentId).map((t) => t.id));
-  const parents = tasks.filter((t) => !t.parentId);
-  const children = tasks.filter((t) => t.parentId);
+interface WaitCondition {
+  type: "event" | "task" | "schedule";
+  eventType?: string;
+  filter?: string;
+  taskId?: string;
+  cron?: string;
+}
 
-  const result: any[] = [];
-  for (const parent of parents) {
-    result.push(parent);
-    const kids = children.filter((c) => c.parentId === parent.id);
-    result.push(...kids);
+export function describeWaitCondition(wc: WaitCondition | null | undefined): string | null {
+  if (!wc) return null;
+  if (wc.type === "event" && wc.eventType) {
+    return wc.filter ? `waiting on ${wc.eventType} (${wc.filter})` : `waiting on ${wc.eventType}`;
   }
-
-  // Add orphan children (parentId not in parents list)
-  const orphans = children.filter((c) => !parentIds.has(c.parentId));
-  result.push(...orphans);
-
-  return result;
+  if (wc.type === "task" && wc.taskId) {
+    return `waiting on task ${wc.taskId.slice(0, 8)}`;
+  }
+  if (wc.type === "schedule" && wc.cron) {
+    return `waiting on schedule ${wc.cron}`;
+  }
+  return "waiting";
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -84,13 +86,20 @@ const STATUS_STYLES: Record<string, string> = {
   cancelled: "bg-muted text-muted-foreground",
 };
 
-export default function TasksPage({ activeRepo }: Partial<WidgetProps> = {}) {
+interface EditTarget {
+  id: string;
+  title: string;
+  description: string;
+  repo: string;
+}
+
+export default function TasksPage({ activeRepo: _activeRepo }: Partial<WidgetProps> = {}) {
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newRepo, setNewRepo] = useState("");
-  const [editTarget, setEditTarget] = useState<{ id: string; title: string; description: string } | null>(null);
+  const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
   const queryClient = useQueryClient();
 
   const { data, isLoading, isError, error } = useQuery({
@@ -120,6 +129,7 @@ export default function TasksPage({ activeRepo }: Partial<WidgetProps> = {}) {
       setNewTitle("");
       setNewDescription("");
       setNewRepo("");
+      toast.success("Task created");
     },
     onError: (err: Error) => toast.error(`Failed to create task: ${err.message}`),
   });
@@ -133,39 +143,43 @@ export default function TasksPage({ activeRepo }: Partial<WidgetProps> = {}) {
   const tasksData = data as TasksData | undefined;
   const tasks = tasksData?.tasks ?? [];
   const counts = tasksData?.counts ?? {};
-  const completionRate = tasksData?.completionRate ?? 0;
 
-  const sorted = sortTasksWithChildren(tasks);
-  const filtered = statusFilter
-    ? sorted.filter((t) => t.status === statusFilter)
-    : sorted;
+  const filtered = statusFilter ? tasks.filter((t) => t.status === statusFilter) : tasks;
 
   const activate = useMutation({
     mutationFn: (id: string) => activateTask({ data: { id } }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: vigilKeys.tasks }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: vigilKeys.tasks });
+      toast.success("Task activated");
+    },
+    onError: (err: Error) => toast.error(`Failed to activate: ${err.message}`),
   });
 
   const complete = useMutation({
     mutationFn: (id: string) => completeTask({ data: { id } }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: vigilKeys.tasks }),
-  });
-
-  const fail = useMutation({
-    mutationFn: (id: string) => failTask({ data: { id } }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: vigilKeys.tasks }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: vigilKeys.tasks });
+      toast.success("Task completed");
+    },
+    onError: (err: Error) => toast.error(`Failed to complete: ${err.message}`),
   });
 
   const cancel = useMutation({
     mutationFn: (id: string) => cancelTask({ data: { id } }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: vigilKeys.tasks }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: vigilKeys.tasks });
+      toast.success("Task cancelled");
+    },
+    onError: (err: Error) => toast.error(`Failed to cancel: ${err.message}`),
   });
 
   const update = useMutation({
-    mutationFn: (data: { id: string; title: string; description: string }) =>
-      updateTask({ data }),
+    mutationFn: (payload: { id: string; title: string; description: string; repo: string }) =>
+      updateTask({ data: payload }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: vigilKeys.tasks });
       setEditTarget(null);
+      toast.success("Task updated");
     },
     onError: (err: Error) => toast.error(`Failed to update task: ${err.message}`),
   });
@@ -178,29 +192,18 @@ export default function TasksPage({ activeRepo }: Partial<WidgetProps> = {}) {
       case "complete":
         complete.mutate(id);
         break;
-      case "fail":
-        fail.mutate(id);
-        break;
       case "cancel":
         cancel.mutate(id);
         break;
     }
   };
 
-  const allCount = Object.values(counts).reduce(
-    (a: number, b: number) => a + b,
-    0,
-  );
+  const allCount = Object.values(counts).reduce((a: number, b: number) => a + b, 0);
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-medium">Tasks</h3>
-          <span className="text-xs text-muted-foreground">
-            {completionRate}% complete
-          </span>
-        </div>
+        <h3 className="text-sm font-medium">Tasks</h3>
         <Button size="xs" onClick={() => setCreateOpen(true)}>
           <Plus className="size-3" />
           New Task
@@ -233,10 +236,12 @@ export default function TasksPage({ activeRepo }: Partial<WidgetProps> = {}) {
               />
             </div>
             <div className="space-y-2">
-              <Label>Repository</Label>
+              <Label>
+                Repository <span className="text-destructive">*</span>
+              </Label>
               <Select value={newRepo} onValueChange={setNewRepo}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select repo (optional)" />
+                  <SelectValue placeholder="Select repo" />
                 </SelectTrigger>
                 <SelectContent>
                   {repos.map((r: any) => (
@@ -251,7 +256,7 @@ export default function TasksPage({ activeRepo }: Partial<WidgetProps> = {}) {
           <DialogFooter>
             <Button
               onClick={() => createMut.mutate()}
-              disabled={!isTaskFormValid(newTitle) || createMut.isPending}
+              disabled={!isTaskFormValid(newTitle) || !newRepo || createMut.isPending}
             >
               {createMut.isPending ? "Creating..." : "Create Task"}
             </Button>
@@ -291,10 +296,11 @@ export default function TasksPage({ activeRepo }: Partial<WidgetProps> = {}) {
       <div className="space-y-2">
         {filtered.map((task: any) => {
           const actions = getTaskActions(task.status);
-          const isChild = !!task.parentId;
+          const waitLabel =
+            task.status === "waiting" ? describeWaitCondition(task.waitCondition) : null;
 
           return (
-            <Card key={task.id} className={cn(isChild && "ml-6")}>
+            <Card key={task.id}>
               <CardContent className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <CheckSquare className="size-4 text-muted-foreground" />
@@ -302,8 +308,12 @@ export default function TasksPage({ activeRepo }: Partial<WidgetProps> = {}) {
                     <div className="text-sm font-medium">{task.title}</div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       {task.repo && <span>{task.repo}</span>}
-                      {task.updatedRelative && (
-                        <span>{task.updatedRelative}</span>
+                      {task.updatedRelative && <span>{task.updatedRelative}</span>}
+                      {waitLabel && (
+                        <span className="flex items-center gap-1 text-warning">
+                          <Clock className="size-3" />
+                          {waitLabel}
+                        </span>
                       )}
                     </div>
                   </div>
@@ -322,7 +332,14 @@ export default function TasksPage({ activeRepo }: Partial<WidgetProps> = {}) {
                       size="xs"
                       variant="secondary"
                       aria-label={`Edit ${task.title}`}
-                      onClick={() => setEditTarget({ id: task.id, title: task.title, description: task.description ?? "" })}
+                      onClick={() =>
+                        setEditTarget({
+                          id: task.id,
+                          title: task.title,
+                          description: task.description ?? "",
+                          repo: task.repo ?? "",
+                        })
+                      }
                     >
                       <Pencil className="size-3" />
                     </Button>
@@ -373,9 +390,39 @@ export default function TasksPage({ activeRepo }: Partial<WidgetProps> = {}) {
                 onChange={(e) => setEditTarget((prev) => prev ? { ...prev, description: e.target.value } : null)}
               />
             </div>
+            <div className="space-y-2">
+              <Label>Repository</Label>
+              <Select
+                value={editTarget?.repo ?? ""}
+                onValueChange={(v) =>
+                  setEditTarget((prev) => (prev ? { ...prev, repo: v } : null))
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select repo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {repos.map((r: any) => (
+                    <SelectItem key={r.name} value={r.name}>
+                      {r.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <DialogFooter>
-            <Button onClick={() => update.mutate({ id: editTarget!.id, title: editTarget!.title, description: editTarget!.description })} disabled={update.isPending || !editTarget?.title}>
+            <Button
+              onClick={() =>
+                update.mutate({
+                  id: editTarget!.id,
+                  title: editTarget!.title,
+                  description: editTarget!.description,
+                  repo: editTarget!.repo,
+                })
+              }
+              disabled={update.isPending || !editTarget?.title || !editTarget?.repo}
+            >
               {update.isPending ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>

@@ -10,8 +10,9 @@
     "dashboard:dev": "cd dashboard-v2 && bun --bun vite dev",
     "lint": "biome check src/",
     "lint:fix": "biome check --write src/",
+    "lint:wiki": "bun run scripts/wiki-lint.ts",
     "typecheck": "tsc --noEmit",
-    "check": "bun run lint && bun run typecheck"
+    "check": "bun run lint && bun run typecheck && bun run lint:wiki"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.10",

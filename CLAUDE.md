@@ -37,6 +37,20 @@ bun run src/cli/index.ts memory             # Show repo profile
 bun run src/cli/index.ts config [key] [val] # View/set config
 ```
 
+## Wiki Maintenance
+The `wiki/` directory documents durable knowledge (subsystems, decisions, gotchas). Pages use a front-matter schema defined in `wiki/.template.md`. Two safeguards keep it from rotting:
+- `scripts/wiki-lint.ts` — static checks (orphans, broken links, dead `sources:`, git-mtime drift). Wired into `.githooks/pre-commit` on `wiki/**` changes.
+- `.claude/hooks/wiki-review.sh` — SessionEnd hook that reviews the transcript and proposes wiki updates (dry-run logs to `.claude/hooks/wiki-review.log`; set `APPLY=1` to auto-edit).
+
+Verify:
+```bash
+bun run lint:wiki        # wiki: clean
+bun run check            # lint + typecheck + lint:wiki
+git commit -m "..."      # pre-commit runs lint:wiki on wiki/** changes
+```
+
+New clones must run `git config core.hooksPath .githooks` once to enable the pre-commit hook.
+
 ## Critical: LLM Billing
 All LLM calls go through `claude -p` (not the Anthropic API directly). This routes through the Max subscription. The decision-max.ts module temporarily removes ANTHROPIC_API_KEY from env before spawning claude CLI to ensure Max billing.
 

@@ -42,6 +42,9 @@ export function createMockDaemon() {
           },
         ];
       },
+      getConsolidatedHistory(_options?: { repo?: string; limit?: number }) {
+        return [];
+      },
     },
     eventLog: {
       query(_options: any) {

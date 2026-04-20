@@ -372,6 +372,27 @@ describe("handleSpecialistDelete", () => {
     const result = handleSpecialistDelete(ctx, "nonexistent");
     expect(result.error).toBeDefined();
   });
+
+  it("soft-dismisses the deleted specialist's findings so they don't linger", () => {
+    // Seed a non-builtin specialist so we can actually delete it.
+    handleSpecialistCreate(ctx, {
+      name: "temp-agent",
+      class: "deterministic",
+      description: "temp",
+      triggerEvents: ["new_commit"],
+    });
+
+    const store = (ctx.daemon as any).specialistStore;
+    const dismissedFor: string[] = [];
+    store.dismissFindingsBySpecialist = (name: string) => {
+      dismissedFor.push(name);
+      return 0;
+    };
+
+    const result = handleSpecialistDelete(ctx, "temp-agent");
+    expect(result.success).toBe(true);
+    expect(dismissedFor).toEqual(["temp-agent"]);
+  });
 });
 
 // ── Update + Toggle ──
@@ -380,6 +401,34 @@ describe("handleSpecialistUpdate", () => {
   it("returns null for non-existent specialist", () => {
     const result = handleSpecialistUpdate(ctx, "nonexistent", { description: "x" });
     expect(result).toBeNull();
+  });
+
+  it("rejects unsupported fields instead of silently dropping them", () => {
+    const result = handleSpecialistUpdate(ctx, "security", {
+      description: "updated",
+      model: "haiku",
+    });
+    expect(result).not.toBeNull();
+    expect(result!.success).toBeUndefined();
+    expect(result!.error).toContain("model");
+  });
+
+  it("refuses to change class after creation", () => {
+    // `security` was seeded as class: deterministic. Flipping to analytical
+    // via update would otherwise bypass the create-time analytical reject.
+    const result = handleSpecialistUpdate(ctx, "security", { class: "analytical" });
+    expect(result).not.toBeNull();
+    expect(result!.success).toBeUndefined();
+    expect(result!.error).toContain("class");
+  });
+
+  it("accepts an update that passes the same class (no-op class echo)", () => {
+    const result = handleSpecialistUpdate(ctx, "security", {
+      class: "deterministic",
+      description: "updated",
+    });
+    expect(result).not.toBeNull();
+    expect(result!.success).toBe(true);
   });
 });
 
@@ -433,25 +482,109 @@ describe("handleFindingDismiss", () => {
 });
 
 describe("handleFindingCreateAction", () => {
-  it("creates action from finding and returns actionId", async () => {
-    const result = await handleFindingCreateAction(ctx, "f_001", {});
+  it("creates action when an explicit command is provided", async () => {
+    const result = await handleFindingCreateAction(ctx, "f_001", {
+      command: "bun run lint:fix",
+    });
     expect(result.success).toBe(true);
     expect(result.actionId).toBe("action_001");
   });
 
+  it("rejects when no command is provided (suggestion is not auto-executed)", async () => {
+    const result = await handleFindingCreateAction(ctx, "f_001", {});
+    expect(result.success).toBeUndefined();
+    expect(result.error).toContain("command");
+  });
+
   it("returns error for non-existent finding", async () => {
-    const result = await handleFindingCreateAction(ctx, "nonexistent", {});
+    const result = await handleFindingCreateAction(ctx, "nonexistent", {
+      command: "noop",
+    });
     expect(result.error).toBeDefined();
+  });
+
+  it("propagates source=specialist + sourceFindingId to executor.submit", async () => {
+    let captured: any = null;
+    (ctx.daemon as any).actionExecutor.submit = async (
+      command: string,
+      reason: string,
+      repo: string,
+      repoPath: string,
+      opts: any,
+    ) => {
+      captured = { command, reason, repo, repoPath, opts };
+      return {
+        id: "action_002",
+        repo,
+        command,
+        args: [command],
+        tier: "safe",
+        reason,
+        confidence: opts?.confidence ?? 0,
+        status: "pending",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+    };
+    const result = await handleFindingCreateAction(ctx, "f_001", {
+      command: "bun run lint:fix",
+    });
+    expect(result.success).toBe(true);
+    expect(captured.opts.source).toBe("specialist");
+    expect(captured.opts.sourceSpecialist).toBe("security");
+    expect(captured.opts.sourceFindingId).toBe("f_001");
   });
 });
 
 // ── Flaky tests ──
 
 describe("getFlakyTestsJSON", () => {
-  it("returns flaky test data", () => {
+  it("returns tests array and summary (camelCase contract)", () => {
     const url = new URL("http://localhost/api/specialists/flaky");
-    const result = getFlakyTestsJSON(ctx, url);
-    expect(result).toBeDefined();
+    const result = getFlakyTestsJSON(ctx, url) as any;
+    expect(Array.isArray(result.tests)).toBe(true);
+    expect(result.summary).toEqual({
+      totalTracked: expect.any(Number),
+      flakyCount: expect.any(Number),
+      stableCount: expect.any(Number),
+      insufficientData: expect.any(Number),
+    });
+  });
+
+  it("transforms FlakinessRow to FlakyTestItem (camelCase)", () => {
+    // Seed the fake store with a single tracked test.
+    const store = (ctx.daemon as any).specialistStore;
+    const now = Date.now();
+    const trackedRow = {
+      repo: "vigil",
+      test_name: "tests/flaky.test.ts > wobbles",
+      test_file: "tests/flaky.test.ts",
+      total_runs: 10,
+      total_passes: 3,
+      total_failures: 7,
+      flaky_commits: 2,
+      last_seen_commit: "abc123",
+      last_seen_passed: 0,
+      updated_at: now,
+    };
+    store.getAllTrackedTests = () => [trackedRow];
+
+    const url = new URL("http://localhost/api/specialists/flaky");
+    const result = getFlakyTestsJSON(ctx, url) as any;
+
+    expect(result.tests).toHaveLength(1);
+    const t = result.tests[0];
+    expect(t.testName).toBe("tests/flaky.test.ts > wobbles");
+    expect(t.testFile).toBe("tests/flaky.test.ts");
+    expect(t.repo).toBe("vigil");
+    expect(t.totalRuns).toBe(10);
+    expect(t.flakyCommits).toBe(2);
+    expect(t.isDefinitive).toBe(true);
+    expect(t.passRate).toBeCloseTo(0.3);
+    expect(t.status).toBe("flaky");
+    expect(t.lastFlakyAt).toBe(new Date(now).toISOString());
+    expect(result.summary.totalTracked).toBe(1);
+    expect(result.summary.flakyCount).toBe(1);
   });
 });
 
@@ -469,21 +602,21 @@ describe("handleFlakyTestRun", () => {
 });
 
 describe("handleFlakyTestReset", () => {
-  it("returns success on happy path (falls back to first watched repo)", () => {
-    const result = handleFlakyTestReset(ctx, "some-test");
+  it("succeeds when an explicit repo is provided", () => {
+    const result = handleFlakyTestReset(ctx, "some-test", "vigil");
     expect(result.success).toBe(true);
+  });
+
+  it("requires the repo query param (no fallback)", () => {
+    const result = handleFlakyTestReset(ctx, "some-test");
+    expect(result.success).toBeUndefined();
+    expect(result.error).toContain("repo");
   });
 
   it("returns error when nothing was deleted", () => {
     (ctx.daemon as any).specialistStore.resetFlakyTest = () => false;
-    const result = handleFlakyTestReset(ctx, "missing-test");
+    const result = handleFlakyTestReset(ctx, "missing-test", "vigil");
     expect(result.error).toContain("not found");
-  });
-
-  it("returns error when no repo query param and no watched repos", () => {
-    (ctx.daemon as any).repoPaths = [];
-    const result = handleFlakyTestReset(ctx, "some-test");
-    expect(result.error).toContain("repo");
   });
 });
 

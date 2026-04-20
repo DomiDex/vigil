@@ -9,6 +9,24 @@ export interface FlakinessReport {
   suggestion: string;
 }
 
+/**
+ * Classify a single flakiness row as definitive flaky / statistical flaky / stable.
+ * Shared by the CLI table, the backend API transform, and the dashboard.
+ * When thresholds change, callers stay in sync.
+ */
+export type FlakyClassification = "FLAKY (definitive)" | "FLAKY (statistical)" | "STABLE";
+export function classifyFlakyStatus(row: {
+  flaky_commits: number;
+  total_runs: number;
+  total_passes: number;
+}): FlakyClassification {
+  if (row.flaky_commits > 0) return "FLAKY (definitive)";
+  if (row.total_runs > 0 && row.total_passes / row.total_runs < 0.5) {
+    return "FLAKY (statistical)";
+  }
+  return "STABLE";
+}
+
 export interface FlakinessStats {
   test_name: string;
   test_file: string;

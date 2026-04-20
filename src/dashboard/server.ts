@@ -281,7 +281,8 @@ export async function startDashboard(daemon: Daemon, port = 7480): Promise<Retur
       if (path === "/api/tasks" && req.method === "POST") {
         const body = await req.formData().catch(() => null);
         if (!body) return json({ error: "Invalid form data" }, 400);
-        return json(handleTaskCreate(ctx, body));
+        const result = handleTaskCreate(ctx, body);
+        return json(result, result.ok ? 200 : 400);
       }
       // Match POST /api/tasks/:id/activate
       const taskActivateMatch = path.match(/^\/api\/tasks\/([^/]+)\/activate$/);
@@ -493,7 +494,9 @@ export async function startDashboard(daemon: Daemon, port = 7480): Promise<Retur
       if (findingActionMatch && req.method === "POST") {
         const body = await req.json().catch(() => null);
         const result = await handleFindingCreateAction(ctx, decodeURIComponent(findingActionMatch[1]), body);
-        return json(result, result.error ? 404 : 200);
+        if (!result.error) return json(result);
+        const status = result.error === "Finding not found" ? 404 : 400;
+        return json(result, status);
       }
       const findingDetailMatch = path.match(/^\/api\/specialists\/findings\/([^/]+)$/);
       if (findingDetailMatch && req.method === "GET") {
@@ -553,7 +556,7 @@ export async function startDashboard(daemon: Daemon, port = 7480): Promise<Retur
           if (!body) return json({ error: "Invalid JSON body" }, 400);
           const result = handleSpecialistUpdate(ctx, name, body);
           if (!result) return json({ error: "Specialist not found" }, 404);
-          return json(result);
+          return json(result, result.error ? 400 : 200);
         }
         if (req.method === "DELETE") {
           const result = handleSpecialistDelete(ctx, name);

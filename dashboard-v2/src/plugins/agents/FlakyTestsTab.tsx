@@ -25,6 +25,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "../../components/ui/alert-dialog";
 import { cn } from "../../lib/cn";
 import type { FlakyTestsResponse, FlakyTestItem } from "../../types/api";
 
@@ -52,7 +63,7 @@ export default function FlakyTestsTab() {
   const [repoFilter, setRepoFilter] = useState("all");
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: vigilKeys.specialists.flaky(
+    queryKey: vigilKeys.specialists.flaky.list(
       repoFilter !== "all" ? repoFilter : undefined,
     ),
     queryFn: () =>
@@ -73,16 +84,23 @@ export default function FlakyTestsTab() {
   const runMut = useMutation({
     mutationFn: (repo: string) => runFlakyTests({ data: { repo } }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["specialists", "flaky"] });
+      // Root key invalidates every flaky list variant (filtered + unfiltered).
+      queryClient.invalidateQueries({
+        queryKey: vigilKeys.specialists.flaky.root,
+      });
       toast.success("Test run triggered");
     },
     onError: (err: Error) => toast.error(err.message),
   });
 
   const resetMut = useMutation({
-    mutationFn: (testName: string) => resetFlakyTest({ data: { testName } }),
+    mutationFn: ({ testName, repo }: { testName: string; repo: string }) =>
+      resetFlakyTest({ data: { testName, repo } }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["specialists", "flaky"] });
+      // Root key invalidates every flaky list variant (filtered + unfiltered).
+      queryClient.invalidateQueries({
+        queryKey: vigilKeys.specialists.flaky.root,
+      });
       toast.success("Flaky data reset");
     },
     onError: (err: Error) => toast.error(err.message),
@@ -208,19 +226,49 @@ export default function FlakyTestsTab() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="size-6"
-                        title="Reset flaky data"
-                        onClick={() => resetMut.mutate(t.testName)}
-                        disabled={
-                          resetMut.isPending &&
-                          resetMut.variables === t.testName
-                        }
-                      >
-                        <Trash2 className="size-3 text-muted-foreground" />
-                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="size-6"
+                            title="Reset flaky data"
+                            disabled={
+                              resetMut.isPending &&
+                              resetMut.variables?.testName === t.testName &&
+                              resetMut.variables?.repo === t.repo
+                            }
+                          >
+                            <Trash2 className="size-3 text-muted-foreground" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>
+                              Reset flaky history?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Clears the flakiness counters for
+                              <code className="mx-1">{t.testName}</code>. Past
+                              test runs are discarded and tracking starts over.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() =>
+                                resetMut.mutate({
+                                  testName: t.testName,
+                                  repo: t.repo,
+                                })
+                              }
+                              className="bg-destructive hover:bg-destructive/90"
+                            >
+                              Reset
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </TableCell>
                   </TableRow>
                 );

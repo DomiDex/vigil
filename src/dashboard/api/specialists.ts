@@ -19,6 +19,47 @@ function parseJsonArray(raw: unknown): string[] {
   }
 }
 
+interface FindingItem {
+  id: string;
+  specialist: string;
+  severity: string;
+  title: string;
+  detail: string;
+  file?: string;
+  line?: number;
+  suggestion?: string;
+  repo: string;
+  confidence: number;
+  commitHash?: string;
+  dismissed: boolean;
+  dismissedAt?: number;
+  ignorePattern?: string;
+  sourceActionId?: string;
+  createdAt: string;
+}
+
+function findingRowToItem(row: any): FindingItem {
+  const createdAtTs = typeof row.created_at === "number" ? row.created_at : Number(row.created_at) || Date.now();
+  return {
+    id: row.id,
+    specialist: row.specialist,
+    severity: row.severity,
+    title: row.title,
+    detail: row.detail,
+    file: row.file ?? undefined,
+    line: row.line ?? undefined,
+    suggestion: row.suggestion ?? undefined,
+    repo: row.repo,
+    confidence: typeof row.confidence === "number" ? row.confidence : Number(row.confidence) || 0,
+    commitHash: row.commit_hash ?? undefined,
+    dismissed: row.dismissed === 1 || row.dismissed === true,
+    dismissedAt: row.dismissed_at ?? undefined,
+    ignorePattern: row.ignore_pattern ?? undefined,
+    sourceActionId: row.source_action_id ?? undefined,
+    createdAt: new Date(createdAtTs).toISOString(),
+  };
+}
+
 function rowToConfig(row: any): {
   name: string;
   class: string;
@@ -49,10 +90,6 @@ function repoNames(ctx: DashboardContext): string[] {
     .filter((n): n is string => n.length > 0);
 }
 
-function firstRepoName(ctx: DashboardContext): string | undefined {
-  return repoNames(ctx)[0];
-}
-
 /** Per-repo cooldown map. 0 = ready. */
 function cooldownsByRepo(ctx: DashboardContext, name: string): Record<string, number> {
   const router = (ctx.daemon as any).specialistRouter;
@@ -61,7 +98,14 @@ function cooldownsByRepo(ctx: DashboardContext, name: string): Record<string, nu
   for (const repo of repoNames(ctx)) {
     try {
       out[repo] = router.getCooldownRemaining(name, repo) ?? 0;
-    } catch {
+    } catch (err) {
+      // Fall back to "ready" so the UI stays responsive, but log — a thrown
+      // cooldown error usually means the router has a real bug we'd otherwise
+      // hide indefinitely.
+      console.warn(
+        `[specialists] cooldown lookup failed for ${name}@${repo}:`,
+        err instanceof Error ? err.message : err,
+      );
       out[repo] = 0;
     }
   }
@@ -123,7 +167,7 @@ export function getSpecialistsJSON(ctx: DashboardContext) {
       watchPatterns: cfg.watchPatterns,
       isBuiltin: cfg.isBuiltin,
       findingCount: s.total,
-      lastRunAt: s.lastAt,
+      lastRunAt: s.lastAt != null ? new Date(s.lastAt).toISOString() : null,
       lastRunRepo: s.lastRepo,
       cooldownRemaining: minCooldown(cooldowns),
       cooldowns,
@@ -143,7 +187,8 @@ export function getSpecialistDetailJSON(ctx: DashboardContext, name: string) {
   const cfg = rowToConfig(row);
   const stats = store.getSpecialistStats(name);
   // Repo-agnostic: show findings from every watched repo, not just the first.
-  const { findings: recentFindings } = store.getFindings({ specialist: name, limit: 20, offset: 0 });
+  const { findings: recentFindingsRaw } = store.getFindings({ specialist: name, limit: 20, offset: 0 });
+  const recentFindings = recentFindingsRaw.map(findingRowToItem);
   const summaries =
     typeof (store as any).getSpecialistSummaries === "function"
       ? (store as any).getSpecialistSummaries()
@@ -161,7 +206,7 @@ export function getSpecialistDetailJSON(ctx: DashboardContext, name: string) {
       watchPatterns: cfg.watchPatterns,
       isBuiltin: cfg.isBuiltin,
       findingCount: stats.total,
-      lastRunAt: summary.lastAt,
+      lastRunAt: summary.lastAt != null ? new Date(summary.lastAt).toISOString() : null,
       lastRunRepo: summary.lastRepo,
       cooldownRemaining: minCooldown(cooldowns),
       cooldowns,
@@ -189,7 +234,8 @@ export function getSpecialistFindingsJSON(ctx: DashboardContext, url: URL) {
   const store = ctx.daemon.specialistStore;
   if (!store) return { findings: [], total: 0, page, hasMore: false };
 
-  const { findings, total } = store.getFindings({ specialist, severity, repo, limit, offset });
+  const { findings: rawFindings, total } = store.getFindings({ specialist, severity, repo, limit, offset });
+  const findings = rawFindings.map(findingRowToItem);
   return { findings, total, page, hasMore: offset + findings.length < total };
 }
 
@@ -198,7 +244,8 @@ export function getSpecialistFindingsJSON(ctx: DashboardContext, url: URL) {
 export function getSpecialistFindingDetailJSON(ctx: DashboardContext, id: string) {
   const store = ctx.daemon.specialistStore;
   if (!store) return null;
-  return store.getFindingById(id) ?? null;
+  const row = store.getFindingById(id);
+  return row ? findingRowToItem(row) : null;
 }
 
 // ── POST /api/specialists ──
@@ -254,16 +301,35 @@ export function handleSpecialistCreate(
 
 // ── PUT /api/specialists/:name ──
 
-export function handleSpecialistUpdate(ctx: DashboardContext, name: string, body: any): { success: true } | null {
+export function handleSpecialistUpdate(
+  ctx: DashboardContext,
+  name: string,
+  body: any,
+): { success?: true; error?: string } | null {
   const store = ctx.daemon.specialistStore;
   if (!store) return null;
   const row = store.getSpecialistConfig(name);
   if (!row) return null;
   const existing = rowToConfig(row);
 
+  // Symmetric with create: reject fields the backend can't yet persist rather
+  // than silently dropping them and returning success.
+  const dropped = UNSUPPORTED_CONFIG_FIELDS.filter((k) => body?.[k] !== undefined);
+  if (dropped.length > 0) {
+    return {
+      error: `Unsupported fields (Phase 3 gap): ${dropped.join(", ")}. Remove them and retry.`,
+    };
+  }
+
+  // Class is immutable after creation. Allowing flips would bypass the
+  // analytical-class reject gate in handleSpecialistCreate.
+  if (body?.class !== undefined && body.class !== existing.class) {
+    return { error: "class cannot be changed after creation — delete and recreate instead" };
+  }
+
   store.upsertSpecialistConfig({
     name,
-    class: body?.class ?? existing.class,
+    class: existing.class,
     description: body?.description ?? existing.description,
     triggerEvents: Array.isArray(body?.triggerEvents) ? body.triggerEvents : existing.triggerEvents,
     watchPatterns: Array.isArray(body?.watchPatterns) ? body.watchPatterns : existing.watchPatterns,
@@ -282,6 +348,11 @@ export function handleSpecialistDelete(ctx: DashboardContext, name: string): { s
   if (!row) return { error: "Specialist not found" };
   if (rowToConfig(row).isBuiltin) {
     return { error: "Cannot delete built-in specialist. Use toggle to disable." };
+  }
+  // Soft-dismiss the specialist's open findings so they don't linger in
+  // default views or reattach if someone later recreates the same name.
+  if (typeof (store as any).dismissFindingsBySpecialist === "function") {
+    (store as any).dismissFindingsBySpecialist(name);
   }
   store.deleteSpecialistConfig(name);
   return { success: true };
@@ -361,8 +432,11 @@ export async function handleFindingCreateAction(
   const executor = ctx.daemon.actionExecutor as any;
   if (!executor?.submit) return { error: "Action executor not available" };
 
-  const command = (body?.command ?? (finding as any).suggestion ?? "").toString();
-  if (!command.trim()) return { error: "No command available to execute" };
+  // Require an explicit command — suggestions are prose, not shell-safe.
+  const command = typeof body?.command === "string" ? body.command.trim() : "";
+  if (!command) {
+    return { error: "command is required (suggestion text is not auto-executed)" };
+  }
   const reason = (body?.reason ?? `Fix: ${(finding as any).title}`).toString();
 
   const repoName = (finding as any).repo as string;
@@ -370,6 +444,9 @@ export async function handleFindingCreateAction(
 
   const action = await executor.submit(command, reason, repoName, repoPath, {
     confidence: (finding as any).confidence ?? 0.7,
+    source: "specialist",
+    sourceSpecialist: (finding as any).specialist,
+    sourceFindingId: id,
   });
 
   return { success: true, actionId: action.id };
@@ -377,11 +454,73 @@ export async function handleFindingCreateAction(
 
 // ── GET /api/specialists/flaky ──
 
+type FlakyStatus = "flaky" | "stable" | "insufficient_data";
+
+interface FlakyTestItem {
+  testName: string;
+  testFile: string;
+  repo: string;
+  totalRuns: number;
+  passRate: number;
+  flakyCommits: number;
+  isDefinitive: boolean;
+  lastFlakyAt: string | null;
+  status: FlakyStatus;
+}
+
+function flakyRowToItem(row: any, minRuns: number, flakyThreshold: number): FlakyTestItem {
+  const totalRuns: number = row.total_runs ?? 0;
+  const totalPasses: number = row.total_passes ?? 0;
+  const flakyCommits: number = row.flaky_commits ?? 0;
+  const passRate = totalRuns > 0 ? totalPasses / totalRuns : 0;
+  const isDefinitive = flakyCommits > 0;
+  const isStatistical = totalRuns > 0 && passRate > 0 && passRate < 1 && passRate < 1 - flakyThreshold;
+  let status: FlakyStatus;
+  if (totalRuns < minRuns) status = "insufficient_data";
+  else if (isDefinitive || isStatistical) status = "flaky";
+  else status = "stable";
+  const lastFlakyAt =
+    (isDefinitive || isStatistical) && typeof row.updated_at === "number"
+      ? new Date(row.updated_at).toISOString()
+      : null;
+  return {
+    testName: row.test_name,
+    testFile: row.test_file,
+    repo: row.repo,
+    totalRuns,
+    passRate,
+    flakyCommits,
+    isDefinitive,
+    lastFlakyAt,
+    status,
+  };
+}
+
 export function getFlakyTestsJSON(ctx: DashboardContext, url: URL) {
   const repo = url.searchParams.get("repo") || undefined;
   const store = ctx.daemon.specialistStore;
-  if (!store) return { flakyTests: [] };
-  return { flakyTests: store.getFlakyTests(repo) };
+  const emptySummary = { totalTracked: 0, flakyCount: 0, stableCount: 0, insufficientData: 0 };
+  if (!store) return { tests: [], summary: emptySummary };
+
+  const flakyCfg = ((ctx.daemon.config as any).specialists?.flakyTest ?? {}) as {
+    minRunsToJudge?: number;
+    flakyThreshold?: number;
+  };
+  const minRuns = flakyCfg.minRunsToJudge ?? 3;
+  const threshold = flakyCfg.flakyThreshold ?? 0.5;
+
+  const rows = typeof (store as any).getAllTrackedTests === "function"
+    ? (store as any).getAllTrackedTests(repo)
+    : store.getFlakyTests(repo);
+
+  const tests = (rows as any[]).map((r) => flakyRowToItem(r, minRuns, threshold));
+  const summary = {
+    totalTracked: tests.length,
+    flakyCount: tests.filter((t) => t.status === "flaky").length,
+    stableCount: tests.filter((t) => t.status === "stable").length,
+    insufficientData: tests.filter((t) => t.status === "insufficient_data").length,
+  };
+  return { tests, summary };
 }
 
 // ── POST /api/specialists/flaky/run ──
@@ -407,13 +546,15 @@ export function handleFlakyTestReset(
   testName: string,
   repo?: string,
 ): { success?: true; error?: string } {
-  const targetRepo = repo ?? firstRepoName(ctx);
-  if (!targetRepo) {
-    return { error: "repo query param is required (no watched repos to fall back to)" };
+  // Require the repo explicitly — reset is destructive per-repo. Silently
+  // picking "first watched repo" could zero out stats the caller didn't
+  // intend to touch when multiple repos are watched.
+  if (!repo) {
+    return { error: "repo query param is required" };
   }
   const store = ctx.daemon.specialistStore;
   if (!store) return { error: "Specialists subsystem is not enabled" };
-  const deleted = store.resetFlakyTest(targetRepo, testName);
+  const deleted = store.resetFlakyTest(repo, testName);
   if (!deleted) return { error: "Flaky test not found" };
   return { success: true };
 }

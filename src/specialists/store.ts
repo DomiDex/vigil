@@ -261,6 +261,21 @@ export class SpecialistStore {
       .run(Date.now(), ignorePattern ?? null, id);
   }
 
+  /**
+   * Soft-dismiss every non-dismissed finding authored by a specialist.
+   * Used when a specialist is deleted so its findings stop appearing in
+   * default ("not dismissed") queries, without losing the audit trail.
+   * Returns the number of rows marked dismissed.
+   */
+  dismissFindingsBySpecialist(specialist: string, reason = "specialist_deleted"): number {
+    const result = this.db
+      .query(
+        "UPDATE specialist_findings SET dismissed = 1, dismissed_at = ?1, ignore_pattern = COALESCE(ignore_pattern, ?2) WHERE specialist = ?3 AND dismissed = 0",
+      )
+      .run(Date.now(), `__${reason}__`, specialist);
+    return result.changes;
+  }
+
   getIgnorePatterns(specialist: string): string[] {
     const rows = this.db
       .query(
@@ -428,6 +443,20 @@ export class SpecialistStore {
     return this.db
       .query("SELECT * FROM test_flakiness WHERE repo = ? ORDER BY updated_at DESC")
       .all(repo) as FlakinessRow[];
+  }
+
+  /** All tracked tests, optionally filtered by repo. Unlike getFlakyTests, this
+   * includes stable + insufficient-data rows so the dashboard can render a full
+   * tracked-tests view and compute summary counts. */
+  getAllTrackedTests(repo?: string): FlakinessRow[] {
+    if (repo) {
+      return this.db
+        .query("SELECT * FROM test_flakiness WHERE repo = ? ORDER BY updated_at DESC")
+        .all(repo) as FlakinessRow[];
+    }
+    return this.db
+      .query("SELECT * FROM test_flakiness ORDER BY updated_at DESC")
+      .all() as FlakinessRow[];
   }
 
   /** Returns true if a row was deleted, false if no matching test existed. */

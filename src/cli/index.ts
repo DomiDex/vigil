@@ -15,6 +15,7 @@ import { DecisionEngine } from "../llm/decision-max.ts";
 import { EventLog, VectorStore } from "../memory/store.ts";
 import { NotificationRouter } from "../notify/push.ts";
 import type { Finding, FindingSeverity, SpecialistName } from "../specialists/types.ts";
+import { classifyFlakyStatus } from "../specialists/agents/flaky-test/scorer.ts";
 
 // Build-time gated: webhook subscriptions (Phase 12)
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -34,10 +35,21 @@ const specialistAgentsMod = feature("VIGIL_SPECIALISTS")
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 async function runGit(args: string[], cwd: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  const proc = Bun.spawn(["git", ...args], { cwd, stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
-  await proc.exited;
-  return { stdout, stderr, exitCode: proc.exitCode ?? 0 };
+  try {
+    const proc = Bun.spawn(["git", ...args], { cwd, stdout: "pipe", stderr: "pipe" });
+    const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
+    await proc.exited;
+    return { stdout, stderr, exitCode: proc.exitCode ?? 0 };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { stdout: "", stderr: message, exitCode: 127 };
+  }
+}
+
+const DIFF_CAP_BYTES = 60_000;
+function capWithMarker(text: string, limit = DIFF_CAP_BYTES): string {
+  if (text.length <= limit) return text;
+  return `${text.slice(0, limit)}\n\n[…truncated ${text.length - limit} chars]`;
 }
 
 const program = new Command();
@@ -177,6 +189,10 @@ program
 
         const diffResult = await runGit(["diff", "HEAD~1", "--stat", "-p"], repoPath);
         const filesResult = await runGit(["diff", "HEAD~1", "--name-only"], repoPath);
+        const commitsResult = await runGit(
+          ["log", "-n", "10", "--pretty=format:%h %s"],
+          repoPath,
+        );
         if (diffResult.exitCode !== 0 || filesResult.exitCode !== 0) {
           console.error(
             chalk.yellow("  Warning: could not diff against HEAD~1 (single-commit repo?). Running with empty diff.\n"),
@@ -198,9 +214,12 @@ program
           repoName,
           repoPath,
           branch: branchResult.stdout.trim(),
-          diff: diffResult.exitCode === 0 ? diffResult.stdout.slice(0, 10_000) : "",
+          diff: diffResult.exitCode === 0 ? capWithMarker(diffResult.stdout) : "",
           changedFiles: filesResult.exitCode === 0 ? filesResult.stdout.trim().split("\n").filter(Boolean) : [],
-          recentCommits: [],
+          recentCommits:
+            commitsResult.exitCode === 0
+              ? commitsResult.stdout.trim().split("\n").filter(Boolean)
+              : [],
           recentFindings,
         };
 
@@ -281,6 +300,11 @@ program
       repoName,
       result.summary,
       memories.map((m) => m.id),
+      {
+        patterns: result.patterns,
+        insights: result.insights,
+        confidence: result.confidence,
+      },
     );
     store.saveRepoProfile({
       repo: repoName,
@@ -694,21 +718,15 @@ program
       );
       console.log(chalk.gray(`  ${"\u2500".repeat(84)}`));
 
+      const colorFor: Record<string, typeof chalk.red> = {
+        "FLAKY (definitive)": chalk.red,
+        "FLAKY (statistical)": chalk.yellow,
+        STABLE: chalk.green,
+      };
       for (const t of tests) {
         const rate = t.total_runs > 0 ? `${((t.total_passes / t.total_runs) * 100).toFixed(0)}%` : "N/A";
-
-        let status: string;
-        let statusColor: typeof chalk.red;
-        if (t.flaky_commits > 0) {
-          status = "FLAKY (definitive)";
-          statusColor = chalk.red;
-        } else if (t.total_runs > 0 && t.total_passes / t.total_runs < 0.5) {
-          status = "FLAKY (statistical)";
-          statusColor = chalk.yellow;
-        } else {
-          status = "STABLE";
-          statusColor = chalk.green;
-        }
+        const status = classifyFlakyStatus(t);
+        const statusColor = colorFor[status] ?? chalk.gray;
 
         const name = t.test_name.length > 48 ? `${t.test_name.slice(0, 45)}...` : t.test_name;
         console.log(
@@ -718,9 +736,7 @@ program
         );
       }
 
-      const flakyCount = tests.filter(
-        (t) => t.flaky_commits > 0 || (t.total_runs > 0 && t.total_passes / t.total_runs < 0.5),
-      ).length;
+      const flakyCount = tests.filter((t) => classifyFlakyStatus(t) !== "STABLE").length;
       console.log(chalk.gray(`\n  ${tests.length} test(s) tracked, ${flakyCount} flaky\n`));
     } finally {
       store.close();

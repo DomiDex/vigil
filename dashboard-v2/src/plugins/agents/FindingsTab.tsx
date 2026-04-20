@@ -28,14 +28,16 @@ import type {
   FindingsListResponse,
   SpecialistsListResponse,
 } from "../../types/api";
+import type { AgentsSearch, AgentsSearchInput } from "../../routes/agents";
 import { FindingDetailSheet } from "./FindingDetailSheet";
+import { severityClasses } from "./severity";
+import { formatRelativeTime } from "./time";
 
 const PAGE_SIZE = 25;
+const ALL = "all" as const;
 
-function severityClasses(sev: FindingSeverity): string {
-  if (sev === "critical") return "text-red-400 bg-red-400/10 border-0";
-  if (sev === "warning") return "text-yellow-400 bg-yellow-400/10 border-0";
-  return "text-blue-400 bg-blue-400/10 border-0";
+function stripAll<T extends string>(v: T | typeof ALL): T | undefined {
+  return v === ALL ? undefined : v;
 }
 
 interface FindingsTabProps {
@@ -56,27 +58,21 @@ export default function FindingsTab({ activeId }: FindingsTabProps) {
     setDetailId(activeId ?? null);
   }, [activeId]);
 
+  const specialist = stripAll(filters.specialist);
+  const severity = stripAll(filters.severity) as FindingSeverity | undefined;
+  const repo = stripAll(filters.repo);
   const queryFilters: Record<string, string | number | undefined> = {
-    ...(filters.specialist !== "all" && { specialist: filters.specialist }),
-    ...(filters.severity !== "all" && { severity: filters.severity }),
-    ...(filters.repo !== "all" && { repo: filters.repo }),
+    ...(specialist && { specialist }),
+    ...(severity && { severity }),
+    ...(repo && { repo }),
     page,
   };
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: vigilKeys.specialists.findings(queryFilters),
+    queryKey: vigilKeys.specialists.findings.list(queryFilters),
     queryFn: () =>
       getSpecialistFindings({
-        data: {
-          specialist:
-            filters.specialist !== "all" ? filters.specialist : undefined,
-          severity:
-            filters.severity !== "all"
-              ? (filters.severity as FindingSeverity)
-              : undefined,
-          repo: filters.repo !== "all" ? filters.repo : undefined,
-          page,
-        },
+        data: { specialist, severity, repo, page },
       }),
   });
   const response = data as FindingsListResponse | undefined;
@@ -104,7 +100,7 @@ export default function FindingsTab({ activeId }: FindingsTabProps) {
     setDetailId(id);
     navigate({
       to: "/agents",
-      search: (prev: any) => ({
+      search: (prev: AgentsSearchInput): AgentsSearch => ({
         ...prev,
         tab: "findings",
         id,
@@ -116,7 +112,7 @@ export default function FindingsTab({ activeId }: FindingsTabProps) {
     setDetailId(null);
     navigate({
       to: "/agents",
-      search: (prev: any) => ({
+      search: (prev: AgentsSearchInput): AgentsSearch => ({
         ...prev,
         tab: "findings",
         id: undefined,
@@ -236,7 +232,7 @@ export default function FindingsTab({ activeId }: FindingsTabProps) {
                       </TableCell>
                       <TableCell className="text-xs">{f.repo}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {f.createdAt}
+                        {formatRelativeTime(f.createdAt)}
                       </TableCell>
                     </TableRow>
                   ))

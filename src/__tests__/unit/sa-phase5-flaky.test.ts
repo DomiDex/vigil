@@ -1,16 +1,7 @@
 import { Database } from "bun:sqlite";
 import { beforeEach, describe, expect, test } from "bun:test";
 import { SpecialistStore } from "../../specialists/store.ts";
-
-function classifyFlakyStatus(row: {
-  flaky_commits: number;
-  total_runs: number;
-  total_passes: number;
-}): "FLAKY (definitive)" | "FLAKY (statistical)" | "STABLE" {
-  if (row.flaky_commits > 0) return "FLAKY (definitive)";
-  if (row.total_runs > 0 && row.total_passes / row.total_runs < 0.5) return "FLAKY (statistical)";
-  return "STABLE";
-}
+import { classifyFlakyStatus } from "../../specialists/agents/flaky-test/scorer.ts";
 
 function seed(store: SpecialistStore) {
   // Definitive flaky on my-app: same commit, different result

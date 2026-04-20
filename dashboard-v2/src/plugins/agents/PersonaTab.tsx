@@ -65,12 +65,6 @@ export default function PersonaTab() {
 
   return (
     <div className="space-y-6 mt-4">
-      <div className="flex items-center gap-3">
-        <Badge variant="secondary" className="text-xs">
-          {agents.length} available
-        </Badge>
-      </div>
-
       {isLoading && (
         <div className="text-sm text-muted-foreground">Loading...</div>
       )}
@@ -120,7 +114,7 @@ export default function PersonaTab() {
       {agents.length > 0 && (
         <div className="space-y-3">
           <h4 className="text-xs font-medium text-muted-foreground uppercase">
-            Available Agents
+            Available Agents ({agents.length})
           </h4>
           <div className="space-y-2">
             {agents.map((agent) => {
